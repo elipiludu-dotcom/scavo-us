@@ -815,7 +815,7 @@ async function exportPDFSingola() {
   showToast('Generazione PDF…');
   await loadJsPDF();
   const doc = buildICCDpdf([s]);
-  doc.save('SchedaUS_' + s.numero + '_' + today() + '.pdf');
+  doc.save('SchedaUS_' + s.numero + '_' + new Date().toISOString().split('T')[0] + '.pdf');
   showToast('✓ PDF generato');
 }
 
@@ -825,7 +825,7 @@ async function exportPDFTutte() {
   await loadJsPDF();
   const sorted = [...schede].sort((a,b)=>a.numero-b.numero);
   const doc = buildICCDpdf(sorted);
-  doc.save('SchedeUS_complete_' + today() + '.pdf');
+  doc.save('SchedeUS_complete_' + new Date().toISOString().split('T')[0] + '.pdf');
   showToast('✓ PDF generato (' + sorted.length + ' schede)');
 }
 
