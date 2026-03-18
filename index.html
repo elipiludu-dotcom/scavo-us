@@ -337,6 +337,21 @@
           <p>Ricarica tutte le schede dal cloud, utile se altri membri del team hanno appena salvato.</p>
           <button class="btn btn-secondary" onclick="loadFromSheets(true)">↻ Sincronizza ora</button>
         </div>
+        <div class="export-card">
+          <h3>Stampa PDF – Scheda singola</h3>
+          <p>Genera un PDF in formato ICCD ministeriale per una singola scheda US.</p>
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+            <select id="pdfSelectUS" style="flex:1;padding:9px 12px;border:1.5px solid var(--border);border-radius:6px;font-size:0.85rem;background:var(--parchment-light);outline:none;min-width:120px">
+              <option value="">— seleziona US —</option>
+            </select>
+            <button class="btn btn-primary" onclick="exportPDFSingola()">⬇ PDF Scheda</button>
+          </div>
+        </div>
+        <div class="export-card">
+          <h3>Stampa PDF – Tutte le schede</h3>
+          <p>Genera un unico PDF con tutte le schede US in formato ICCD, una per pagina.</p>
+          <button class="btn btn-primary" onclick="exportPDFTutte()">⬇ PDF Completo</button>
+        </div>
       </div>
     </div>
 
@@ -575,6 +590,7 @@ function renderStats() {
     <div class="stat-box"><span class="stat-num">${complete}</span><span class="stat-label">Complete</span></div>
     <div class="stat-box"><span class="stat-num">${tipi}</span><span class="stat-label">Tipi US</span></div>
   `;
+  populatePDFSelect();
 }
 
 // ─── FORM ─────────────────────────────────────────────────────────
@@ -769,6 +785,283 @@ function exportCSV() {
   a.download = 'schede_us_' + new Date().toISOString().split('T')[0] + '.csv';
   a.click();
   showToast('✓ CSV esportato');
+}
+
+// ─── PDF ICCD ─────────────────────────────────────────────────────
+function loadJsPDF() {
+  return new Promise((resolve) => {
+    if (window.jspdf) { resolve(); return; }
+    const s = document.createElement('script');
+    s.src = 'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js';
+    s.onload = resolve;
+    document.head.appendChild(s);
+  });
+}
+
+function populatePDFSelect() {
+  const sel = document.getElementById('pdfSelectUS');
+  if (!sel) return;
+  sel.innerHTML = '<option value="">— seleziona US —</option>' +
+    [...schede].sort((a,b)=>a.numero-b.numero).map(s =>
+      `<option value="${s.id}">US ${s.numero}${s.area?' – Area '+s.area:''}${s.tipo?' ('+s.tipo+')':''}</option>`
+    ).join('');
+}
+
+async function exportPDFSingola() {
+  const id = document.getElementById('pdfSelectUS').value;
+  if (!id) { showToast('⚠ Seleziona una scheda US'); return; }
+  const s = schede.find(x => x.id === id);
+  if (!s) return;
+  showToast('Generazione PDF…');
+  await loadJsPDF();
+  const doc = buildICCDpdf([s]);
+  doc.save('SchedaUS_' + s.numero + '_' + today() + '.pdf');
+  showToast('✓ PDF generato');
+}
+
+async function exportPDFTutte() {
+  if (!schede.length) { showToast('Nessuna scheda da esportare'); return; }
+  showToast('Generazione PDF…');
+  await loadJsPDF();
+  const sorted = [...schede].sort((a,b)=>a.numero-b.numero);
+  const doc = buildICCDpdf(sorted);
+  doc.save('SchedeUS_complete_' + today() + '.pdf');
+  showToast('✓ PDF generato (' + sorted.length + ' schede)');
+}
+
+function buildICCDpdf(schedeList) {
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+
+  schedeList.forEach((s, idx) => {
+    if (idx > 0) doc.addPage();
+    drawICCDpage(doc, s);
+  });
+  return doc;
+}
+
+function drawICCDpage(doc, s) {
+  const W = 210, H = 297;
+  const ML = 10, MR = 10, MT = 10;
+  let y = MT;
+
+  // ── helpers ──
+  const line = (x1,y1,x2,y2,w=0.2) => { doc.setLineWidth(w); doc.line(x1,y1,x2,y2); };
+  const rect = (x,yr,w,h,lw=0.2) => { doc.setLineWidth(lw); doc.rect(x,yr,w,h); };
+  const txt = (t,x,yr,size=8,style='normal',color=[0,0,0]) => {
+    doc.setFontSize(size); doc.setFont('helvetica',style); doc.setTextColor(...color);
+    doc.text(String(t||''), x, yr);
+  };
+  const label = (t,x,yr) => txt(t,x,yr,6,'normal',[100,100,100]);
+  const value = (t,x,yr,maxW) => {
+    doc.setFontSize(8); doc.setFont('helvetica','normal'); doc.setTextColor(0,0,0);
+    if (maxW) {
+      const lines = doc.splitTextToSize(String(t||''), maxW);
+      doc.text(lines, x, yr);
+      return lines.length;
+    }
+    doc.text(String(t||''), x, yr);
+    return 1;
+  };
+
+  const fieldBox = (lbl, val, x, yr, w, h=7) => {
+    rect(x, yr, w, h);
+    label(lbl, x+1, yr+3);
+    value(val, x+1, yr+6, w-2);
+  };
+
+  // ══════════════════════════════════
+  // INTESTAZIONE
+  // ══════════════════════════════════
+  rect(ML, y, W-ML-MR, 12, 0.5);
+  txt('MINISTERO DELLA CULTURA', ML+2, y+5, 7, 'bold', [0,0,0]);
+  txt('Istituto Centrale per il Catalogo e la Documentazione', ML+2, y+9, 6, 'normal', [80,80,80]);
+  txt('SCHEDA US – UNITÀ STRATIGRAFICA', 115, y+5, 9, 'bold');
+  txt('Rif. ICCD – Standard RA 4.00', 115, y+9, 6, 'normal', [80,80,80]);
+  y += 14;
+
+  // ══════════════════════════════════
+  // SEZIONE 1 – IDENTIFICAZIONE
+  // ══════════════════════════════════
+  rect(ML, y, W-ML-MR, 5, 0.3);
+  doc.setFillColor(220,210,195);
+  doc.rect(ML, y, W-ML-MR, 5, 'F');
+  rect(ML, y, W-ML-MR, 5, 0.3);
+  txt('1. IDENTIFICAZIONE', ML+2, y+3.5, 7, 'bold');
+  y += 5;
+
+  const IW = W-ML-MR;
+  // Riga 1: N°US | Area | Saggio | Tipo | Data
+  const r1h = 8;
+  fieldBox('N° US', s.numero, ML, y, 22, r1h);
+  fieldBox('Area / Settore', s.area, ML+22, y, 28, r1h);
+  fieldBox('Saggio', s.saggio, ML+50, y, 25, r1h);
+  fieldBox('Tipo US', s.tipo, ML+75, y, 45, r1h);
+  fieldBox('Data rilevamento', s.data, ML+120, y, 35, r1h);
+  fieldBox('Stato', s.stato, ML+155, y, IW-155, r1h);
+  y += r1h;
+
+  // Riga 2: Responsabile
+  rect(ML, y, IW, 7);
+  label('Responsabile rilevamento', ML+1, y+3);
+  value(s.responsabile, ML+1, y+6, IW-2);
+  y += 7;
+
+  // ══════════════════════════════════
+  // SEZIONE 2 – DESCRIZIONE STRATIGRAFICA
+  // ══════════════════════════════════
+  y += 2;
+  doc.setFillColor(220,210,195);
+  doc.rect(ML, y, IW, 5, 'F');
+  rect(ML, y, IW, 5, 0.3);
+  txt('2. DESCRIZIONE STRATIGRAFICA', ML+2, y+3.5, 7, 'bold');
+  y += 5;
+
+  // Colore | Consistenza | Composizione | Umidità
+  fieldBox('Colore (Munsell)', s.colore, ML, y, 40);
+  fieldBox('Consistenza', s.consistenza, ML+40, y, 35);
+  fieldBox('Composizione', s.composizione, ML+75, y, 35);
+  fieldBox('Umidità', s.umidita, ML+110, y, 30);
+  fieldBox('Spessore (cm)', s.spessore, ML+140, y, IW-140);
+  y += 7;
+
+  // Quote
+  fieldBox('Quota massima (m s.l.m.)', s.quota_max, ML, y, 50);
+  fieldBox('Quota minima (m s.l.m.)', s.quota_min, ML+50, y, 50);
+  y += 7;
+
+  // Inclusi
+  rect(ML, y, IW, 10);
+  label('Inclusi (tipo, dimensione, frequenza, distribuzione)', ML+1, y+3);
+  value(s.inclusi, ML+1, y+7, IW-2);
+  y += 10;
+
+  // Descrizione
+  const descLines = doc.splitTextToSize(String(s.descrizione||''), IW-2);
+  const descH = Math.max(14, descLines.length * 4 + 5);
+  rect(ML, y, IW, descH);
+  label('Descrizione generale', ML+1, y+3);
+  doc.setFontSize(8); doc.setFont('helvetica','normal'); doc.setTextColor(0,0,0);
+  doc.text(descLines, ML+1, y+7);
+  y += descH;
+
+  // ══════════════════════════════════
+  // SEZIONE 3 – RAPPORTI STRATIGRAFICI
+  // ══════════════════════════════════
+  y += 2;
+  doc.setFillColor(220,210,195);
+  doc.rect(ML, y, IW, 5, 'F');
+  rect(ML, y, IW, 5, 0.3);
+  txt('3. RAPPORTI STRATIGRAFICI', ML+2, y+3.5, 7, 'bold');
+  y += 5;
+
+  const rapporti = s.rapporti || [];
+  const rapLabels = {
+    copre:'COPRE', coperto_da:'COPERTO DA', si_lega_a:'SI LEGA A',
+    uguale_a:'UGUALE A', taglia:'TAGLIA', tagliato_da:'TAGLIATO DA',
+    riempie:'RIEMPIE', riempito_da:'RIEMPITO DA'
+  };
+  const rapTypes = ['copre','coperto_da','si_lega_a','uguale_a','taglia','tagliato_da','riempie','riempito_da'];
+  const rapCols = 4;
+  const rapW = IW / rapCols;
+
+  rapTypes.forEach((tipo, i) => {
+    const col = i % rapCols;
+    const row = Math.floor(i / rapCols);
+    const rx = ML + col * rapW;
+    const ry = y + row * 8;
+    rect(rx, ry, rapW, 8);
+    label(rapLabels[tipo], rx+1, ry+3);
+    const vals = rapporti.filter(r=>r.tipo===tipo).map(r=>r.us).join(', ');
+    value(vals, rx+1, ry+7, rapW-2);
+  });
+  y += Math.ceil(rapTypes.length / rapCols) * 8;
+
+  // ══════════════════════════════════
+  // SEZIONE 4 – REPERTI
+  // ══════════════════════════════════
+  y += 2;
+  doc.setFillColor(220,210,195);
+  doc.rect(ML, y, IW, 5, 'F');
+  rect(ML, y, IW, 5, 0.3);
+  txt('4. REPERTI E CAMPIONI', ML+2, y+3.5, 7, 'bold');
+  y += 5;
+
+  const reperti = s.reperti || [];
+  if (reperti.length === 0) {
+    rect(ML, y, IW, 7);
+    value('Nessun reperto registrato', ML+2, y+5, IW-4);
+    y += 7;
+  } else {
+    // Header
+    rect(ML, y, IW, 5);
+    doc.setFillColor(240,235,225);
+    doc.rect(ML, y, IW, 5, 'F');
+    rect(ML, y, IW, 5, 0.2);
+    txt('Categoria', ML+2, y+3.5, 6, 'bold');
+    txt('N° Inventario', ML+42, y+3.5, 6, 'bold');
+    txt('Qtà', ML+92, y+3.5, 6, 'bold');
+    txt('Descrizione', ML+107, y+3.5, 6, 'bold');
+    y += 5;
+    reperti.forEach(r => {
+      rect(ML, y, 40, 6); value(r.categoria||'', ML+2, y+4.5, 38);
+      rect(ML+40, y, 50, 6); value(r.inv||'', ML+42, y+4.5, 48);
+      rect(ML+90, y, 15, 6); value(r.qty||'', ML+92, y+4.5, 13);
+      rect(ML+105, y, IW-105, 6); value(r.desc||'', ML+107, y+4.5, IW-108);
+      y += 6;
+    });
+  }
+
+  // ══════════════════════════════════
+  // SEZIONE 5 – DOCUMENTAZIONE
+  // ══════════════════════════════════
+  y += 2;
+  doc.setFillColor(220,210,195);
+  doc.rect(ML, y, IW, 5, 'F');
+  rect(ML, y, IW, 5, 0.3);
+  txt('5. DOCUMENTAZIONE', ML+2, y+3.5, 7, 'bold');
+  y += 5;
+  fieldBox('N° Fotografie', s.foto, ML, y, IW/2);
+  fieldBox('N° Disegni / Piante', s.disegni, ML+IW/2, y, IW/2);
+  y += 7;
+  rect(ML, y, IW, 8);
+  label('Note documentazione', ML+1, y+3);
+  value(s.note_doc, ML+1, y+7, IW-2);
+  y += 8;
+
+  // ══════════════════════════════════
+  // SEZIONE 6 – INTERPRETAZIONE
+  // ══════════════════════════════════
+  y += 2;
+  doc.setFillColor(220,210,195);
+  doc.rect(ML, y, IW, 5, 'F');
+  rect(ML, y, IW, 5, 0.3);
+  txt('6. INTERPRETAZIONE', ML+2, y+3.5, 7, 'bold');
+  y += 5;
+
+  fieldBox('Interpretazione funzionale', s.interpretazione, ML, y, 65);
+  fieldBox('Datazione proposta', s.datazione, ML+65, y, 50);
+  fieldBox('Periodo / Fase', s.fase, ML+115, y, 40);
+  fieldBox('Affidabilità', s.affidabilita, ML+155, y, IW-155);
+  y += 7;
+
+  const noteLines = doc.splitTextToSize(String(s.note_interp||''), IW-2);
+  const noteH = Math.max(12, noteLines.length * 4 + 5);
+  rect(ML, y, IW, noteH);
+  label('Note interpretative', ML+1, y+3);
+  doc.setFontSize(8); doc.setFont('helvetica','normal'); doc.setTextColor(0,0,0);
+  doc.text(noteLines, ML+1, y+7);
+  y += noteH;
+
+  // ══════════════════════════════════
+  // FOOTER
+  // ══════════════════════════════════
+  const footerY = H - 8;
+  line(ML, footerY, W-MR, footerY, 0.2);
+  txt('Scheda US ' + s.numero + (s.area ? ' – Area ' + s.area : '') + (s.saggio ? ' – ' + s.saggio : ''),
+    ML, footerY+4, 6, 'normal', [120,120,120]);
+  txt('Generato il ' + new Date().toLocaleDateString('it-IT'), W-MR-40, footerY+4, 6, 'normal', [120,120,120]);
+  txt('ICCD – Scheda US', W/2 - 10, footerY+4, 6, 'normal', [120,120,120]);
 }
 
 // ─── SYNC STATUS ─────────────────────────────────────────────────
