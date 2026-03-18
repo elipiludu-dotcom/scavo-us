@@ -1,0 +1,788 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Archivio US – Scavo</title>
+<script>
+  // Carica Google Identity Services in modo controllato
+  function loadGoogleScript() {
+    return new Promise((resolve) => {
+      if (typeof google !== 'undefined') { resolve(); return; }
+      const script = document.createElement('script');
+      script.src = 'https://accounts.google.com/gsi/client';
+      script.onload = resolve;
+      script.onerror = () => {
+        document.getElementById('loadingOverlay').innerHTML =
+          '<p style="color:#c0392b;font-family:monospace;padding:20px;text-align:center">⚠ Impossibile caricare Google.<br>Controlla la connessione internet.</p>';
+      };
+      document.head.appendChild(script);
+    });
+  }
+</script>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --sand: #e8dcc8;
+    --sand-dark: #c9b99a;
+    --earth: #8b6f47;
+    --earth-dark: #5c4a2a;
+    --terra: #a0522d;
+    --ink: #1a1208;
+    --parchment: #f5edd8;
+    --parchment-light: #faf6ed;
+    --accent: #c0392b;
+    --green-field: #4a7c59;
+    --muted: #7a6a55;
+    --border: #c9b99a;
+    --shadow: rgba(90,60,20,0.13);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'IBM Plex Sans', sans-serif;
+    background: var(--sand);
+    color: var(--ink);
+    min-height: 100vh;
+  }
+
+  /* HEADER */
+  .app-header {
+    background: var(--earth-dark);
+    color: var(--parchment);
+    padding: 14px 20px 12px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    box-shadow: 0 2px 12px var(--shadow);
+  }
+  .app-header h1 { font-family: 'Playfair Display', serif; font-size: 1.15rem; letter-spacing: 0.04em; }
+  .header-right { display: flex; align-items: center; gap: 10px; }
+  .sync-status {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.68rem;
+    padding: 4px 10px;
+    border-radius: 20px;
+    background: rgba(255,255,255,0.12);
+    color: var(--parchment);
+    display: flex; align-items: center; gap: 5px;
+  }
+  .sync-dot { width: 7px; height: 7px; border-radius: 50%; background: #aaa; display: inline-block; }
+  .sync-dot.ok { background: #5cb85c; }
+  .sync-dot.syncing { background: #f0ad4e; animation: pulse 1s infinite; }
+  .sync-dot.error { background: #c0392b; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
+
+  /* LOGIN SCREEN */
+  .login-screen {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    min-height: 80vh; padding: 30px 20px; text-align: center;
+  }
+  .login-screen .icon { font-size: 3.5rem; margin-bottom: 16px; }
+  .login-screen h2 { font-family: 'Playfair Display', serif; font-size: 1.4rem; color: var(--earth-dark); margin-bottom: 8px; }
+  .login-screen p { font-size: 0.88rem; color: var(--muted); margin-bottom: 28px; line-height: 1.6; max-width: 320px; }
+  #googleSignInBtn { margin-top: 8px; }
+
+  /* NAV TABS */
+  .nav-tabs { display: flex; background: var(--earth); overflow-x: auto; scrollbar-width: none; border-bottom: 2px solid var(--earth-dark); }
+  .nav-tabs::-webkit-scrollbar { display: none; }
+  .nav-tab { padding: 10px 18px; font-family: 'IBM Plex Mono', monospace; font-size: 0.72rem; color: var(--sand); cursor: pointer; white-space: nowrap; border-bottom: 3px solid transparent; transition: all 0.2s; text-transform: uppercase; letter-spacing: 0.06em; opacity: 0.75; }
+  .nav-tab.active { border-bottom-color: var(--parchment); opacity: 1; background: rgba(0,0,0,0.15); }
+  .nav-tab:hover { opacity: 1; }
+
+  .content { max-width: 800px; margin: 0 auto; padding: 0 0 80px; }
+  .view { display: none; }
+  .view.active { display: block; }
+
+  /* LIST VIEW */
+  .list-toolbar { padding: 16px 16px 8px; display: flex; gap: 10px; align-items: center; }
+  .search-box { flex: 1; padding: 9px 14px; border: 1.5px solid var(--border); border-radius: 6px; font-family: 'IBM Plex Sans', sans-serif; font-size: 0.88rem; background: var(--parchment-light); color: var(--ink); outline: none; }
+  .search-box:focus { border-color: var(--earth); }
+
+  .btn { padding: 9px 18px; border: none; border-radius: 6px; font-family: 'IBM Plex Mono', monospace; font-size: 0.78rem; cursor: pointer; letter-spacing: 0.04em; transition: all 0.18s; }
+  .btn-primary { background: var(--earth-dark); color: var(--parchment); }
+  .btn-primary:hover { background: var(--earth); }
+  .btn-secondary { background: var(--sand-dark); color: var(--ink); }
+  .btn-secondary:hover { background: var(--border); }
+  .btn-danger { background: #c0392b; color: #fff; }
+  .btn-danger:hover { background: #96281b; }
+  .btn-success { background: var(--green-field); color: #fff; }
+  .btn-success:hover { background: #3a6347; }
+
+  .us-list { padding: 0 16px; }
+  .us-card { background: var(--parchment-light); border: 1.5px solid var(--border); border-radius: 8px; padding: 14px 16px; margin-bottom: 10px; cursor: pointer; transition: all 0.18s; display: flex; align-items: center; justify-content: space-between; box-shadow: 0 1px 4px var(--shadow); }
+  .us-card:hover { border-color: var(--earth); transform: translateY(-1px); box-shadow: 0 3px 10px var(--shadow); }
+  .us-card-left { display: flex; align-items: center; gap: 14px; }
+  .us-number { font-family: 'IBM Plex Mono', monospace; font-size: 1.3rem; font-weight: 500; color: var(--earth); min-width: 52px; }
+  .us-meta { font-size: 0.82rem; color: var(--muted); }
+  .us-meta strong { color: var(--ink); font-size: 0.9rem; display: block; margin-bottom: 2px; }
+  .us-badge { font-family: 'IBM Plex Mono', monospace; font-size: 0.65rem; padding: 3px 8px; border-radius: 20px; background: var(--sand-dark); color: var(--earth-dark); text-transform: uppercase; }
+  .us-badge.completa { background: #d4edda; color: #2d6a3f; }
+  .us-badge.parziale { background: #fff3cd; color: #856404; }
+
+  .empty-state { text-align: center; padding: 60px 20px; color: var(--muted); }
+  .empty-state .icon { font-size: 3rem; margin-bottom: 12px; }
+  .empty-state p { font-family: 'IBM Plex Mono', monospace; font-size: 0.82rem; }
+
+  /* FORM */
+  .form-header { background: var(--parchment); border-bottom: 1.5px solid var(--border); padding: 14px 16px; display: flex; align-items: center; justify-content: space-between; }
+  .form-header h2 { font-family: 'Playfair Display', serif; font-size: 1.1rem; color: var(--earth-dark); }
+  .form-actions { display: flex; gap: 8px; }
+
+  .form-section { margin: 0 16px 16px; }
+  .section-title { font-family: 'IBM Plex Mono', monospace; font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.12em; color: var(--muted); padding: 18px 0 8px; border-bottom: 1px solid var(--border); margin-bottom: 14px; display: flex; align-items: center; gap: 8px; }
+  .section-title::before { content: ''; display: inline-block; width: 10px; height: 10px; background: var(--earth); border-radius: 2px; }
+
+  .field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px; }
+  .field-row.single { grid-template-columns: 1fr; }
+  .field-row.triple { grid-template-columns: 1fr 1fr 1fr; }
+  .field-group { display: flex; flex-direction: column; gap: 4px; }
+  .field-group label { font-family: 'IBM Plex Mono', monospace; font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.07em; color: var(--muted); }
+  .field-group input, .field-group select, .field-group textarea { padding: 9px 12px; border: 1.5px solid var(--border); border-radius: 6px; font-family: 'IBM Plex Sans', sans-serif; font-size: 0.87rem; background: var(--parchment-light); color: var(--ink); outline: none; transition: border-color 0.15s; -webkit-appearance: none; }
+  .field-group input:focus, .field-group select:focus, .field-group textarea:focus { border-color: var(--earth); }
+  .field-group textarea { resize: vertical; min-height: 70px; }
+  .munsell-hint { font-size: 0.7rem; color: var(--muted); font-family: 'IBM Plex Mono', monospace; margin-top: 2px; }
+
+  .rapporto-row { display: flex; gap: 8px; align-items: center; margin-bottom: 6px; }
+  .rapporto-row select { flex: 0 0 140px; padding: 8px 10px; border: 1.5px solid var(--border); border-radius: 6px; font-size: 0.82rem; background: var(--parchment-light); color: var(--ink); outline: none; -webkit-appearance: none; }
+  .rapporto-row input { flex: 1; padding: 8px 10px; border: 1.5px solid var(--border); border-radius: 6px; font-size: 0.82rem; background: var(--parchment-light); color: var(--ink); outline: none; }
+  .rapporto-row .btn-rm { background: none; border: none; color: var(--accent); font-size: 1.1rem; cursor: pointer; padding: 4px 6px; border-radius: 4px; }
+  .btn-add-rapporto { font-family: 'IBM Plex Mono', monospace; font-size: 0.73rem; background: none; border: 1.5px dashed var(--border); color: var(--earth); padding: 7px 14px; border-radius: 6px; cursor: pointer; width: 100%; margin-top: 4px; transition: all 0.15s; }
+  .btn-add-rapporto:hover { border-color: var(--earth); background: var(--parchment); }
+
+  .reperto-item { background: var(--parchment); border: 1.5px solid var(--border); border-radius: 6px; padding: 12px; margin-bottom: 8px; position: relative; }
+  .reperto-item .btn-rm { position: absolute; top: 8px; right: 8px; background: none; border: none; color: var(--accent); font-size: 1rem; cursor: pointer; }
+
+  .stats-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; padding: 16px; }
+  .stat-box { background: var(--parchment-light); border: 1.5px solid var(--border); border-radius: 8px; padding: 14px 10px; text-align: center; }
+  .stat-num { font-family: 'Playfair Display', serif; font-size: 1.8rem; color: var(--earth); display: block; }
+  .stat-label { font-family: 'IBM Plex Mono', monospace; font-size: 0.62rem; text-transform: uppercase; letter-spacing: 0.07em; color: var(--muted); }
+
+  .export-section { padding: 20px 16px; }
+  .export-card { background: var(--parchment-light); border: 1.5px solid var(--border); border-radius: 8px; padding: 18px; margin-bottom: 12px; }
+  .export-card h3 { font-family: 'Playfair Display', serif; font-size: 1rem; margin-bottom: 6px; color: var(--earth-dark); }
+  .export-card p { font-size: 0.82rem; color: var(--muted); margin-bottom: 12px; line-height: 1.5; }
+
+  .toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(100px); background: var(--earth-dark); color: var(--parchment); padding: 12px 24px; border-radius: 8px; font-family: 'IBM Plex Mono', monospace; font-size: 0.82rem; z-index: 999; transition: transform 0.3s ease; box-shadow: 0 4px 20px rgba(0,0,0,0.3); }
+  .toast.show { transform: translateX(-50%) translateY(0); }
+
+  .loading-overlay { position: fixed; inset: 0; background: rgba(232,220,200,0.85); display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 500; gap: 14px; }
+  .spinner { width: 36px; height: 36px; border: 3px solid var(--border); border-top-color: var(--earth); border-radius: 50%; animation: spin 0.8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .loading-overlay p { font-family: 'IBM Plex Mono', monospace; font-size: 0.82rem; color: var(--earth-dark); }
+
+  @media (max-width: 480px) {
+    .field-row.triple { grid-template-columns: 1fr 1fr; }
+    .stats-grid { grid-template-columns: 1fr 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<div class="app-header">
+  <h1>⛏ Archivio US</h1>
+  <div class="header-right">
+    <div class="sync-status" id="syncStatus">
+      <span class="sync-dot" id="syncDot"></span>
+      <span id="syncLabel">–</span>
+    </div>
+  </div>
+</div>
+
+<div id="loadingOverlay" class="loading-overlay">
+  <div class="spinner"></div>
+  <p>Connessione a Google…</p>
+</div>
+
+<div id="appShell" style="display:none">
+  <div class="nav-tabs">
+    <div class="nav-tab active" onclick="showView('list')">Schede US</div>
+    <div class="nav-tab" onclick="showView('new')">+ Nuova US</div>
+    <div class="nav-tab" onclick="showView('export')">Esporta</div>
+    <div class="nav-tab" onclick="signOut()" style="margin-left:auto">Esci</div>
+  </div>
+
+  <div class="content">
+
+    <!-- LIST -->
+    <div id="view-list" class="view active">
+      <div class="stats-grid" id="statsGrid"></div>
+      <div class="list-toolbar">
+        <input class="search-box" type="search" placeholder="Cerca per numero US, area, descrizione…" oninput="renderList(this.value)">
+        <button class="btn btn-secondary" onclick="loadFromSheets(true)" title="Sincronizza">↻</button>
+      </div>
+      <div class="us-list" id="usList"></div>
+    </div>
+
+    <!-- FORM -->
+    <div id="view-new" class="view">
+      <div class="form-header">
+        <h2 id="formTitle">Nuova Scheda US</h2>
+        <div class="form-actions">
+          <button class="btn btn-secondary" onclick="showView('list')">Annulla</button>
+          <button class="btn btn-success" onclick="saveScheda()">Salva</button>
+        </div>
+      </div>
+
+      <div class="form-section">
+        <div class="section-title">1 · Identificazione</div>
+        <div class="field-row triple">
+          <div class="field-group"><label>N° US *</label><input type="number" id="f_numero" placeholder="es. 101" min="1"></div>
+          <div class="field-group"><label>Area</label><input type="text" id="f_area" placeholder="es. A"></div>
+          <div class="field-group"><label>Saggio / Settore</label><input type="text" id="f_saggio" placeholder="es. S3"></div>
+        </div>
+        <div class="field-row">
+          <div class="field-group"><label>Tipo US</label>
+            <select id="f_tipo"><option value="">— seleziona —</option><option>Strato</option><option>Struttura</option><option>Taglio</option><option>Riempimento</option><option>Interfaccia</option><option>Buca</option><option>Crollo</option><option>Altro</option></select>
+          </div>
+          <div class="field-group"><label>Data rilevamento</label><input type="date" id="f_data"></div>
+        </div>
+        <div class="field-row">
+          <div class="field-group"><label>Responsabile</label><input type="text" id="f_responsabile" placeholder="Nome cognome"></div>
+          <div class="field-group"><label>Stato compilazione</label>
+            <select id="f_stato"><option value="parziale">Parziale</option><option value="completa">Completa</option></select>
+          </div>
+        </div>
+      </div>
+
+      <div class="form-section">
+        <div class="section-title">2 · Descrizione Stratigrafica</div>
+        <div class="field-row">
+          <div class="field-group"><label>Colore (Munsell)</label><input type="text" id="f_colore" placeholder="es. 10YR 4/4"><span class="munsell-hint">Codice Munsell consigliato</span></div>
+          <div class="field-group"><label>Consistenza</label>
+            <select id="f_consistenza"><option value="">— seleziona —</option><option>Molto friabile</option><option>Friabile</option><option>Compatta</option><option>Molto compatta</option><option>Dura</option></select>
+          </div>
+        </div>
+        <div class="field-row">
+          <div class="field-group"><label>Composizione</label>
+            <select id="f_composizione"><option value="">— seleziona —</option><option>Argillosa</option><option>Limosa</option><option>Sabbiosa</option><option>Ghiaiosa</option><option>Organica</option><option>Mista</option></select>
+          </div>
+          <div class="field-group"><label>Umidità</label>
+            <select id="f_umidita"><option value="">— seleziona —</option><option>Secca</option><option>Umida</option><option>Bagnata</option></select>
+          </div>
+        </div>
+        <div class="field-row single"><div class="field-group"><label>Inclusi</label><textarea id="f_inclusi" placeholder="Tipo, dimensione, frequenza, distribuzione…"></textarea></div></div>
+        <div class="field-row triple">
+          <div class="field-group"><label>Quota max (m)</label><input type="number" id="f_quota_max" step="0.01" placeholder="0.00"></div>
+          <div class="field-group"><label>Quota min (m)</label><input type="number" id="f_quota_min" step="0.01" placeholder="0.00"></div>
+          <div class="field-group"><label>Spessore (cm)</label><input type="number" id="f_spessore" step="0.1" placeholder="0.0"></div>
+        </div>
+        <div class="field-row single"><div class="field-group"><label>Descrizione generale</label><textarea id="f_descrizione" placeholder="Descrizione morfologica…" style="min-height:90px"></textarea></div></div>
+      </div>
+
+      <div class="form-section">
+        <div class="section-title">3 · Rapporti Stratigrafici</div>
+        <div id="rapportiList"></div>
+        <button class="btn-add-rapporto" onclick="addRapporto()">+ Aggiungi rapporto</button>
+      </div>
+
+      <div class="form-section">
+        <div class="section-title">4 · Reperti e Campioni</div>
+        <div id="repertiList"></div>
+        <div style="display:flex;gap:8px;margin-top:4px">
+          <button class="btn btn-secondary" style="flex:1;font-size:0.75rem" onclick="addReperto('reperto')">+ Reperto</button>
+          <button class="btn btn-secondary" style="flex:1;font-size:0.75rem" onclick="addReperto('campione')">+ Campione</button>
+        </div>
+      </div>
+
+      <div class="form-section">
+        <div class="section-title">5 · Documentazione</div>
+        <div class="field-row">
+          <div class="field-group"><label>N° foto</label><input type="text" id="f_foto" placeholder="es. A101_01, A101_02"></div>
+          <div class="field-group"><label>N° disegni</label><input type="text" id="f_disegni" placeholder="es. D-45, D-46"></div>
+        </div>
+        <div class="field-row single"><div class="field-group"><label>Note documentazione</label><textarea id="f_note_doc" placeholder="Note su documentazione grafica e fotografica…"></textarea></div></div>
+      </div>
+
+      <div class="form-section">
+        <div class="section-title">6 · Interpretazione</div>
+        <div class="field-row">
+          <div class="field-group"><label>Interpretazione funzionale</label>
+            <select id="f_interpretazione"><option value="">— seleziona —</option><option>Livello di frequentazione</option><option>Livello di abbandono</option><option>Livello di crollo</option><option>Scarico / discarica</option><option>Piano d'uso</option><option>Fondazione</option><option>Riempimento intenzionale</option><option>Erosione naturale</option><option>Strato di distruzione</option><option>Buca di palo</option><option>Sepoltura</option><option>Incendio</option><option>Altro</option></select>
+          </div>
+          <div class="field-group"><label>Datazione proposta</label><input type="text" id="f_datazione" placeholder="es. I sec. d.C."></div>
+        </div>
+        <div class="field-row">
+          <div class="field-group"><label>Periodo / Fase</label><input type="text" id="f_fase" placeholder="es. Fase 3b"></div>
+          <div class="field-group"><label>Affidabilità</label>
+            <select id="f_affidabilita"><option value="">— seleziona —</option><option>Alta</option><option>Media</option><option>Bassa</option><option>Ipotetica</option></select>
+          </div>
+        </div>
+        <div class="field-row single"><div class="field-group"><label>Note interpretative</label><textarea id="f_note_interp" placeholder="Osservazioni, confronti, note…" style="min-height:90px"></textarea></div></div>
+      </div>
+
+      <div style="padding:0 16px 16px;display:flex;gap:10px">
+        <button class="btn btn-success" style="flex:1" onclick="saveScheda()">☁ Salva su Cloud</button>
+        <button class="btn btn-danger" id="btnDelete" style="display:none" onclick="deleteScheda()">🗑 Elimina</button>
+      </div>
+    </div>
+
+    <!-- EXPORT -->
+    <div id="view-export" class="view">
+      <div class="export-section">
+        <div class="export-card">
+          <h3>Google Sheets</h3>
+          <p>Apri direttamente il foglio Google Sheets condiviso con il team.</p>
+          <a href="https://docs.google.com/spreadsheets/d/1iVXaplyjWp3uCx76-x5MPYEM1e3udtjW2mQxuomyggA/edit" target="_blank" class="btn btn-primary" style="display:inline-block;text-decoration:none">Apri Google Sheets</a>
+        </div>
+        <div class="export-card">
+          <h3>Esporta CSV</h3>
+          <p>Scarica tutte le schede in formato CSV, compatibile con Excel e GIS.</p>
+          <button class="btn btn-primary" onclick="exportCSV()">⬇ Scarica CSV</button>
+        </div>
+        <div class="export-card">
+          <h3>Sincronizza</h3>
+          <p>Ricarica tutte le schede dal cloud, utile se altri membri del team hanno appena salvato.</p>
+          <button class="btn btn-secondary" onclick="loadFromSheets(true)">↻ Sincronizza ora</button>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- Login screen (shown if not authenticated) -->
+<div id="loginScreen" class="login-screen" style="display:none">
+  <div class="icon">🏺</div>
+  <h2>Archivio US – Scavo</h2>
+  <p>Accedi con il tuo account Google per sincronizzare le schede con il team.</p>
+  <div id="googleSignInBtn"></div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ─── CONFIG ──────────────────────────────────────────────────────
+const CLIENT_ID = '992861805498-4lengq8pp51dq416hglac56u7lgsid7f.apps.googleusercontent.com';
+const SHEET_ID  = '1iVXaplyjWp3uCx76-x5MPYEM1e3udtjW2mQxuomyggA';
+const SHEET_NAME = 'SchedeUS';
+const SCOPES = 'https://www.googleapis.com/auth/spreadsheets';
+
+const HEADERS = ['id','numero','area','saggio','tipo','data','responsabile','stato',
+  'colore','consistenza','composizione','umidita','inclusi','quota_max','quota_min',
+  'spessore','descrizione','rapporti','reperti','foto','disegni','note_doc',
+  'interpretazione','datazione','fase','affidabilita','note_interp'];
+
+let accessToken = null;
+let schede = [];
+let editingId = null;
+let rapportiCount = 0;
+let repertiCount = 0;
+
+// ─── GOOGLE IDENTITY ─────────────────────────────────────────────
+window.onload = async () => {
+  await loadGoogleScript();
+
+  google.accounts.id.initialize({
+    client_id: CLIENT_ID,
+    callback: handleCredential,
+    auto_select: true,
+  });
+
+  tryTokenClient();
+};
+
+function tryTokenClient() {
+  const tokenClient = google.accounts.oauth2.initTokenClient({
+    client_id: CLIENT_ID,
+    scope: SCOPES,
+    prompt: '',
+    callback: (resp) => {
+      if (resp.error) { showLogin(); return; }
+      accessToken = resp.access_token;
+      onAuthenticated();
+    },
+  });
+  // Try silently
+  tokenClient.requestAccessToken({ prompt: '' });
+  // Store tokenClient for re-use
+  window._tokenClient = tokenClient;
+}
+
+function handleCredential(response) {
+  // After ID token, get access token
+  window._tokenClient.requestAccessToken({ prompt: '' });
+}
+
+function showLogin() {
+  document.getElementById('loadingOverlay').style.display = 'none';
+  document.getElementById('loginScreen').style.display = 'flex';
+  document.getElementById('appShell').style.display = 'none';
+  google.accounts.id.renderButton(document.getElementById('googleSignInBtn'), {
+    theme: 'outline', size: 'large', text: 'signin_with', locale: 'it'
+  });
+  google.accounts.id.prompt();
+}
+
+function onAuthenticated() {
+  document.getElementById('loadingOverlay').style.display = 'none';
+  document.getElementById('loginScreen').style.display = 'none';
+  document.getElementById('appShell').style.display = 'block';
+  setSyncStatus('syncing', 'Caricamento…');
+  loadFromSheets(false);
+}
+
+function signOut() {
+  google.accounts.id.disableAutoSelect();
+  accessToken = null;
+  schede = [];
+  showLogin();
+}
+
+// ─── SHEETS API ──────────────────────────────────────────────────
+async function sheetsGet(range) {
+  const url = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(range)}`;
+  const res = await fetch(url, { headers: { Authorization: 'Bearer ' + accessToken } });
+  if (!res.ok) throw new Error('Sheets GET error ' + res.status);
+  return res.json();
+}
+
+async function sheetsUpdate(range, values) {
+  const url = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(range)}?valueInputOption=RAW`;
+  const res = await fetch(url, {
+    method: 'PUT',
+    headers: { Authorization: 'Bearer ' + accessToken, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ values })
+  });
+  if (!res.ok) throw new Error('Sheets PUT error ' + res.status);
+  return res.json();
+}
+
+async function sheetsAppend(values) {
+  const url = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(SHEET_NAME)}:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`;
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { Authorization: 'Bearer ' + accessToken, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ values })
+  });
+  if (!res.ok) throw new Error('Sheets APPEND error ' + res.status);
+  return res.json();
+}
+
+async function sheetsClear(range) {
+  const url = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(range)}:clear`;
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { Authorization: 'Bearer ' + accessToken, 'Content-Type': 'application/json' },
+  });
+  if (!res.ok) throw new Error('Sheets CLEAR error ' + res.status);
+  return res.json();
+}
+
+// Ensure header row exists
+async function ensureHeaders() {
+  try {
+    const data = await sheetsGet(`${SHEET_NAME}!A1:Z1`);
+    if (!data.values || !data.values[0] || data.values[0][0] !== 'id') {
+      await sheetsUpdate(`${SHEET_NAME}!A1`, [HEADERS]);
+    }
+  } catch {
+    await sheetsUpdate(`${SHEET_NAME}!A1`, [HEADERS]);
+  }
+}
+
+async function loadFromSheets(showMsg = false) {
+  setSyncStatus('syncing', 'Sync…');
+  try {
+    await ensureHeaders();
+    const data = await sheetsGet(`${SHEET_NAME}!A1:Z1000`);
+    const rows = data.values || [];
+    if (rows.length <= 1) { schede = []; }
+    else {
+      const hdrs = rows[0];
+      schede = rows.slice(1).map(row => {
+        const obj = {};
+        hdrs.forEach((h, i) => obj[h] = row[i] || '');
+        // Parse JSON fields
+        try { obj.rapporti = JSON.parse(obj.rapporti || '[]'); } catch { obj.rapporti = []; }
+        try { obj.reperti = JSON.parse(obj.reperti || '[]'); } catch { obj.reperti = []; }
+        obj.numero = parseInt(obj.numero) || 0;
+        return obj;
+      });
+    }
+    setSyncStatus('ok', 'Sincronizzato');
+    renderList(); renderStats();
+    if (showMsg) showToast('✓ Dati aggiornati (' + schede.length + ' schede)');
+  } catch (e) {
+    setSyncStatus('error', 'Errore sync');
+    showToast('⚠ Errore di sincronizzazione');
+    console.error(e);
+  }
+}
+
+async function writeAllToSheets() {
+  await ensureHeaders();
+  const range = `${SHEET_NAME}!A2:Z10000`;
+  await sheetsClear(range);
+  if (schede.length > 0) {
+    const rows = schede.map(s => HEADERS.map(h => {
+      if (h === 'rapporti' || h === 'reperti') return JSON.stringify(s[h] || []);
+      return s[h] !== undefined ? String(s[h]) : '';
+    }));
+    await sheetsUpdate(`${SHEET_NAME}!A2`, rows);
+  }
+}
+
+// ─── VIEW ─────────────────────────────────────────────────────────
+function showView(v) {
+  document.querySelectorAll('.view').forEach(el => el.classList.remove('active'));
+  document.querySelectorAll('.nav-tab').forEach(el => el.classList.remove('active'));
+  document.getElementById('view-' + v).classList.add('active');
+  const idx = {list:0,new:1,export:2}[v];
+  if (idx !== undefined) document.querySelectorAll('.nav-tab')[idx].classList.add('active');
+  if (v === 'new' && editingId === null) resetForm();
+  if (v === 'list') { editingId = null; renderList(); renderStats(); }
+}
+
+// ─── RENDER LIST ─────────────────────────────────────────────────
+function renderList(q = '') {
+  const list = document.getElementById('usList');
+  const term = q.toLowerCase();
+  const filtered = schede.filter(s =>
+    String(s.numero).includes(term) ||
+    (s.area||'').toLowerCase().includes(term) ||
+    (s.descrizione||'').toLowerCase().includes(term) ||
+    (s.tipo||'').toLowerCase().includes(term)
+  ).sort((a,b) => a.numero - b.numero);
+
+  if (!filtered.length) {
+    list.innerHTML = `<div class="empty-state"><div class="icon">🏺</div><p>${schede.length ? 'Nessun risultato.' : 'Nessuna scheda US ancora.<br>Tocca "+ Nuova US" per iniziare.'}</p></div>`;
+    return;
+  }
+  list.innerHTML = filtered.map(s => `
+    <div class="us-card" onclick="openEdit('${s.id}')">
+      <div class="us-card-left">
+        <div class="us-number">US ${s.numero}</div>
+        <div class="us-meta">
+          <strong>${s.tipo || 'Tipo non definito'}</strong>
+          ${s.area ? 'Area ' + s.area : ''}${s.saggio ? ' · ' + s.saggio : ''}
+          ${s.datazione ? '<br><span style="font-size:0.75rem;color:#8b6f47">'+s.datazione+'</span>' : ''}
+        </div>
+      </div>
+      <span class="us-badge ${s.stato}">${s.stato}</span>
+    </div>
+  `).join('');
+}
+
+function renderStats() {
+  const total = schede.length;
+  const complete = schede.filter(s => s.stato === 'completa').length;
+  const tipi = [...new Set(schede.map(s=>s.tipo).filter(Boolean))].length;
+  document.getElementById('statsGrid').innerHTML = `
+    <div class="stat-box"><span class="stat-num">${total}</span><span class="stat-label">Schede US</span></div>
+    <div class="stat-box"><span class="stat-num">${complete}</span><span class="stat-label">Complete</span></div>
+    <div class="stat-box"><span class="stat-num">${tipi}</span><span class="stat-label">Tipi US</span></div>
+  `;
+}
+
+// ─── FORM ─────────────────────────────────────────────────────────
+function resetForm() {
+  const ids = ['numero','area','saggio','tipo','data','responsabile','stato','colore','consistenza',
+   'composizione','umidita','inclusi','quota_max','quota_min','spessore','descrizione',
+   'foto','disegni','note_doc','interpretazione','datazione','fase','affidabilita','note_interp'];
+  ids.forEach(id => {
+    const el = document.getElementById('f_' + id);
+    if (el) el.value = id === 'data' ? new Date().toISOString().split('T')[0] : id === 'stato' ? 'parziale' : '';
+  });
+  document.getElementById('rapportiList').innerHTML = '';
+  document.getElementById('repertiList').innerHTML = '';
+  rapportiCount = 0; repertiCount = 0;
+  document.getElementById('formTitle').textContent = 'Nuova Scheda US';
+  document.getElementById('btnDelete').style.display = 'none';
+  editingId = null;
+}
+
+function openEdit(id) {
+  const s = schede.find(x => x.id === id);
+  if (!s) return;
+  editingId = id;
+  document.getElementById('formTitle').textContent = 'Scheda US ' + s.numero;
+  document.getElementById('btnDelete').style.display = 'block';
+  const fields = ['numero','area','saggio','tipo','data','responsabile','stato','colore','consistenza',
+   'composizione','umidita','inclusi','quota_max','quota_min','spessore','descrizione',
+   'foto','disegni','note_doc','interpretazione','datazione','fase','affidabilita','note_interp'];
+  fields.forEach(id => { const el = document.getElementById('f_'+id); if (el && s[id] !== undefined) el.value = s[id]; });
+  document.getElementById('rapportiList').innerHTML = ''; rapportiCount = 0;
+  (s.rapporti || []).forEach(r => addRapporto(r));
+  document.getElementById('repertiList').innerHTML = ''; repertiCount = 0;
+  (s.reperti || []).forEach(r => addReperto(r.tipo, r));
+  document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.nav-tab')[1].classList.add('active');
+  document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+  document.getElementById('view-new').classList.add('active');
+}
+
+// ─── RAPPORTI ─────────────────────────────────────────────────────
+function addRapporto(prefill = {}) {
+  const id = 'rap_' + (++rapportiCount);
+  const div = document.createElement('div');
+  div.className = 'rapporto-row'; div.id = id;
+  div.innerHTML = `
+    <select id="${id}_tipo">
+      <option value="copre" ${prefill.tipo==='copre'?'selected':''}>Copre</option>
+      <option value="coperto_da" ${prefill.tipo==='coperto_da'?'selected':''}>Coperto da</option>
+      <option value="si_lega_a" ${prefill.tipo==='si_lega_a'?'selected':''}>Si lega a</option>
+      <option value="uguale_a" ${prefill.tipo==='uguale_a'?'selected':''}>Uguale a</option>
+      <option value="taglia" ${prefill.tipo==='taglia'?'selected':''}>Taglia</option>
+      <option value="tagliato_da" ${prefill.tipo==='tagliato_da'?'selected':''}>Tagliato da</option>
+      <option value="riempie" ${prefill.tipo==='riempie'?'selected':''}>Riempie</option>
+      <option value="riempito_da" ${prefill.tipo==='riempito_da'?'selected':''}>Riempito da</option>
+    </select>
+    <input type="text" id="${id}_us" placeholder="N° US" value="${prefill.us||''}" style="max-width:80px">
+    <input type="text" id="${id}_note" placeholder="Note" value="${prefill.note||''}">
+    <button class="btn-rm" onclick="document.getElementById('${id}').remove()">×</button>`;
+  document.getElementById('rapportiList').appendChild(div);
+}
+
+function getRapporti() {
+  return Array.from(document.querySelectorAll('[id^="rap_"]')).map(div => ({
+    tipo: div.querySelector('[id$="_tipo"]').value,
+    us: div.querySelector('[id$="_us"]').value,
+    note: div.querySelector('[id$="_note"]').value,
+  })).filter(r => r.us);
+}
+
+// ─── REPERTI ──────────────────────────────────────────────────────
+function addReperto(tipo = 'reperto', prefill = {}) {
+  const id = 'rep_' + (++repertiCount);
+  const div = document.createElement('div');
+  div.className = 'reperto-item'; div.id = id;
+  div.innerHTML = `
+    <button class="btn-rm" onclick="document.getElementById('${id}').remove()">×</button>
+    <div class="field-row triple" style="margin-bottom:8px">
+      <div class="field-group"><label>Categoria</label>
+        <select id="${id}_tipo">
+          <option value="ceramica" ${prefill.categoria==='ceramica'?'selected':''}>Ceramica</option>
+          <option value="metallo" ${prefill.categoria==='metallo'?'selected':''}>Metallo</option>
+          <option value="osso" ${prefill.categoria==='osso'?'selected':''}>Osso</option>
+          <option value="vetro" ${prefill.categoria==='vetro'?'selected':''}>Vetro</option>
+          <option value="pietra" ${prefill.categoria==='pietra'?'selected':''}>Pietra lavorata</option>
+          <option value="moneta" ${prefill.categoria==='moneta'?'selected':''}>Moneta</option>
+          <option value="carbone" ${prefill.categoria==='carbone'?'selected':''}>Carbone (C14)</option>
+          <option value="legno" ${prefill.categoria==='legno'?'selected':''}>Legno</option>
+          <option value="malacofauna" ${prefill.categoria==='malacofauna'?'selected':''}>Malacofauna</option>
+          <option value="campione_suolo" ${prefill.categoria==='campione_suolo'?'selected':''}>Campione suolo</option>
+          <option value="altro" ${prefill.categoria==='altro'?'selected':''}>Altro</option>
+        </select>
+      </div>
+      <div class="field-group"><label>N° inv.</label><input type="text" id="${id}_inv" value="${prefill.inv||''}" placeholder="es. CR24-101-01"></div>
+      <div class="field-group"><label>Quantità</label><input type="number" id="${id}_qty" value="${prefill.qty||''}" placeholder="n." min="1"></div>
+    </div>
+    <div class="field-group"><label>Descrizione</label><input type="text" id="${id}_desc" value="${prefill.desc||''}" placeholder="Breve descrizione…"></div>`;
+  document.getElementById('repertiList').appendChild(div);
+}
+
+function getReperti() {
+  return Array.from(document.querySelectorAll('[id^="rep_"]')).map(div => ({
+    categoria: div.querySelector('[id$="_tipo"]').value,
+    inv: div.querySelector('[id$="_inv"]').value,
+    qty: div.querySelector('[id$="_qty"]').value,
+    desc: div.querySelector('[id$="_desc"]').value,
+  }));
+}
+
+// ─── SAVE / DELETE ────────────────────────────────────────────────
+async function saveScheda() {
+  const numero = parseInt(document.getElementById('f_numero').value);
+  if (!numero) { showToast('⚠ Inserisci il numero US'); return; }
+  const duplicate = schede.find(s => s.numero === numero && s.id !== editingId);
+  if (duplicate) { showToast('⚠ US ' + numero + ' già presente'); return; }
+
+  const scheda = {
+    id: editingId || Date.now().toString(36) + Math.random().toString(36).slice(2),
+    numero,
+    area: document.getElementById('f_area').value,
+    saggio: document.getElementById('f_saggio').value,
+    tipo: document.getElementById('f_tipo').value,
+    data: document.getElementById('f_data').value,
+    responsabile: document.getElementById('f_responsabile').value,
+    stato: document.getElementById('f_stato').value,
+    colore: document.getElementById('f_colore').value,
+    consistenza: document.getElementById('f_consistenza').value,
+    composizione: document.getElementById('f_composizione').value,
+    umidita: document.getElementById('f_umidita').value,
+    inclusi: document.getElementById('f_inclusi').value,
+    quota_max: document.getElementById('f_quota_max').value,
+    quota_min: document.getElementById('f_quota_min').value,
+    spessore: document.getElementById('f_spessore').value,
+    descrizione: document.getElementById('f_descrizione').value,
+    rapporti: getRapporti(),
+    reperti: getReperti(),
+    foto: document.getElementById('f_foto').value,
+    disegni: document.getElementById('f_disegni').value,
+    note_doc: document.getElementById('f_note_doc').value,
+    interpretazione: document.getElementById('f_interpretazione').value,
+    datazione: document.getElementById('f_datazione').value,
+    fase: document.getElementById('f_fase').value,
+    affidabilita: document.getElementById('f_affidabilita').value,
+    note_interp: document.getElementById('f_note_interp').value,
+  };
+
+  if (editingId) schede = schede.map(s => s.id === editingId ? scheda : s);
+  else schede.push(scheda);
+
+  setSyncStatus('syncing', 'Salvataggio…');
+  try {
+    await writeAllToSheets();
+    setSyncStatus('ok', 'Sincronizzato');
+    showToast('☁ US ' + numero + ' salvata sul cloud');
+    editingId = null;
+    showView('list');
+  } catch (e) {
+    setSyncStatus('error', 'Errore salvataggio');
+    showToast('⚠ Errore durante il salvataggio');
+    console.error(e);
+  }
+}
+
+async function deleteScheda() {
+  if (!editingId) return;
+  const s = schede.find(x => x.id === editingId);
+  if (!confirm('Eliminare definitivamente US ' + s.numero + '?')) return;
+  schede = schede.filter(x => x.id !== editingId);
+  setSyncStatus('syncing', 'Eliminazione…');
+  try {
+    await writeAllToSheets();
+    setSyncStatus('ok', 'Sincronizzato');
+    showToast('🗑 US ' + s.numero + ' eliminata');
+    editingId = null;
+    showView('list');
+  } catch (e) {
+    setSyncStatus('error', 'Errore');
+    showToast('⚠ Errore durante l\'eliminazione');
+  }
+}
+
+// ─── EXPORT CSV ───────────────────────────────────────────────────
+function exportCSV() {
+  if (!schede.length) { showToast('Nessuna scheda da esportare'); return; }
+  const rows = schede.map(s => HEADERS.map(h => {
+    if (h === 'rapporti') return '"' + (s.rapporti||[]).map(r=>r.tipo+':'+r.us).join('; ') + '"';
+    if (h === 'reperti') return '"' + (s.reperti||[]).map(r=>r.categoria+' '+r.inv).join('; ') + '"';
+    return '"' + String(s[h]||'').replace(/"/g,'""') + '"';
+  }).join(','));
+  const csv = [HEADERS.join(','), ...rows].join('\n');
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([csv], {type:'text/csv'}));
+  a.download = 'schede_us_' + new Date().toISOString().split('T')[0] + '.csv';
+  a.click();
+  showToast('✓ CSV esportato');
+}
+
+// ─── SYNC STATUS ─────────────────────────────────────────────────
+function setSyncStatus(state, label) {
+  document.getElementById('syncDot').className = 'sync-dot ' + state;
+  document.getElementById('syncLabel').textContent = label;
+}
+
+// ─── TOAST ────────────────────────────────────────────────────────
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2400);
+}
+</script>
+</body>
+</html>
