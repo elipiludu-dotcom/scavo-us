@@ -145,6 +145,53 @@
   .field-group textarea { resize: vertical; min-height: 70px; }
   .munsell-hint { font-size: 0.7rem; color: var(--muted); font-family: 'IBM Plex Mono', monospace; margin-top: 2px; }
 
+  /* Radio buttons custom */
+  input[type="radio"] {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 18px;
+    height: 18px;
+    border: 2px solid var(--earth);
+    border-radius: 50%;
+    background: var(--parchment-light);
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: all 0.15s;
+  }
+  input[type="radio"]:checked {
+    background: var(--earth);
+    border-color: var(--earth-dark);
+    box-shadow: inset 0 0 0 3px var(--parchment-light);
+  }
+  input[type="radio"]:hover {
+    border-color: var(--earth-dark);
+  }
+
+  /* Checkbox custom */
+  input[type="checkbox"] {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 18px;
+    height: 18px;
+    border: 2px solid var(--earth);
+    border-radius: 4px;
+    background: var(--parchment-light);
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: all 0.15s;
+  }
+  input[type="checkbox"]:checked {
+    background: var(--earth);
+    border-color: var(--earth-dark);
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 12 12' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M2 6l3 3 5-5' stroke='%23f5edd8' stroke-width='2' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+    background-size: 12px;
+    background-repeat: no-repeat;
+    background-position: center;
+  }
+  input[type="checkbox"]:hover {
+    border-color: var(--earth-dark);
+  }
+
   .rapporto-row { display: flex; gap: 8px; align-items: center; margin-bottom: 6px; }
   .rapporto-row select { flex: 0 0 140px; padding: 8px 10px; border: 1.5px solid var(--border); border-radius: 6px; font-size: 0.82rem; background: var(--parchment-light); color: var(--ink); outline: none; -webkit-appearance: none; }
   .rapporto-row input { flex: 1; padding: 8px 10px; border: 1.5px solid var(--border); border-radius: 6px; font-size: 0.82rem; background: var(--parchment-light); color: var(--ink); outline: none; }
@@ -250,10 +297,15 @@
           </div>
           <div class="field-group"><label>Data rilevamento</label><input type="date" id="f_data"></div>
         </div>
+        <div class="field-row triple">
+          <div class="field-group"><label>Quota max (m)</label><input type="number" id="f_quota_max" step="0.01" placeholder="0.00"></div>
+          <div class="field-group"><label>Quota min (m)</label><input type="number" id="f_quota_min" step="0.01" placeholder="0.00"></div>
+          <div class="field-group"><label>Spessore (cm)</label><input type="number" id="f_spessore" step="0.1" placeholder="0.0"></div>
+        </div>
         <div class="field-row single">
           <div class="field-group"><label>Definizione e Posizione</label><input type="text" id="f_definizione" placeholder="es. Strato di abbandono nella porzione NE del saggio"></div>
         </div>
-        <div class="field-row single">
+        <div class="field-row">
           <div class="field-group">
             <label>Formazione</label>
             <div style="display:flex;gap:20px;padding:9px 0">
@@ -265,6 +317,7 @@
               </label>
             </div>
           </div>
+          <div class="field-group"><label>Criteri di Distinzione</label><input type="text" id="f_criteri" placeholder="es. cambio di colore e consistenza"></div>
         </div>
         <div class="field-row">
           <div class="field-group"><label>Responsabile</label><input type="text" id="f_responsabile" placeholder="Nome cognome"></div>
@@ -295,12 +348,8 @@
           <div class="field-group"><label>Componenti Organici</label><textarea id="f_inclusi_org" placeholder="es. carboni, semi, ossa…"></textarea></div>
           <div class="field-group"><label>Componenti Artificiali</label><textarea id="f_inclusi_art" placeholder="es. ceramica, laterizi, metalli…"></textarea></div>
         </div>
-        <div class="field-row triple">
-          <div class="field-group"><label>Quota max (m)</label><input type="number" id="f_quota_max" step="0.01" placeholder="0.00"></div>
-          <div class="field-group"><label>Quota min (m)</label><input type="number" id="f_quota_min" step="0.01" placeholder="0.00"></div>
-          <div class="field-group"><label>Spessore (cm)</label><input type="number" id="f_spessore" step="0.1" placeholder="0.0"></div>
-        </div>
         <div class="field-row single"><div class="field-group"><label>Descrizione generale</label><textarea id="f_descrizione" placeholder="Descrizione morfologica…" style="min-height:90px"></textarea></div></div>
+        <div class="field-row single"><div class="field-group"><label>Osservazioni</label><textarea id="f_osservazioni" placeholder="Note aggiuntive, osservazioni di campo…" style="min-height:70px"></textarea></div></div>
       </div>
 
       <div class="form-section">
@@ -321,7 +370,20 @@
       <div class="form-section">
         <div class="section-title">5 · Documentazione</div>
         <div class="field-row">
-          <div class="field-group"><label>Foto</label><input type="text" id="f_foto" placeholder=""></div>
+          <div class="field-group">
+            <label>Foto</label>
+            <div style="display:flex;gap:20px;padding:9px 0;flex-wrap:wrap">
+              <label style="display:flex;align-items:center;gap:7px;font-family:'IBM Plex Sans',sans-serif;font-size:0.87rem;text-transform:none;letter-spacing:normal;color:var(--ink);cursor:pointer">
+                <input type="checkbox" id="f_foto_digitali" value="Digitali"> Digitali
+              </label>
+              <label style="display:flex;align-items:center;gap:7px;font-family:'IBM Plex Sans',sans-serif;font-size:0.87rem;text-transform:none;letter-spacing:normal;color:var(--ink);cursor:pointer">
+                <input type="checkbox" id="f_foto_3d" value="3D/Laser Scanner"> 3D/Laser Scanner
+              </label>
+              <label style="display:flex;align-items:center;gap:7px;font-family:'IBM Plex Sans',sans-serif;font-size:0.87rem;text-transform:none;letter-spacing:normal;color:var(--ink);cursor:pointer">
+                <input type="checkbox" id="f_foto_drone" value="Drone/Asta"> Drone/Asta
+              </label>
+            </div>
+          </div>
           <div class="field-group"><label>Disegni</label><input type="text" id="f_disegni" placeholder=""></div>
         </div>
         <div class="field-row single"><div class="field-group"><label>Note documentazione</label><textarea id="f_note_doc" placeholder="Note su documentazione grafica e fotografica…"></textarea></div></div>
@@ -406,9 +468,9 @@ const SHEET_ID  = '1iVXaplyjWp3uCx76-x5MPYEM1e3udtjW2mQxuomyggA';
 const SHEET_NAME = 'SchedeUS';
 const SCOPES = 'https://www.googleapis.com/auth/spreadsheets';
 
-const HEADERS = ['id','numero','area','saggio','tipo','pos_neg','data','definizione','formazione','responsabile','stato',
+const HEADERS = ['id','numero','area','saggio','tipo','pos_neg','data','definizione','formazione','criteri','responsabile','stato',
   'colore','consistenza','composizione','umidita','inclusi_geo','inclusi_org','inclusi_art','quota_max','quota_min',
-  'spessore','descrizione','rapporti','reperti','foto','disegni','note_doc',
+  'spessore','descrizione','osservazioni','rapporti','reperti','foto_digitali','foto_3d','foto_drone','disegni','note_doc',
   'interpretazione','datazione','fase','affidabilita','note_interp'];
 
 let accessToken = null;
@@ -626,15 +688,16 @@ function renderStats() {
 
 // ─── FORM ─────────────────────────────────────────────────────────
 function resetForm() {
-  const ids = ['numero','area','saggio','tipo','data','definizione','responsabile','stato','colore','consistenza',
-   'composizione','umidita','inclusi_geo','inclusi_org','inclusi_art','quota_max','quota_min','spessore','descrizione',
-   'foto','disegni','note_doc','interpretazione','datazione','fase','affidabilita','note_interp'];
+  const ids = ['numero','area','saggio','tipo','data','definizione','criteri','responsabile','stato','colore','consistenza',
+   'composizione','umidita','inclusi_geo','inclusi_org','inclusi_art','quota_max','quota_min','spessore','descrizione','osservazioni',
+   'disegni','note_doc','interpretazione','datazione','fase','affidabilita','note_interp'];
   ids.forEach(id => {
     const el = document.getElementById('f_' + id);
     if (el) el.value = id === 'data' ? new Date().toISOString().split('T')[0] : id === 'stato' ? 'parziale' : '';
   });
   document.querySelectorAll('input[name="f_formazione"]').forEach(r => r.checked = false);
   document.querySelectorAll('input[name="f_pos_neg"]').forEach(r => r.checked = false);
+  ['f_foto_digitali','f_foto_3d','f_foto_drone'].forEach(id => { const el = document.getElementById(id); if (el) el.checked = false; });
   document.getElementById('rapportiList').innerHTML = '';
   document.getElementById('repertiList').innerHTML = '';
   rapportiCount = 0; repertiCount = 0;
@@ -649,12 +712,15 @@ function openEdit(id) {
   editingId = id;
   document.getElementById('formTitle').textContent = 'Scheda US ' + s.numero;
   document.getElementById('btnDelete').style.display = 'block';
-  const fields = ['numero','area','saggio','tipo','data','definizione','responsabile','stato','colore','consistenza',
-   'composizione','umidita','inclusi_geo','inclusi_org','inclusi_art','quota_max','quota_min','spessore','descrizione',
-   'foto','disegni','note_doc','interpretazione','datazione','fase','affidabilita','note_interp'];
+  const fields = ['numero','area','saggio','tipo','data','definizione','criteri','responsabile','stato','colore','consistenza',
+   'composizione','umidita','inclusi_geo','inclusi_org','inclusi_art','quota_max','quota_min','spessore','descrizione','osservazioni',
+   'disegni','note_doc','interpretazione','datazione','fase','affidabilita','note_interp'];
   fields.forEach(id => { const el = document.getElementById('f_'+id); if (el && s[id] !== undefined) el.value = s[id]; });
   document.querySelectorAll('input[name="f_formazione"]').forEach(r => { r.checked = r.value === s.formazione; });
   document.querySelectorAll('input[name="f_pos_neg"]').forEach(r => { r.checked = r.value === s.pos_neg; });
+  document.getElementById('f_foto_digitali').checked = !!s.foto_digitali;
+  document.getElementById('f_foto_3d').checked = !!s.foto_3d;
+  document.getElementById('f_foto_drone').checked = !!s.foto_drone;
   document.getElementById('rapportiList').innerHTML = ''; rapportiCount = 0;
   (s.rapporti || []).forEach(r => addRapporto(r));
   document.getElementById('repertiList').innerHTML = ''; repertiCount = 0;
@@ -751,6 +817,7 @@ async function saveScheda() {
     data: document.getElementById('f_data').value,
     definizione: document.getElementById('f_definizione').value,
     formazione: (document.querySelector('input[name="f_formazione"]:checked') || {}).value || '',
+    criteri: document.getElementById('f_criteri').value,
     responsabile: document.getElementById('f_responsabile').value,
     stato: document.getElementById('f_stato').value,
     colore: document.getElementById('f_colore').value,
@@ -764,9 +831,12 @@ async function saveScheda() {
     quota_min: document.getElementById('f_quota_min').value,
     spessore: document.getElementById('f_spessore').value,
     descrizione: document.getElementById('f_descrizione').value,
+    osservazioni: document.getElementById('f_osservazioni').value,
     rapporti: getRapporti(),
     reperti: getReperti(),
-    foto: document.getElementById('f_foto').value,
+    foto_digitali: document.getElementById('f_foto_digitali').checked,
+    foto_3d: document.getElementById('f_foto_3d').checked,
+    foto_drone: document.getElementById('f_foto_drone').checked,
     disegni: document.getElementById('f_disegni').value,
     note_doc: document.getElementById('f_note_doc').value,
     interpretazione: document.getElementById('f_interpretazione').value,
@@ -942,14 +1012,21 @@ function drawICCDpage(doc, s) {
   fieldBox('Stato', s.stato, ML+165, y, IW-165, r1h);
   y += r1h;
 
-  // Riga 2: Definizione e Posizione
+  // Riga 2: Quote e Spessore
+  fieldBox('Quota massima (m s.l.m.)', s.quota_max, ML, y, 60);
+  fieldBox('Quota minima (m s.l.m.)', s.quota_min, ML+60, y, 60);
+  fieldBox('Spessore (cm)', s.spessore, ML+120, y, IW-120);
+  y += 7;
+
+  // Riga 3: Definizione e Posizione
   rect(ML, y, IW, 7);
   label('Definizione e Posizione', ML+1, y+3);
   value(s.definizione, ML+1, y+6, IW-2);
   y += 7;
 
-  // Riga 3: Formazione
-  fieldBox('Formazione', s.formazione, ML, y, IW);
+  // Riga 3: Formazione + Criteri di distinzione
+  fieldBox('Formazione', s.formazione, ML, y, IW/2);
+  fieldBox('Criteri di Distinzione', s.criteri, ML+IW/2, y, IW/2);
   y += 7;
 
   // Riga 4: Responsabile
@@ -972,13 +1049,7 @@ function drawICCDpage(doc, s) {
   fieldBox('Colore', s.colore, ML, y, 40);
   fieldBox('Consistenza', s.consistenza, ML+40, y, 35);
   fieldBox('Composizione', s.composizione, ML+75, y, 35);
-  fieldBox('Umidità', s.umidita, ML+110, y, 30);
-  fieldBox('Spessore (cm)', s.spessore, ML+140, y, IW-140);
-  y += 7;
-
-  // Quote
-  fieldBox('Quota massima (m s.l.m.)', s.quota_max, ML, y, 50);
-  fieldBox('Quota minima (m s.l.m.)', s.quota_min, ML+50, y, 50);
+  fieldBox('Umidità', s.umidita, ML+110, y, IW-110);
   y += 7;
 
   // Inclusi
@@ -1002,6 +1073,15 @@ function drawICCDpage(doc, s) {
   doc.setFontSize(8); doc.setFont('helvetica','normal'); doc.setTextColor(0,0,0);
   doc.text(descLines, ML+1, y+7);
   y += descH;
+
+  // Osservazioni
+  const osservLines = doc.splitTextToSize(String(s.osservazioni||''), IW-2);
+  const osservH = Math.max(12, osservLines.length * 4 + 5);
+  rect(ML, y, IW, osservH);
+  label('Osservazioni', ML+1, y+3);
+  doc.setFontSize(8); doc.setFont('helvetica','normal'); doc.setTextColor(0,0,0);
+  doc.text(osservLines, ML+1, y+7);
+  y += osservH;
 
   // ══════════════════════════════════
   // SEZIONE 3 – RAPPORTI STRATIGRAFICI
@@ -1079,8 +1159,15 @@ function drawICCDpage(doc, s) {
   rect(ML, y, IW, 5, 0.3);
   txt('5. DOCUMENTAZIONE', ML+2, y+3.5, 7, 'bold');
   y += 5;
-  fieldBox('Fotografie', s.foto, ML, y, IW/2);
-  fieldBox('Disegni / Piante', s.disegni, ML+IW/2, y, IW/2);
+
+  // Foto: 3 checkbox come campi
+  const fotoW = IW / 3;
+  rect(ML, y, fotoW, 7); label('Foto Digitali', ML+1, y+3); value(s.foto_digitali ? '✓' : '', ML+1, y+6, fotoW-2);
+  rect(ML+fotoW, y, fotoW, 7); label('3D / Laser Scanner', ML+fotoW+1, y+3); value(s.foto_3d ? '✓' : '', ML+fotoW+1, y+6, fotoW-2);
+  rect(ML+fotoW*2, y, fotoW, 7); label('Drone / Asta', ML+fotoW*2+1, y+3); value(s.foto_drone ? '✓' : '', ML+fotoW*2+1, y+6, fotoW-2);
+  y += 7;
+
+  fieldBox('Disegni / Piante', s.disegni, ML, y, IW);
   y += 7;
   rect(ML, y, IW, 8);
   label('Note documentazione', ML+1, y+3);
