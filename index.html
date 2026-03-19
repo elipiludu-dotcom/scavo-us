@@ -23,19 +23,19 @@
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;600;700&family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
 <style>
   :root {
-    --sand: #151512;
-    --sand-dark: #1f1f1c;
+    --sand: #2e2b26;
+    --sand-dark: #38342e;
     --earth: #c9963a;
     --earth-dark: #a87828;
     --terra: #c17f45;
-    --ink: #ddd5c4;
-    --parchment: #1e1e1b;
-    --parchment-light: #1a1a17;
+    --ink: #ede5d8;
+    --parchment: #353028;
+    --parchment-light: #2e2b26;
     --accent: #d94f30;
     --green-field: #4a9e6b;
-    --muted: #6a6358;
-    --border: #2e2e2a;
-    --shadow: rgba(0,0,0,0.6);
+    --muted: #8a7f70;
+    --border: #4a4540;
+    --shadow: rgba(0,0,0,0.35);
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body {
@@ -44,13 +44,13 @@
     color: var(--ink);
     min-height: 100vh;
     background-image:
-      repeating-linear-gradient(0deg, transparent, transparent 28px, rgba(255,255,255,0.012) 28px, rgba(255,255,255,0.012) 29px),
-      repeating-linear-gradient(90deg, transparent, transparent 28px, rgba(255,255,255,0.008) 28px, rgba(255,255,255,0.008) 29px);
+      repeating-linear-gradient(0deg, transparent, transparent 28px, rgba(255,255,255,0.025) 28px, rgba(255,255,255,0.025) 29px),
+      repeating-linear-gradient(90deg, transparent, transparent 28px, rgba(255,255,255,0.015) 28px, rgba(255,255,255,0.015) 29px);
   }
 
   /* HEADER */
   .app-header {
-    background: #0d0d0b;
+    background: #252219;
     color: var(--ink);
     padding: 0 20px;
     height: 52px;
@@ -116,8 +116,7 @@
   /* NAV TABS */
   .nav-tabs {
     display: flex;
-    background: #0d0d0b;
-    overflow-x: auto;
+    background: #252219;
     scrollbar-width: none;
     border-bottom: 1px solid var(--border);
   }
@@ -177,7 +176,7 @@
     transition: all 0.15s;
     text-transform: uppercase;
   }
-  .btn-primary { background: var(--earth); color: #0d0d0b; border-color: var(--earth); font-weight: 700; }
+  .btn-primary { background: var(--earth); color: #1e1b16; border-color: var(--earth); font-weight: 700; }
   .btn-primary:hover { background: #ddb050; border-color: #ddb050; }
   .btn-secondary { background: transparent; color: var(--muted); border-color: var(--border); }
   .btn-secondary:hover { border-color: var(--earth); color: var(--earth); }
@@ -313,7 +312,7 @@
   }
   .field-group input::placeholder, .field-group textarea::placeholder { color: var(--muted); opacity: 0.7; }
   .field-group select { color: var(--ink); }
-  .field-group select option { background: #1a1a17; }
+  .field-group select option { background: #2e2b26; }
   .field-group textarea { resize: vertical; min-height: 70px; }
   .munsell-hint { font-size: 0.65rem; color: var(--muted); font-family: 'Space Mono', monospace; margin-top: 2px; }
 
@@ -366,7 +365,7 @@
 
   .rapporto-row { display: flex; gap: 8px; align-items: center; margin-bottom: 6px; }
   .rapporto-row select { flex: 0 0 140px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 3px; font-size: 0.82rem; background: var(--parchment-light); color: var(--ink); outline: none; -webkit-appearance: none; }
-  .rapporto-row select option { background: #1a1a17; }
+  .rapporto-row select option { background: #2e2b26; }
   .rapporto-row input { flex: 1; padding: 8px 10px; border: 1px solid var(--border); border-radius: 3px; font-size: 0.82rem; background: var(--parchment-light); color: var(--ink); outline: none; }
   .rapporto-row .btn-rm { background: none; border: none; color: var(--muted); font-size: 1.1rem; cursor: pointer; padding: 4px 6px; border-radius: 3px; transition: color 0.15s; }
   .rapporto-row .btn-rm:hover { color: var(--accent); }
@@ -439,7 +438,7 @@
     bottom: 24px;
     left: 50%;
     transform: translateX(-50%) translateY(100px);
-    background: #0d0d0b;
+    background: #252219;
     color: var(--earth);
     padding: 11px 22px;
     border-radius: 3px;
@@ -456,7 +455,7 @@
   .loading-overlay {
     position: fixed;
     inset: 0;
-    background: rgba(21,21,18,0.92);
+    background: rgba(46,43,38,0.93);
     display: flex;
     flex-direction: column;
     align-items: center;
