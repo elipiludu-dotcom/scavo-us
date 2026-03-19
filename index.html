@@ -38,11 +38,13 @@
     --shadow: rgba(0,0,0,0.35);
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
+  html { overflow-x: hidden; }
   body {
     font-family: 'DM Sans', sans-serif;
     background: var(--sand);
     color: var(--ink);
     min-height: 100vh;
+    overflow-x: hidden;
     background-image:
       repeating-linear-gradient(0deg, transparent, transparent 28px, rgba(255,255,255,0.025) 28px, rgba(255,255,255,0.025) 29px),
       repeating-linear-gradient(90deg, transparent, transparent 28px, rgba(255,255,255,0.015) 28px, rgba(255,255,255,0.015) 29px);
@@ -473,9 +475,43 @@
   @keyframes spin { to { transform: rotate(360deg); } }
   .loading-overlay p { font-family: 'Space Mono', monospace; font-size: 0.7rem; color: var(--muted); letter-spacing: 0.08em; text-transform: uppercase; }
 
-  @media (max-width: 480px) {
-    .field-row.triple { grid-template-columns: 1fr 1fr; }
-    .stats-grid { grid-template-columns: 1fr 1fr; }
+  @media (max-width: 600px) {
+    /* Tutti i grid diventano colonna singola */
+    .field-row { grid-template-columns: 1fr; }
+    .field-row.triple { grid-template-columns: 1fr; }
+    .stats-grid { grid-template-columns: 1fr 1fr 1fr; gap: 6px; padding: 10px; }
+    .stat-num { font-size: 1.6rem; }
+
+    /* Form section: rimuovi i margini laterali su mobile */
+    .form-section { margin: 0 10px 12px; }
+
+    /* Form header sticky sotto la nav */
+    .form-header { top: 52px; flex-wrap: wrap; gap: 8px; }
+
+    /* Rapporto row: va a capo */
+    .rapporto-row { flex-wrap: wrap; }
+    .rapporto-row select { flex: 1 1 100%; }
+    .rapporto-row input { flex: 1 1 calc(100% - 44px); }
+
+    /* Nav tabs: font più piccolo */
+    .nav-tab { padding: 10px 12px; font-size: 0.6rem; letter-spacing: 0.06em; }
+
+    /* Export cards */
+    .export-section { padding: 12px 10px; }
+
+    /* Bottoni form in fondo */
+    .form-actions { gap: 6px; }
+    .form-actions .btn { padding: 8px 12px; font-size: 0.65rem; }
+
+    /* List toolbar */
+    .list-toolbar { padding: 10px 10px 6px; }
+
+    /* US card */
+    .us-list { padding: 0 10px; }
+
+    /* Assicura che nulla esca dalla viewport */
+    * { max-width: 100%; }
+    input, select, textarea { width: 100%; box-sizing: border-box; }
   }
 
   /* Fix date & color pickers on dark theme */
