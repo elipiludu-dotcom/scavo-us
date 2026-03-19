@@ -582,7 +582,7 @@ async function sheetsClear(range) {
 // Ensure header row exists
 async function ensureHeaders() {
   try {
-    const data = await sheetsGet(`${SHEET_NAME}!A1:Z1`);
+    const data = await sheetsGet(`${SHEET_NAME}!A1:AM1`);
     if (!data.values || !data.values[0] || data.values[0][0] !== 'id') {
       await sheetsUpdate(`${SHEET_NAME}!A1`, [HEADERS]);
     }
@@ -595,7 +595,7 @@ async function loadFromSheets(showMsg = false) {
   setSyncStatus('syncing', 'Sync…');
   try {
     await ensureHeaders();
-    const data = await sheetsGet(`${SHEET_NAME}!A1:Z1000`);
+    const data = await sheetsGet(`${SHEET_NAME}!A1:AM1000`);
     const rows = data.values || [];
     if (rows.length <= 1) { schede = []; }
     else {
@@ -606,6 +606,8 @@ async function loadFromSheets(showMsg = false) {
         // Parse JSON fields
         try { obj.rapporti = JSON.parse(obj.rapporti || '[]'); } catch { obj.rapporti = []; }
         try { obj.reperti = JSON.parse(obj.reperti || '[]'); } catch { obj.reperti = []; }
+        // Parse boolean fields
+        ['foto_digitali','foto_3d','foto_drone'].forEach(k => { obj[k] = obj[k] === 'true'; });
         obj.numero = parseInt(obj.numero) || 0;
         return obj;
       });
@@ -622,7 +624,7 @@ async function loadFromSheets(showMsg = false) {
 
 async function writeAllToSheets() {
   await ensureHeaders();
-  const range = `${SHEET_NAME}!A2:Z10000`;
+  const range = `${SHEET_NAME}!A2:AM10000`;
   await sheetsClear(range);
   if (schede.length > 0) {
     const rows = schede.map(s => HEADERS.map(h => {
