@@ -233,11 +233,38 @@
           <div class="field-group"><label>Area</label><input type="text" id="f_area" placeholder="es. A"></div>
           <div class="field-group"><label>Saggio / Settore</label><input type="text" id="f_saggio" placeholder="es. S3"></div>
         </div>
-        <div class="field-row">
+        <div class="field-row triple">
           <div class="field-group"><label>Tipo US</label>
             <select id="f_tipo"><option value="">— seleziona —</option><option>Strato</option><option>Struttura</option><option>Taglio</option><option>Riempimento</option><option>Interfaccia</option><option>Buca</option><option>Crollo</option><option>Altro</option></select>
           </div>
+          <div class="field-group">
+            <label>Positiva / Negativa</label>
+            <div style="display:flex;gap:20px;padding:9px 0">
+              <label style="display:flex;align-items:center;gap:7px;font-family:'IBM Plex Sans',sans-serif;font-size:0.87rem;text-transform:none;letter-spacing:normal;color:var(--ink);cursor:pointer">
+                <input type="radio" name="f_pos_neg" id="f_pos_neg_pos" value="Positiva"> Positiva
+              </label>
+              <label style="display:flex;align-items:center;gap:7px;font-family:'IBM Plex Sans',sans-serif;font-size:0.87rem;text-transform:none;letter-spacing:normal;color:var(--ink);cursor:pointer">
+                <input type="radio" name="f_pos_neg" id="f_pos_neg_neg" value="Negativa"> Negativa
+              </label>
+            </div>
+          </div>
           <div class="field-group"><label>Data rilevamento</label><input type="date" id="f_data"></div>
+        </div>
+        <div class="field-row single">
+          <div class="field-group"><label>Definizione e Posizione</label><input type="text" id="f_definizione" placeholder="es. Strato di abbandono nella porzione NE del saggio"></div>
+        </div>
+        <div class="field-row single">
+          <div class="field-group">
+            <label>Formazione</label>
+            <div style="display:flex;gap:20px;padding:9px 0">
+              <label style="display:flex;align-items:center;gap:7px;font-family:'IBM Plex Sans',sans-serif;font-size:0.87rem;text-transform:none;letter-spacing:normal;color:var(--ink);cursor:pointer">
+                <input type="radio" name="f_formazione" id="f_formazione_nat" value="Naturale"> Naturale
+              </label>
+              <label style="display:flex;align-items:center;gap:7px;font-family:'IBM Plex Sans',sans-serif;font-size:0.87rem;text-transform:none;letter-spacing:normal;color:var(--ink);cursor:pointer">
+                <input type="radio" name="f_formazione" id="f_formazione_art" value="Artificiale"> Artificiale
+              </label>
+            </div>
+          </div>
         </div>
         <div class="field-row">
           <div class="field-group"><label>Responsabile</label><input type="text" id="f_responsabile" placeholder="Nome cognome"></div>
@@ -250,7 +277,7 @@
       <div class="form-section">
         <div class="section-title">2 · Descrizione Stratigrafica</div>
         <div class="field-row">
-          <div class="field-group"><label>Colore (Munsell)</label><input type="text" id="f_colore" placeholder="es. 10YR 4/4"><span class="munsell-hint">Codice Munsell consigliato</span></div>
+          <div class="field-group"><label>Colore</label><input type="text" id="f_colore" placeholder="es. Bruno giallastro"></div>
           <div class="field-group"><label>Consistenza</label>
             <select id="f_consistenza"><option value="">— seleziona —</option><option>Molto friabile</option><option>Friabile</option><option>Compatta</option><option>Molto compatta</option><option>Dura</option></select>
           </div>
@@ -263,7 +290,11 @@
             <select id="f_umidita"><option value="">— seleziona —</option><option>Secca</option><option>Umida</option><option>Bagnata</option></select>
           </div>
         </div>
-        <div class="field-row single"><div class="field-group"><label>Inclusi</label><textarea id="f_inclusi" placeholder="Tipo, dimensione, frequenza, distribuzione…"></textarea></div></div>
+        <div class="field-row triple">
+          <div class="field-group"><label>Componenti Geologici</label><textarea id="f_inclusi_geo" placeholder="es. ciottoli, ghiaia, sabbia…"></textarea></div>
+          <div class="field-group"><label>Componenti Organici</label><textarea id="f_inclusi_org" placeholder="es. carboni, semi, ossa…"></textarea></div>
+          <div class="field-group"><label>Componenti Artificiali</label><textarea id="f_inclusi_art" placeholder="es. ceramica, laterizi, metalli…"></textarea></div>
+        </div>
         <div class="field-row triple">
           <div class="field-group"><label>Quota max (m)</label><input type="number" id="f_quota_max" step="0.01" placeholder="0.00"></div>
           <div class="field-group"><label>Quota min (m)</label><input type="number" id="f_quota_min" step="0.01" placeholder="0.00"></div>
@@ -290,8 +321,8 @@
       <div class="form-section">
         <div class="section-title">5 · Documentazione</div>
         <div class="field-row">
-          <div class="field-group"><label>N° foto</label><input type="text" id="f_foto" placeholder="es. A101_01, A101_02"></div>
-          <div class="field-group"><label>N° disegni</label><input type="text" id="f_disegni" placeholder="es. D-45, D-46"></div>
+          <div class="field-group"><label>Foto</label><input type="text" id="f_foto" placeholder=""></div>
+          <div class="field-group"><label>Disegni</label><input type="text" id="f_disegni" placeholder=""></div>
         </div>
         <div class="field-row single"><div class="field-group"><label>Note documentazione</label><textarea id="f_note_doc" placeholder="Note su documentazione grafica e fotografica…"></textarea></div></div>
       </div>
@@ -375,8 +406,8 @@ const SHEET_ID  = '1iVXaplyjWp3uCx76-x5MPYEM1e3udtjW2mQxuomyggA';
 const SHEET_NAME = 'SchedeUS';
 const SCOPES = 'https://www.googleapis.com/auth/spreadsheets';
 
-const HEADERS = ['id','numero','area','saggio','tipo','data','responsabile','stato',
-  'colore','consistenza','composizione','umidita','inclusi','quota_max','quota_min',
+const HEADERS = ['id','numero','area','saggio','tipo','pos_neg','data','definizione','formazione','responsabile','stato',
+  'colore','consistenza','composizione','umidita','inclusi_geo','inclusi_org','inclusi_art','quota_max','quota_min',
   'spessore','descrizione','rapporti','reperti','foto','disegni','note_doc',
   'interpretazione','datazione','fase','affidabilita','note_interp'];
 
@@ -595,13 +626,15 @@ function renderStats() {
 
 // ─── FORM ─────────────────────────────────────────────────────────
 function resetForm() {
-  const ids = ['numero','area','saggio','tipo','data','responsabile','stato','colore','consistenza',
-   'composizione','umidita','inclusi','quota_max','quota_min','spessore','descrizione',
+  const ids = ['numero','area','saggio','tipo','data','definizione','responsabile','stato','colore','consistenza',
+   'composizione','umidita','inclusi_geo','inclusi_org','inclusi_art','quota_max','quota_min','spessore','descrizione',
    'foto','disegni','note_doc','interpretazione','datazione','fase','affidabilita','note_interp'];
   ids.forEach(id => {
     const el = document.getElementById('f_' + id);
     if (el) el.value = id === 'data' ? new Date().toISOString().split('T')[0] : id === 'stato' ? 'parziale' : '';
   });
+  document.querySelectorAll('input[name="f_formazione"]').forEach(r => r.checked = false);
+  document.querySelectorAll('input[name="f_pos_neg"]').forEach(r => r.checked = false);
   document.getElementById('rapportiList').innerHTML = '';
   document.getElementById('repertiList').innerHTML = '';
   rapportiCount = 0; repertiCount = 0;
@@ -616,10 +649,12 @@ function openEdit(id) {
   editingId = id;
   document.getElementById('formTitle').textContent = 'Scheda US ' + s.numero;
   document.getElementById('btnDelete').style.display = 'block';
-  const fields = ['numero','area','saggio','tipo','data','responsabile','stato','colore','consistenza',
-   'composizione','umidita','inclusi','quota_max','quota_min','spessore','descrizione',
+  const fields = ['numero','area','saggio','tipo','data','definizione','responsabile','stato','colore','consistenza',
+   'composizione','umidita','inclusi_geo','inclusi_org','inclusi_art','quota_max','quota_min','spessore','descrizione',
    'foto','disegni','note_doc','interpretazione','datazione','fase','affidabilita','note_interp'];
   fields.forEach(id => { const el = document.getElementById('f_'+id); if (el && s[id] !== undefined) el.value = s[id]; });
+  document.querySelectorAll('input[name="f_formazione"]').forEach(r => { r.checked = r.value === s.formazione; });
+  document.querySelectorAll('input[name="f_pos_neg"]').forEach(r => { r.checked = r.value === s.pos_neg; });
   document.getElementById('rapportiList').innerHTML = ''; rapportiCount = 0;
   (s.rapporti || []).forEach(r => addRapporto(r));
   document.getElementById('repertiList').innerHTML = ''; repertiCount = 0;
@@ -712,14 +747,19 @@ async function saveScheda() {
     area: document.getElementById('f_area').value,
     saggio: document.getElementById('f_saggio').value,
     tipo: document.getElementById('f_tipo').value,
+    pos_neg: (document.querySelector('input[name="f_pos_neg"]:checked') || {}).value || '',
     data: document.getElementById('f_data').value,
+    definizione: document.getElementById('f_definizione').value,
+    formazione: (document.querySelector('input[name="f_formazione"]:checked') || {}).value || '',
     responsabile: document.getElementById('f_responsabile').value,
     stato: document.getElementById('f_stato').value,
     colore: document.getElementById('f_colore').value,
     consistenza: document.getElementById('f_consistenza').value,
     composizione: document.getElementById('f_composizione').value,
     umidita: document.getElementById('f_umidita').value,
-    inclusi: document.getElementById('f_inclusi').value,
+    inclusi_geo: document.getElementById('f_inclusi_geo').value,
+    inclusi_org: document.getElementById('f_inclusi_org').value,
+    inclusi_art: document.getElementById('f_inclusi_art').value,
     quota_max: document.getElementById('f_quota_max').value,
     quota_min: document.getElementById('f_quota_min').value,
     spessore: document.getElementById('f_spessore').value,
@@ -896,12 +936,23 @@ function drawICCDpage(doc, s) {
   fieldBox('N° US', s.numero, ML, y, 22, r1h);
   fieldBox('Area / Settore', s.area, ML+22, y, 28, r1h);
   fieldBox('Saggio', s.saggio, ML+50, y, 25, r1h);
-  fieldBox('Tipo US', s.tipo, ML+75, y, 45, r1h);
-  fieldBox('Data rilevamento', s.data, ML+120, y, 35, r1h);
-  fieldBox('Stato', s.stato, ML+155, y, IW-155, r1h);
+  fieldBox('Tipo US', s.tipo, ML+75, y, 35, r1h);
+  fieldBox('Pos./Neg.', s.pos_neg, ML+110, y, 25, r1h);
+  fieldBox('Data rilevamento', s.data, ML+135, y, 30, r1h);
+  fieldBox('Stato', s.stato, ML+165, y, IW-165, r1h);
   y += r1h;
 
-  // Riga 2: Responsabile
+  // Riga 2: Definizione e Posizione
+  rect(ML, y, IW, 7);
+  label('Definizione e Posizione', ML+1, y+3);
+  value(s.definizione, ML+1, y+6, IW-2);
+  y += 7;
+
+  // Riga 3: Formazione
+  fieldBox('Formazione', s.formazione, ML, y, IW);
+  y += 7;
+
+  // Riga 4: Responsabile
   rect(ML, y, IW, 7);
   label('Responsabile rilevamento', ML+1, y+3);
   value(s.responsabile, ML+1, y+6, IW-2);
@@ -918,7 +969,7 @@ function drawICCDpage(doc, s) {
   y += 5;
 
   // Colore | Consistenza | Composizione | Umidità
-  fieldBox('Colore (Munsell)', s.colore, ML, y, 40);
+  fieldBox('Colore', s.colore, ML, y, 40);
   fieldBox('Consistenza', s.consistenza, ML+40, y, 35);
   fieldBox('Composizione', s.composizione, ML+75, y, 35);
   fieldBox('Umidità', s.umidita, ML+110, y, 30);
@@ -931,9 +982,16 @@ function drawICCDpage(doc, s) {
   y += 7;
 
   // Inclusi
-  rect(ML, y, IW, 10);
-  label('Inclusi (tipo, dimensione, frequenza, distribuzione)', ML+1, y+3);
-  value(s.inclusi, ML+1, y+7, IW-2);
+  const thirdW = IW / 3;
+  rect(ML, y, thirdW, 10);
+  label('Componenti Geologici', ML+1, y+3);
+  value(s.inclusi_geo, ML+1, y+7, thirdW-2);
+  rect(ML+thirdW, y, thirdW, 10);
+  label('Componenti Organici', ML+thirdW+1, y+3);
+  value(s.inclusi_org, ML+thirdW+1, y+7, thirdW-2);
+  rect(ML+thirdW*2, y, thirdW, 10);
+  label('Componenti Artificiali', ML+thirdW*2+1, y+3);
+  value(s.inclusi_art, ML+thirdW*2+1, y+7, thirdW-2);
   y += 10;
 
   // Descrizione
@@ -1021,8 +1079,8 @@ function drawICCDpage(doc, s) {
   rect(ML, y, IW, 5, 0.3);
   txt('5. DOCUMENTAZIONE', ML+2, y+3.5, 7, 'bold');
   y += 5;
-  fieldBox('N° Fotografie', s.foto, ML, y, IW/2);
-  fieldBox('N° Disegni / Piante', s.disegni, ML+IW/2, y, IW/2);
+  fieldBox('Fotografie', s.foto, ML, y, IW/2);
+  fieldBox('Disegni / Piante', s.disegni, ML+IW/2, y, IW/2);
   y += 7;
   rect(ML, y, IW, 8);
   label('Note documentazione', ML+1, y+3);
