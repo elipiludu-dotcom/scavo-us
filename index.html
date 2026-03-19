@@ -777,25 +777,48 @@ window.onload = async () => {
 };
 
 function tryTokenClient() {
+  let settled = false;
+
+  // Fallback: Safari/iPhone blocca i token silenziosi (ITP).
+  // Se entro 4s non arriva risposta, mostriamo il login manualmente.
+  const fallbackTimer = setTimeout(() => {
+    if (!settled) { settled = true; showLogin(); }
+  }, 4000);
+
   const tokenClient = google.accounts.oauth2.initTokenClient({
     client_id: CLIENT_ID,
     scope: SCOPES,
     prompt: '',
     callback: (resp) => {
-      if (resp.error) { showLogin(); return; }
+      if (!settled) { settled = true; clearTimeout(fallbackTimer); }
+      if (resp.error || !resp.access_token) { showLogin(); return; }
       accessToken = resp.access_token;
       onAuthenticated();
     },
+    error_callback: () => {
+      if (!settled) { settled = true; clearTimeout(fallbackTimer); }
+      showLogin();
+    },
   });
-  // Try silently
-  tokenClient.requestAccessToken({ prompt: '' });
-  // Store tokenClient for re-use
+
+  try {
+    tokenClient.requestAccessToken({ prompt: '' });
+  } catch (e) {
+    clearTimeout(fallbackTimer);
+    showLogin();
+  }
+
   window._tokenClient = tokenClient;
 }
 
 function handleCredential(response) {
-  // After ID token, get access token
-  window._tokenClient.requestAccessToken({ prompt: '' });
+  // Dopo l'ID token, richiediamo l'access token con popup esplicito
+  // (necessario su Safari dove il silent token viene bloccato)
+  if (window._tokenClient) {
+    window._tokenClient.requestAccessToken({ prompt: 'consent' });
+  } else {
+    showLogin();
+  }
 }
 
 function showLogin() {
