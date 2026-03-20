@@ -955,7 +955,6 @@ function onAuthenticated() {
   document.getElementById('loginScreen').style.display = 'none';
   document.getElementById('appShell').style.display = 'block';
   editingId = null;
-  showView('list');
   setSyncStatus('syncing', 'Caricamento…');
   loadFromSheets(false);
 }
@@ -1054,6 +1053,11 @@ async function loadFromSheets(showMsg = false) {
     }
     setSyncStatus('ok', 'Sincronizzato');
     renderList(); renderStats();
+    // Assicura che la vista lista sia sempre quella mostrata dopo il caricamento
+    document.querySelectorAll('.view').forEach(el => el.classList.remove('active'));
+    document.querySelectorAll('.nav-tab').forEach(el => el.classList.remove('active'));
+    document.getElementById('view-list').classList.add('active');
+    document.querySelectorAll('.nav-tab')[0].classList.add('active');
     if (showMsg) showToast('✓ Dati aggiornati (' + schede.length + ' schede)');
   } catch (e) {
     setSyncStatus('error', 'Errore sync');
@@ -1466,7 +1470,7 @@ async function exportPDFTest() {
   showToast('✓ PDF di test generato');
 }
 
-
+async function exportPDFSingola() {
   const id = document.getElementById('pdfSelectUS').value;
   if (!id) { showToast('⚠ Seleziona una scheda US'); return; }
   const s = schede.find(x => x.id === id);
