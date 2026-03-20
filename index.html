@@ -921,28 +921,6 @@ function doGoogleLogin() {
   }
 }
 
-// Rinnova il token silenziosamente se necessario, prima di ogni operazione Sheets
-function ensureToken() {
-  return new Promise((resolve, reject) => {
-    if (!window._tokenClient) { reject(new Error('Token client non disponibile')); return; }
-    // Proviamo a fare una chiamata test; se fallisce con 401, rinnoviamo
-    const testUrl = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(SHEET_NAME + '!A1')}`;
-    fetch(testUrl, { headers: { Authorization: 'Bearer ' + accessToken } })
-      .then(res => {
-        if (res.ok || res.status !== 401) { resolve(); return; }
-        // Token scaduto: rinnova silenziosamente
-        const orig = window._tokenClient.callback;
-        window._tokenClient.callback = (resp) => {
-          window._tokenClient.callback = orig;
-          if (resp.error || !resp.access_token) { reject(new Error('Rinnovo token fallito')); return; }
-          accessToken = resp.access_token;
-          resolve();
-        };
-        window._tokenClient.requestAccessToken({ prompt: '' });
-      })
-      .catch(() => resolve()); // Se il test fallisce per altri motivi, proviamo comunque
-  });
-}
 
 function showLogin() {
   document.getElementById('loadingOverlay').style.display = 'none';
@@ -1024,7 +1002,6 @@ async function ensureHeaders() {
 async function loadFromSheets(showMsg = false) {
   setSyncStatus('syncing', 'Sync…');
   try {
-    await ensureToken();
     await ensureHeaders();
     const data = await sheetsGet(`${SHEET_NAME}!A1:AM1000`);
     const rows = data.values || [];
@@ -1282,14 +1259,6 @@ async function saveScheda() {
   if (duplicate) { showToast('⚠ US ' + numero + ' già presente'); return; }
 
   setSyncStatus('syncing', 'Salvataggio…');
-  try {
-    await ensureToken();
-  } catch (e) {
-    setSyncStatus('error', 'Sessione scaduta');
-    showToast('⚠ Sessione scaduta, rieffettua il login');
-    showLogin();
-    return;
-  }
 
   const scheda = {
     id: editingId || Date.now().toString(36) + Math.random().toString(36).slice(2),
