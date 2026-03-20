@@ -954,6 +954,8 @@ function onAuthenticated() {
   document.getElementById('loadingOverlay').style.display = 'none';
   document.getElementById('loginScreen').style.display = 'none';
   document.getElementById('appShell').style.display = 'block';
+  editingId = null;
+  showView('list');
   setSyncStatus('syncing', 'Caricamento…');
   loadFromSheets(false);
 }
