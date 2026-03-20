@@ -1396,261 +1396,311 @@ function buildICCDpdf(schedeList) {
 
 function drawICCDpage(doc, s) {
   const W = 210, H = 297;
-  const ML = 10, MR = 10, MT = 10;
-  let y = MT;
+  const ML = 8, MR = 8, MT = 8;
+  const IW = W - ML - MR;
 
   // ── helpers ──
-  const line = (x1,y1,x2,y2,w=0.2) => { doc.setLineWidth(w); doc.line(x1,y1,x2,y2); };
-  const rect = (x,yr,w,h,lw=0.2) => { doc.setLineWidth(lw); doc.rect(x,yr,w,h); };
-  const txt = (t,x,yr,size=8,style='normal',color=[0,0,0]) => {
+  const line  = (x1,y1,x2,y2,w=0.2) => { doc.setLineWidth(w); doc.setDrawColor(0,0,0); doc.line(x1,y1,x2,y2); };
+  const rect  = (x,yr,w,h,lw=0.2)   => { doc.setLineWidth(lw); doc.setDrawColor(0,0,0); doc.rect(x,yr,w,h); };
+  const fillRect = (x,yr,w,h,r,g,b) => { doc.setFillColor(r,g,b); doc.rect(x,yr,w,h,'F'); };
+  const txt   = (t,x,yr,size=7,style='normal',color=[0,0,0]) => {
     doc.setFontSize(size); doc.setFont('helvetica',style); doc.setTextColor(...color);
     doc.text(String(t||''), x, yr);
   };
-  const label = (t,x,yr) => txt(t,x,yr,6,'normal',[100,100,100]);
-  const value = (t,x,yr,maxW) => {
-    doc.setFontSize(8); doc.setFont('helvetica','normal'); doc.setTextColor(0,0,0);
-    if (maxW) {
-      const lines = doc.splitTextToSize(String(t||''), maxW);
-      doc.text(lines, x, yr);
-      return lines.length;
-    }
-    doc.text(String(t||''), x, yr);
-    return 1;
+  const lbl   = (t,x,yr) => txt(t,x,yr,5.5,'normal',[80,80,80]);
+  const val   = (t,x,yr,maxW) => {
+    doc.setFontSize(7.5); doc.setFont('helvetica','normal'); doc.setTextColor(0,0,0);
+    const lines = doc.splitTextToSize(String(t||''), maxW || 999);
+    doc.text(lines, x, yr);
+    return lines.length;
   };
-
-  const fieldBox = (lbl, val, x, yr, w, h=7) => {
+  const cell  = (lblTxt, valTxt, x, yr, w, h=8) => {
     rect(x, yr, w, h);
-    label(lbl, x+1, yr+3);
-    value(val, x+1, yr+6, w-2);
+    lbl(lblTxt, x+1.5, yr+3.5);
+    val(valTxt, x+1.5, yr+7, w-3);
+  };
+  const drawCB = (checked, x, yc) => {
+    const sz = 3.2;
+    doc.setLineWidth(0.3); doc.setDrawColor(0,0,0);
+    doc.rect(x, yc-sz/2, sz, sz);
+    if (checked) {
+      doc.setLineWidth(0.6);
+      doc.line(x+0.4, yc+0.2, x+sz*0.38, yc+sz*0.32);
+      doc.line(x+sz*0.38, yc+sz*0.32, x+sz-0.3, yc-sz*0.38);
+    }
+    doc.setLineWidth(0.2);
+  };
+  const multiCell = (lblTxt, valTxt, x, yr, w, minH=14) => {
+    const lines = doc.splitTextToSize(String(valTxt||''), w-3);
+    const h = Math.max(minH, lines.length * 4 + 6);
+    rect(x, yr, w, h);
+    lbl(lblTxt, x+1.5, yr+3.5);
+    doc.setFontSize(7.5); doc.setFont('helvetica','normal'); doc.setTextColor(0,0,0);
+    doc.text(lines, x+1.5, yr+7);
+    return h;
   };
 
-  // ══════════════════════════════════
-  // INTESTAZIONE
-  // ══════════════════════════════════
-  rect(ML, y, W-ML-MR, 12, 0.5);
-  txt('MINISTERO DELLA CULTURA', ML+2, y+5, 7, 'bold', [0,0,0]);
-  txt('Istituto Centrale per il Catalogo e la Documentazione', ML+2, y+9, 6, 'normal', [80,80,80]);
-  txt('SCHEDA US – UNITÀ STRATIGRAFICA', 115, y+5, 9, 'bold');
-  txt('Rif. ICCD – Standard RA 4.00', 115, y+9, 6, 'normal', [80,80,80]);
+  // ════════════════════════════════════════════════
+  // PAGINA 1
+  // ════════════════════════════════════════════════
+  let y = MT;
+
+  // — INTESTAZIONE —
+  // Bordo esterno intestazione
+  rect(ML, y, IW, 14, 0.4);
+  // Cella US (sinistra)
+  rect(ML, y, 14, 14, 0.4);
+  txt('US', ML+3.5, y+9, 11, 'bold');
+  // Cella centrale: ente
+  rect(ML+14, y, 90, 14, 0.2);
+  txt('ENTE RESPONSABILE', ML+15, y+4, 5, 'normal', [100,100,100]);
+  txt('MINISTERO DELLA CULTURA', ML+15, y+8, 7, 'bold');
+  txt('Istituto Centrale per il Catalogo e la Documentazione', ML+15, y+12, 5.5, 'normal', [60,60,60]);
+  // Cella destra: ANNO
+  rect(ML+104, y, IW-104, 14, 0.2);
+  txt('ANNO', ML+106, y+4, 5, 'normal', [100,100,100]);
+  txt(s.data ? s.data.substring(0,4) : '', ML+106, y+9, 9, 'bold');
   y += 14;
 
-  // ══════════════════════════════════
-  // SEZIONE 1 – IDENTIFICAZIONE
-  // ══════════════════════════════════
-  rect(ML, y, W-ML-MR, 5, 0.3);
-  doc.setFillColor(220,210,195);
-  doc.rect(ML, y, W-ML-MR, 5, 'F');
-  rect(ML, y, W-ML-MR, 5, 0.3);
-  txt('1. IDENTIFICAZIONE', ML+2, y+3.5, 7, 'bold');
-  y += 5;
-
-  const IW = W-ML-MR;
-  // Riga 1: N°US | Area | Saggio | Tipo | Data
-  const r1h = 8;
-  fieldBox('N° US', s.numero, ML, y, 22, r1h);
-  fieldBox('Area / Settore', s.area, ML+22, y, 28, r1h);
-  fieldBox('Saggio', s.saggio, ML+50, y, 25, r1h);
-  fieldBox('Tipo US', s.tipo, ML+75, y, 35, r1h);
-  fieldBox('Pos./Neg.', s.pos_neg, ML+110, y, 25, r1h);
-  fieldBox('Data rilevamento', s.data, ML+135, y, 30, r1h);
-  fieldBox('Stato', s.stato, ML+165, y, IW-165, r1h);
-  y += r1h;
-
-  // Riga 2: Quote e Spessore
-  fieldBox('Quota massima (m s.l.m.)', s.quota_max, ML, y, 60);
-  fieldBox('Quota minima (m s.l.m.)', s.quota_min, ML+60, y, 60);
-  fieldBox('Spessore (cm)', s.spessore, ML+120, y, IW-120);
-  y += 7;
-
-  // Riga 3: Definizione e Posizione
-  rect(ML, y, IW, 7);
-  label('Definizione e Posizione', ML+1, y+3);
-  value(s.definizione, ML+1, y+6, IW-2);
-  y += 7;
-
-  // Riga 3: Formazione + Criteri di distinzione
-  fieldBox('Formazione', s.formazione, ML, y, IW/2);
-  fieldBox('Criteri di Distinzione', s.criteri, ML+IW/2, y, IW/2);
-  y += 7;
-
-  // Riga 4: Responsabile
-  rect(ML, y, IW, 7);
-  label('Responsabile rilevamento', ML+1, y+3);
-  value(s.responsabile, ML+1, y+6, IW-2);
-  y += 7;
-
-  // ══════════════════════════════════
-  // SEZIONE 2 – DESCRIZIONE STRATIGRAFICA
-  // ══════════════════════════════════
-  y += 2;
-  doc.setFillColor(220,210,195);
-  doc.rect(ML, y, IW, 5, 'F');
-  rect(ML, y, IW, 5, 0.3);
-  txt('2. DESCRIZIONE STRATIGRAFICA', ML+2, y+3.5, 7, 'bold');
-  y += 5;
-
-  // Colore | Consistenza | Composizione | Umidità
-  fieldBox('Colore', s.colore, ML, y, 40);
-  fieldBox('Consistenza', s.consistenza, ML+40, y, 35);
-  fieldBox('Composizione', s.composizione, ML+75, y, 35);
-  fieldBox('Umidità', s.umidita, ML+110, y, IW-110);
-  y += 7;
-
-  // Inclusi
-  const thirdW = IW / 3;
-  rect(ML, y, thirdW, 10);
-  label('Componenti Geologici', ML+1, y+3);
-  value(s.inclusi_geo, ML+1, y+7, thirdW-2);
-  rect(ML+thirdW, y, thirdW, 10);
-  label('Componenti Organici', ML+thirdW+1, y+3);
-  value(s.inclusi_org, ML+thirdW+1, y+7, thirdW-2);
-  rect(ML+thirdW*2, y, thirdW, 10);
-  label('Componenti Artificiali', ML+thirdW*2+1, y+3);
-  value(s.inclusi_art, ML+thirdW*2+1, y+7, thirdW-2);
+  // — UFFICIO MiC —
+  rect(ML, y, IW*0.55, 10, 0.2);
+  lbl('UFFICIO MiC COMPETENTE PER TUTELA', ML+1.5, y+3.5);
+  val('Soprintendenza Archeologica Belle Arti e Paesaggio', ML+1.5, y+7, IW*0.55-3);
+  rect(ML+IW*0.55, y, IW*0.45, 10, 0.2);
+  lbl('IDENTIFICATIVO SAGGIO / STRUTTURA DI RIFERIMENTO', ML+IW*0.55+1.5, y+3.5);
+  txt(s.saggio||'', ML+IW*0.55+1.5, y+8.5, 9, 'bold');
   y += 10;
 
-  // Descrizione
-  const descLines = doc.splitTextToSize(String(s.descrizione||''), IW-2);
-  const descH = Math.max(14, descLines.length * 4 + 5);
-  rect(ML, y, IW, descH);
-  label('Descrizione generale', ML+1, y+3);
-  doc.setFontSize(8); doc.setFont('helvetica','normal'); doc.setTextColor(0,0,0);
-  doc.text(descLines, ML+1, y+7);
-  y += descH;
+  // — LOCALITA —
+  rect(ML, y, IW, 9, 0.2);
+  lbl('LOCALITA\'', ML+1.5, y+3.5);
+  val(s.definizione || '', ML+1.5, y+7.5, IW-3);
+  y += 9;
 
-  // Osservazioni
-  const osservLines = doc.splitTextToSize(String(s.osservazioni||''), IW-2);
-  const osservH = Math.max(12, osservLines.length * 4 + 5);
-  rect(ML, y, IW, osservH);
-  label('Osservazioni', ML+1, y+3);
-  doc.setFontSize(8); doc.setFont('helvetica','normal'); doc.setTextColor(0,0,0);
-  doc.text(osservLines, ML+1, y+7);
-  y += osservH;
+  // — AREA / SAGGIO —
+  rect(ML, y, IW*0.65, 9, 0.2);
+  lbl('AREA/EDIFICIO/STRUTTURA', ML+1.5, y+3.5);
+  val(s.area||'', ML+1.5, y+7.5, IW*0.65-3);
+  rect(ML+IW*0.65, y, IW*0.35, 9, 0.2);
+  lbl('SAGGIO', ML+IW*0.65+1.5, y+3.5);
+  val(s.saggio||'', ML+IW*0.65+1.5, y+7.5, IW*0.35-3);
+  y += 9;
 
-  // ══════════════════════════════════
-  // SEZIONE 3 – RAPPORTI STRATIGRAFICI
-  // ══════════════════════════════════
-  y += 2;
-  doc.setFillColor(220,210,195);
-  doc.rect(ML, y, IW, 5, 'F');
-  rect(ML, y, IW, 5, 0.3);
-  txt('3. RAPPORTI STRATIGRAFICI', ML+2, y+3.5, 7, 'bold');
-  y += 5;
+  // — AMBIENTE | POSIZIONE | SETTORE | QUADRATO | QUOTE | NAT/ART | POS/NEG —
+  const amb=IW*0.22, pos=IW*0.14, sett=IW*0.1, quad=IW*0.1, quot=IW*0.14, natart=IW*0.15, posneg=IW*0.15;
+  const rowH = 14;
+  rect(ML, y, amb, rowH, 0.2);            lbl('AMBIENTE/UNITA\' FUNZIONALE', ML+1.5, y+3.5);
+  rect(ML+amb, y, pos, rowH, 0.2);        lbl('POSIZIONE', ML+amb+1.5, y+3.5);          val(s.definizione||'', ML+amb+1.5, y+8, pos-3);
+  rect(ML+amb+pos, y, sett, rowH, 0.2);   lbl('SETTORE/I', ML+amb+pos+1.5, y+3.5);
+  rect(ML+amb+pos+sett, y, quad, rowH, 0.2); lbl('QUADRATO/I', ML+amb+pos+sett+1.5, y+3.5);
+  // Quote (con max/min)
+  const qx = ML+amb+pos+sett+quad;
+  rect(qx, y, quot, rowH, 0.2); lbl('QUOTE', qx+1.5, y+3.5);
+  lbl('max', qx+1.5, y+8); val(s.quota_max||'', qx+7, y+8, quot/2-4);
+  lbl('min', qx+quot/2+1, y+8); val(s.quota_min||'', qx+quot/2+7, y+8, quot/2-4);
+  line(qx, y+rowH/2, qx+quot, y+rowH/2);
+  // Naturale/Artificiale
+  const nx = qx+quot;
+  rect(nx, y, natart/2, rowH/2, 0.2); lbl('NATURALE', nx+1, y+3.5);
+  drawCB(s.formazione==='Naturale', nx+1, y+8);
+  rect(nx+natart/2, y, natart/2, rowH/2, 0.2); lbl('ARTIFICIALE', nx+natart/2+1, y+3.5);
+  drawCB(s.formazione==='Artificiale', nx+natart/2+1, y+8);
+  // Positiva/Negativa
+  rect(nx, y+rowH/2, natart/2, rowH/2, 0.2); lbl('POSITIVA', nx+1, y+rowH/2+3.5);
+  drawCB(s.pos_neg==='Positiva', nx+1, y+rowH/2+8);
+  rect(nx+natart/2, y+rowH/2, natart/2, rowH/2, 0.2); lbl('NEGATIVA', nx+natart/2+1, y+rowH/2+3.5);
+  drawCB(s.pos_neg==='Negativa', nx+natart/2+1, y+rowH/2+8);
+  y += rowH;
 
+  // — PIANTE | PROSPETTI | SEZIONI | FOTOGRAFIE | RIF.TABELLE —
+  const docRowH = 22;
+  const pW=IW*0.12, prW=IW*0.12, seW=IW*0.12, foW=IW*0.28, rtW=IW*0.36;
+  rect(ML, y, pW, docRowH, 0.2);     lbl('PIANTE', ML+1.5, y+3.5);     val(s.disegni||'', ML+1.5, y+8, pW-3);
+  rect(ML+pW, y, prW, docRowH, 0.2); lbl('PROSPETTI', ML+pW+1.5, y+3.5);
+  rect(ML+pW+prW, y, seW, docRowH, 0.2); lbl('SEZIONI', ML+pW+prW+1.5, y+3.5);
+  // Fotografie con checkbox
+  const fx = ML+pW+prW+seW;
+  rect(fx, y, foW, docRowH, 0.2); lbl('FOTOGRAFIE', fx+1.5, y+3.5);
+  drawCB(s.foto_digitali, fx+1.5, y+9);  txt('Digitali',      fx+6,  y+9.5, 6.5);
+  drawCB(s.foto_3d,       fx+1.5, y+14); txt('3D/Laser Scanner', fx+6, y+14.5, 6.5);
+  drawCB(s.foto_drone,    fx+1.5, y+19); txt('Drone/Asta',    fx+6,  y+19.5, 6.5);
+  // Riferimenti tabelle materiali
+  const rx2 = fx+foW;
+  rect(rx2, y, rtW, docRowH, 0.2); lbl('RIFERIMENTI TABELLE MATERIALI', rx2+1.5, y+3.5);
+  y += docRowH;
+
+  // — DEFINIZIONE —
+  y += multiCell('DEFINIZIONE', s.definizione, ML, y, IW, 12);
+
+  // — CRITERI DI DISTINZIONE —
+  y += multiCell('CRITERI DI DISTINZIONE', s.criteri, ML, y, IW, 12);
+
+  // — MODO DI FORMAZIONE —
+  y += multiCell('MODO DI FORMAZIONE', s.formazione, ML, y, IW, 12);
+
+  // — COMPONENTI (tabella inorganici/organici) —
+  const compH = 22;
+  const compLabelW = 12;
+  const halfW = (IW - compLabelW) / 2;
+  // Label verticale "COMPONENTI"
+  rect(ML, y, compLabelW, compH, 0.2);
+  doc.setFontSize(5.5); doc.setFont('helvetica','normal'); doc.setTextColor(80,80,80);
+  doc.text('COMPONENTI', ML+2, y+compH/2+1, { angle: 90 });
+  // Intestazioni INORGANICI / ORGANICI
+  rect(ML+compLabelW, y, halfW, compH/2, 0.2);
+  txt('INORGANICI', ML+compLabelW+halfW/2-8, y+4, 6, 'bold');
+  rect(ML+compLabelW+halfW, y, halfW, compH/2, 0.2);
+  txt('ORGANICI', ML+compLabelW+halfW+halfW/2-6, y+4, 6, 'bold');
+  // Righe contenuto
+  const subH = compH/2;
+  rect(ML+compLabelW, y+compH/2, halfW/2, subH, 0.2);
+  txt('Geologici', ML+compLabelW+1.5, y+compH/2+4, 6.5);
+  val(s.inclusi_geo||'', ML+compLabelW+1.5, y+compH/2+9, halfW/2-3);
+  rect(ML+compLabelW+halfW/2, y+compH/2, halfW/2, subH, 0.2);
+  txt('Artificiali', ML+compLabelW+halfW/2+1.5, y+compH/2+4, 6.5);
+  val(s.inclusi_art||'', ML+compLabelW+halfW/2+1.5, y+compH/2+9, halfW/2-3);
+  rect(ML+compLabelW+halfW, y+compH/2, halfW, subH, 0.2);
+  val(s.inclusi_org||'', ML+compLabelW+halfW+1.5, y+compH/2+9, halfW-3);
+  y += compH;
+
+  // — CONSISTENZA | COLORE | MISURE —
+  cell('CONSISTENZA', s.consistenza, ML, y, IW*0.33, 10);
+  cell('COLORE', s.colore, ML+IW*0.33, y, IW*0.34, 10);
+  cell('MISURE (spessore cm)', s.spessore, ML+IW*0.67, y, IW*0.33, 10);
+  y += 10;
+
+  // — STATO DI CONSERVAZIONE —
+  rect(ML, y, IW, 10, 0.2);
+  lbl('STATO DI CONSERVAZIONE', ML+1.5, y+3.5);
+  const statoTxt = s.stato === 'completa' ? 'Conserva i limiti' : 'In corso di rilevamento';
+  drawCB(s.stato==='completa', ML+1.5, y+8); txt(statoTxt, ML+6.5, y+8.5, 7);
+  y += 10;
+
+  // — SEQUENZA FISICA / STRATIGRAFICA —
   const rapporti = s.rapporti || [];
-  const rapLabels = {
-    copre:'COPRE', coperto_da:'COPERTO DA', si_lega_a:'SI LEGA A',
-    uguale_a:'UGUALE A', taglia:'TAGLIA', tagliato_da:'TAGLIATO DA',
-    riempie:'RIEMPIE', riempito_da:'RIEMPITO DA'
-  };
-  const rapTypes = ['copre','coperto_da','si_lega_a','uguale_a','taglia','tagliato_da','riempie','riempito_da'];
-  const rapCols = 4;
-  const rapW = IW / rapCols;
+  const rapH = 42;
+  const seqLabelW = 12;
+  const seqW = (IW - seqLabelW*2) / 2;
 
-  rapTypes.forEach((tipo, i) => {
-    const col = i % rapCols;
-    const row = Math.floor(i / rapCols);
-    const rx = ML + col * rapW;
-    const ry = y + row * 8;
-    rect(rx, ry, rapW, 8);
-    label(rapLabels[tipo], rx+1, ry+3);
-    const vals = rapporti.filter(r=>r.tipo===tipo).map(r=>r.us).join(', ');
-    value(vals, rx+1, ry+7, rapW-2);
-  });
-  y += Math.ceil(rapTypes.length / rapCols) * 8;
+  // Label "SEQUENZA FISICA"
+  rect(ML, y, seqLabelW, rapH, 0.2);
+  doc.setFontSize(5.5); doc.setFont('helvetica','normal'); doc.setTextColor(80,80,80);
+  doc.text('SEQUENZA FISICA', ML+2, y+rapH/2+5, { angle: 90 });
 
-  // ══════════════════════════════════
-  // SEZIONE 4 – REPERTI
-  // ══════════════════════════════════
-  y += 2;
-  doc.setFillColor(220,210,195);
-  doc.rect(ML, y, IW, 5, 'F');
-  rect(ML, y, IW, 5, 0.3);
-  txt('4. REPERTI E CAMPIONI', ML+2, y+3.5, 7, 'bold');
-  y += 5;
-
-  const reperti = s.reperti || [];
-  if (reperti.length === 0) {
-    rect(ML, y, IW, 7);
-    value('Nessun reperto registrato', ML+2, y+5, IW-4);
-    y += 7;
-  } else {
-    // Header
-    rect(ML, y, IW, 5);
-    doc.setFillColor(240,235,225);
-    doc.rect(ML, y, IW, 5, 'F');
-    rect(ML, y, IW, 5, 0.2);
-    txt('Categoria', ML+2, y+3.5, 6, 'bold');
-    txt('N° Inventario', ML+42, y+3.5, 6, 'bold');
-    txt('Qtà', ML+92, y+3.5, 6, 'bold');
-    txt('Descrizione', ML+107, y+3.5, 6, 'bold');
-    y += 5;
-    reperti.forEach(r => {
-      rect(ML, y, 40, 6); value(r.categoria||'', ML+2, y+4.5, 38);
-      rect(ML+40, y, 50, 6); value(r.inv||'', ML+42, y+4.5, 48);
-      rect(ML+90, y, 15, 6); value(r.qty||'', ML+92, y+4.5, 13);
-      rect(ML+105, y, IW-105, 6); value(r.desc||'', ML+107, y+4.5, IW-108);
-      y += 6;
-    });
+  const rapRowH = rapH / 5;
+  const rapDefs = [
+    ['UGUALE A','uguale_a'],['SI LEGA A','si_lega_a'],
+    ['GLI SI APPOGGIA','gli_si_appoggia'],['SI APPOGGIA A','si_appoggia_a'],
+    ['COPERTO DA','coperto_da'],['COPRE','copre'],
+    ['TAGLIATO DA','tagliato_da'],['TAGLIA','taglia'],
+    ['RIEMPITO DA','riempito_da'],['RIEMPIE','riempie'],
+  ];
+  for (let i=0; i<5; i++) {
+    const ry = y + i*rapRowH;
+    const [lbl1,tipo1] = rapDefs[i*2];
+    const [lbl2,tipo2] = rapDefs[i*2+1];
+    rect(ML+seqLabelW, ry, seqW, rapRowH, 0.2);
+    lbl(lbl1, ML+seqLabelW+1.5, ry+3.5);
+    val(rapporti.filter(r=>r.tipo===tipo1).map(r=>r.us).join(', '), ML+seqLabelW+1.5, ry+7, seqW-3);
+    rect(ML+seqLabelW+seqW, ry, seqW, rapRowH, 0.2);
+    lbl(lbl2, ML+seqLabelW+seqW+1.5, ry+3.5);
+    val(rapporti.filter(r=>r.tipo===tipo2).map(r=>r.us).join(', '), ML+seqLabelW+seqW+1.5, ry+7, seqW-3);
   }
 
-  // ══════════════════════════════════
-  // SEZIONE 5 – DOCUMENTAZIONE
-  // ══════════════════════════════════
-  y += 2;
-  doc.setFillColor(220,210,195);
-  doc.rect(ML, y, IW, 5, 'F');
-  rect(ML, y, IW, 5, 0.3);
-  txt('5. DOCUMENTAZIONE', ML+2, y+3.5, 7, 'bold');
-  y += 5;
+  // Label "SEQUENZA STRATIGRAFICA" (destra)
+  const ssX = ML+seqLabelW+seqW*2;
+  rect(ssX, y, seqLabelW, rapH, 0.2);
+  doc.setFontSize(5.5); doc.setFont('helvetica','normal'); doc.setTextColor(80,80,80);
+  doc.text('SEQUENZA STRATIGRAFICA', ssX+2, y+rapH/2+10, { angle: 90 });
+  // Posteriore / Anteriore
+  rect(ssX+seqLabelW, y, IW-(seqLabelW*2+seqW*2+seqLabelW), rapH/2, 0.2);
+  lbl('POSTERIORE', ssX+seqLabelW+1.5, y+3.5);
+  rect(ssX+seqLabelW, y+rapH/2, IW-(seqLabelW*2+seqW*2+seqLabelW), rapH/2, 0.2);
+  lbl('ANTERIORE', ssX+seqLabelW+1.5, y+rapH/2+3.5);
+  y += rapH;
 
-  // Foto: 3 checkbox come campi
-  const fotoW = IW / 3;
-  rect(ML, y, fotoW, 7); label('Foto Digitali', ML+1, y+3); value(s.foto_digitali ? '✓' : '', ML+1, y+6, fotoW-2);
-  rect(ML+fotoW, y, fotoW, 7); label('3D / Laser Scanner', ML+fotoW+1, y+3); value(s.foto_3d ? '✓' : '', ML+fotoW+1, y+6, fotoW-2);
-  rect(ML+fotoW*2, y, fotoW, 7); label('Drone / Asta', ML+fotoW*2+1, y+3); value(s.foto_drone ? '✓' : '', ML+fotoW*2+1, y+6, fotoW-2);
-  y += 7;
+  // — FOOTER pagina 1 —
+  txt('MiC – ICCD_licenza CC BY-SA 4.0 – Creative Commons Attribution-ShareAlike 4.0 International',
+    ML, H-4, 5, 'normal', [120,120,120]);
 
-  fieldBox('Disegni / Piante', s.disegni, ML, y, IW);
-  y += 7;
-  rect(ML, y, IW, 8);
-  label('Note documentazione', ML+1, y+3);
-  value(s.note_doc, ML+1, y+7, IW-2);
-  y += 8;
+  // ════════════════════════════════════════════════
+  // PAGINA 2
+  // ════════════════════════════════════════════════
+  doc.addPage();
+  y = MT;
 
-  // ══════════════════════════════════
-  // SEZIONE 6 – INTERPRETAZIONE
-  // ══════════════════════════════════
-  y += 2;
-  doc.setFillColor(220,210,195);
-  doc.rect(ML, y, IW, 5, 'F');
-  rect(ML, y, IW, 5, 0.3);
-  txt('6. INTERPRETAZIONE', ML+2, y+3.5, 7, 'bold');
-  y += 5;
+  // — DESCRIZIONE —
+  const descLines = doc.splitTextToSize(String(s.descrizione||''), IW-3);
+  const descH = Math.max(30, descLines.length*4+8);
+  rect(ML, y, IW, descH, 0.2);
+  lbl('DESCRIZIONE', ML+1.5, y+3.5);
+  doc.setFontSize(7.5); doc.setFont('helvetica','normal'); doc.setTextColor(0,0,0);
+  doc.text(descLines, ML+1.5, y+7);
+  y += descH;
 
-  fieldBox('Interpretazione funzionale', s.interpretazione, ML, y, 65);
-  fieldBox('Datazione proposta', s.datazione, ML+65, y, 50);
-  fieldBox('Periodo / Fase', s.fase, ML+115, y, 40);
-  fieldBox('Affidabilità', s.affidabilita, ML+155, y, IW-155);
-  y += 7;
+  // — OSSERVAZIONI —
+  const osservLines = doc.splitTextToSize(String(s.osservazioni||''), IW-3);
+  const osservH = Math.max(20, osservLines.length*4+8);
+  rect(ML, y, IW, osservH, 0.2);
+  lbl('OSSERVAZIONI', ML+1.5, y+3.5);
+  doc.setFontSize(7.5); doc.setFont('helvetica','normal'); doc.setTextColor(0,0,0);
+  doc.text(osservLines, ML+1.5, y+7);
+  y += osservH;
 
-  const noteLines = doc.splitTextToSize(String(s.note_interp||''), IW-2);
-  const noteH = Math.max(12, noteLines.length * 4 + 5);
-  rect(ML, y, IW, noteH);
-  label('Note interpretative', ML+1, y+3);
-  doc.setFontSize(8); doc.setFont('helvetica','normal'); doc.setTextColor(0,0,0);
-  doc.text(noteLines, ML+1, y+7);
-  y += noteH;
+  // — INTERPRETAZIONE —
+  const interpLines = doc.splitTextToSize(String(s.interpretazione||'') + (s.note_interp ? '\n'+s.note_interp : ''), IW-3);
+  const interpH = Math.max(30, interpLines.length*4+8);
+  rect(ML, y, IW, interpH, 0.2);
+  lbl('INTERPRETAZIONE', ML+1.5, y+3.5);
+  doc.setFontSize(7.5); doc.setFont('helvetica','normal'); doc.setTextColor(0,0,0);
+  doc.text(interpLines, ML+1.5, y+7);
+  y += interpH;
 
-  // ══════════════════════════════════
-  // FOOTER
-  // ══════════════════════════════════
-  const footerY = H - 8;
-  line(ML, footerY, W-MR, footerY, 0.2);
-  txt('Scheda US ' + s.numero + (s.area ? ' – Area ' + s.area : '') + (s.saggio ? ' – ' + s.saggio : ''),
-    ML, footerY+4, 6, 'normal', [120,120,120]);
-  txt('Generato il ' + new Date().toLocaleDateString('it-IT'), W-MR-40, footerY+4, 6, 'normal', [120,120,120]);
-  txt('ICCD – Scheda US', W/2 - 10, footerY+4, 6, 'normal', [120,120,120]);
+  // — DATAZIONE | PERIODO | FASE | ATTIVITA —
+  const datW = IW*0.3, perW = IW*0.2, fasW = IW*0.2, attW = IW*0.3;
+  cell('DATAZIONE', s.datazione, ML, y, datW, 12);
+  cell('PERIODO', '', ML+datW, y, perW, 12);
+  cell('FASE', s.fase, ML+datW+perW, y, fasW, 12);
+  cell('ATTIVITA\'', '', ML+datW+perW+fasW, y, attW, 12);
+  y += 12;
+
+  // — ELEMENTI DATANTI —
+  y += multiCell('ELEMENTI DATANTI', '', ML, y, IW, 14);
+
+  // — DATI QUANTITATIVI REPERTI —
+  const reperti = s.reperti || [];
+  const repTxt = reperti.map(r => `${r.categoria||''} – inv. ${r.inv||'–'} – qtà ${r.qty||'–'}${r.desc?' ('+r.desc+')':''}`).join('\n') || '';
+  y += multiCell('DATI QUANTITATIVI DEI REPERTI', repTxt, ML, y, IW, 14);
+
+  // — CAMPIONATURE | FLOTTAZIONE | SETACCIATURA —
+  cell('CAMPIONATURE', '', ML, y, IW/3, 12);
+  cell('FLOTTAZIONE', '', ML+IW/3, y, IW/3, 12);
+  cell('SETACCIATURA', '', ML+IW*2/3, y, IW/3, 12);
+  y += 12;
+
+  // — AFFIDABILITA STRATIGRAFICA —
+  cell('AFFIDABILITA\' STRATIGRAFICA', s.affidabilita, ML, y, IW, 10);
+  y += 10;
+
+  // — RESPONSABILE SCIENTIFICO —
+  rect(ML, y, IW, 10, 0.2);
+  lbl('RESPONSABILE SCIENTIFICO DELLE INDAGINI', ML+1.5, y+3.5);
+  txt(s.responsabile||'', ML+IW/2-20, y+8, 9, 'bold');
+  y += 10;
+
+  // — DATA RILEVAMENTO | RESPONSABILE COMPILAZIONE —
+  cell('DATA RILEVAMENTO SUL CAMPO', s.data||'', ML, y, IW/2, 10);
+  cell('RESPONSABILE COMPILAZIONE SUL CAMPO', s.responsabile||'', ML+IW/2, y, IW/2, 10);
+  y += 10;
+
+  // — DATA RIELABORAZIONE | RESPONSABILE RIELABORAZIONE —
+  cell('DATA RIELABORAZIONE', '', ML, y, IW/2, 10);
+  cell('RESPONSABILE RIELABORAZIONE', '', ML+IW/2, y, IW/2, 10);
+  y += 10;
+
+  // — FOOTER pagina 2 —
+  txt('MiC – ICCD_licenza CC BY-SA 4.0 – Creative Commons Attribution-ShareAlike 4.0 International',
+    ML, H-4, 5, 'normal', [120,120,120]);
 }
 
 // ─── SYNC STATUS ─────────────────────────────────────────────────
