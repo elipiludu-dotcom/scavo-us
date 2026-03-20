@@ -237,6 +237,23 @@
   .us-badge.completa { background: rgba(74,158,107,0.12); color: #5dba85; border-color: rgba(74,158,107,0.3); }
   .us-badge.parziale { background: rgba(201,150,58,0.1); color: var(--earth); border-color: rgba(201,150,58,0.3); }
 
+  .btn-edit-card {
+    font-family: 'Space Mono', monospace;
+    font-size: 0.6rem;
+    padding: 5px 10px;
+    border-radius: 3px;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--muted);
+    cursor: pointer;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    transition: all 0.15s;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+  .btn-edit-card:hover { border-color: var(--earth); color: var(--earth); background: rgba(201,150,58,0.06); }
+
   .empty-state { text-align: center; padding: 60px 20px; color: var(--muted); }
   .empty-state .icon { font-size: 2.5rem; margin-bottom: 16px; opacity: 0.4; }
   .empty-state p { font-family: 'Space Mono', monospace; font-size: 0.72rem; letter-spacing: 0.07em; }
@@ -642,7 +659,12 @@
         <div class="field-row">
           <div class="field-group"><label>Responsabile</label><input type="text" id="f_responsabile" placeholder="Nome cognome"></div>
           <div class="field-group"><label>Stato compilazione</label>
-            <select id="f_stato"><option value="parziale">Parziale</option><option value="completa">Completa</option></select>
+            <select id="f_stato">
+              <option value="" disabled>— seleziona —</option>
+              <option value="parziale" selected>Parziale</option>
+              <option value="completa">Completa</option>
+            </select>
+            <span class="munsell-hint">Default: Parziale</span>
           </div>
         </div>
       </div>
@@ -660,7 +682,12 @@
             <select id="f_composizione"><option value="">— seleziona —</option><option>Argillosa</option><option>Limosa</option><option>Sabbiosa</option><option>Ghiaiosa</option><option>Organica</option><option>Mista</option></select>
           </div>
           <div class="field-group"><label>Umidità</label>
-            <select id="f_umidita"><option value="">— seleziona —</option><option>Secca</option><option>Umida</option><option>Bagnata</option></select>
+            <select id="f_umidita">
+              <option value="">— seleziona —</option>
+              <option>Secca</option>
+              <option>Umida</option>
+              <option>Bagnata</option>
+            </select>
           </div>
         </div>
         <div class="field-row triple">
@@ -951,6 +978,14 @@ async function loadFromSheets(showMsg = false) {
         // Parse boolean fields
         ['foto_digitali','foto_3d','foto_drone'].forEach(k => { obj[k] = obj[k] === 'true'; });
         obj.numero = parseInt(obj.numero) || 0;
+        // Sanitize: rimuovi artefatti JSON (es. "[]") dai campi testo
+        if (obj.fase && obj.fase.trim() === '[]') obj.fase = '';
+        if (obj.fase && obj.fase.trim().startsWith('[')) obj.fase = '';
+        // Sanitize interpretazione: se il valore non è tra le opzioni valide, svuotalo
+        const interpretazioniValide = ['Livello di frequentazione','Livello di abbandono','Livello di crollo',
+          'Scarico / discarica',"Piano d'uso",'Fondazione','Riempimento intenzionale','Erosione naturale',
+          'Strato di distruzione','Buca di palo','Sepoltura','Incendio','Altro'];
+        if (obj.interpretazione && !interpretazioniValide.includes(obj.interpretazione)) obj.interpretazione = '';
         return obj;
       });
     }
@@ -985,7 +1020,18 @@ function showView(v) {
   const idx = {list:0,new:1,export:2}[v];
   if (idx !== undefined) document.querySelectorAll('.nav-tab')[idx].classList.add('active');
   if (v === 'new' && editingId === null) resetForm();
-  if (v === 'list') { editingId = null; renderList(); renderStats(); }
+  if (v === 'list') { editingId = null; renderList(); renderStats(); updateNewTabLabel(); }
+  if (v === 'new') updateNewTabLabel();
+}
+
+function updateNewTabLabel() {
+  const tab = document.querySelectorAll('.nav-tab')[1];
+  if (editingId) {
+    const s = schede.find(x => x.id === editingId);
+    tab.textContent = s ? '✏ US ' + s.numero : '✏ Modifica';
+  } else {
+    tab.textContent = '+ Nuova US';
+  }
 }
 
 // ─── RENDER LIST ─────────────────────────────────────────────────
@@ -1013,7 +1059,10 @@ function renderList(q = '') {
           ${s.datazione ? '<br><span style="font-size:0.75rem;color:var(--muted)">'+s.datazione+'</span>' : ''}
         </div>
       </div>
-      <span class="us-badge ${s.stato}">${s.stato}</span>
+      <div style="display:flex;align-items:center;gap:10px">
+        <span class="us-badge ${s.stato}">${s.stato}</span>
+        <button class="btn-edit-card" onclick="event.stopPropagation();openEdit('${s.id}')">✏ Modifica</button>
+      </div>
     </div>
   `).join('');
 }
@@ -1073,6 +1122,7 @@ function openEdit(id) {
   document.querySelectorAll('.nav-tab')[1].classList.add('active');
   document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
   document.getElementById('view-new').classList.add('active');
+  updateNewTabLabel();
 }
 
 // ─── RAPPORTI ─────────────────────────────────────────────────────
