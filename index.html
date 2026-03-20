@@ -957,7 +957,10 @@ async function sheetsClear(range) {
 async function ensureHeaders() {
   try {
     const data = await sheetsGet(`${SHEET_NAME}!A1:AM1`);
-    if (!data.values || !data.values[0] || data.values[0][0] !== 'id') {
+    const existing = (data.values && data.values[0]) || [];
+    // Se gli header non corrispondono esattamente, riscrivili
+    const match = HEADERS.every((h, i) => existing[i] === h) && existing.length === HEADERS.length;
+    if (!match) {
       await sheetsUpdate(`${SHEET_NAME}!A1`, [HEADERS]);
     }
   } catch {
@@ -1263,6 +1266,7 @@ async function saveScheda() {
     setSyncStatus('ok', 'Sincronizzato');
     showToast('☁ US ' + numero + ' salvata sul cloud');
     editingId = null;
+    await loadFromSheets(false);
     showView('list');
   } catch (e) {
     setSyncStatus('error', 'Errore salvataggio');
