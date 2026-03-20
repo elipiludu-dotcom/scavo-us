@@ -624,9 +624,13 @@
           <div class="field-group"><label>Saggio / Settore</label><input type="text" id="f_saggio" placeholder="es. S3"></div>
         </div>
         <div class="field-row triple">
+          <div class="field-group"><label>Anno</label><input type="number" id="f_anno" placeholder="es. 2024"></div>
           <div class="field-group"><label>Tipo US</label>
             <select id="f_tipo"><option value="">— seleziona —</option><option>Strato</option><option>Struttura</option><option>Taglio</option><option>Riempimento</option><option>Interfaccia</option><option>Buca</option><option>Crollo</option><option>Altro</option></select>
           </div>
+          <div class="field-group"><label>Data rilevamento</label><input type="date" id="f_data"></div>
+        </div>
+        <div class="field-row">
           <div class="field-group">
             <label>Positiva / Negativa</label>
             <div style="display:flex;gap:20px;padding:9px 0">
@@ -638,19 +642,26 @@
               </label>
             </div>
           </div>
-          <div class="field-group"><label>Data rilevamento</label><input type="date" id="f_data"></div>
+          <div class="field-group"><label>Stato di conservazione</label>
+            <div style="display:flex;flex-direction:column;gap:8px;padding:9px 0">
+              <label style="display:flex;align-items:center;gap:7px;font-family:'DM Sans',sans-serif;font-size:0.87rem;text-transform:none;letter-spacing:normal;color:var(--ink);cursor:pointer">
+                <input type="radio" name="f_stato_conservazione" id="f_stato_cons_si" value="Conserva i limiti originari"> Conserva i limiti originari
+              </label>
+              <label style="display:flex;align-items:center;gap:7px;font-family:'DM Sans',sans-serif;font-size:0.87rem;text-transform:none;letter-spacing:normal;color:var(--ink);cursor:pointer">
+                <input type="radio" name="f_stato_conservazione" id="f_stato_cons_no" value="Non conserva i limiti originari"> Non conserva i limiti originari, in quanto:
+              </label>
+              <input type="text" id="f_stato_conservazione_note" placeholder="Motivazione…" style="margin-left:24px">
+            </div>
+          </div>
         </div>
-        <div class="field-row triple">
-          <div class="field-group"><label>Quota max (m)</label><input type="number" id="f_quota_max" step="0.01" placeholder="0.00"></div>
           <div class="field-group"><label>Quota min (m)</label><input type="number" id="f_quota_min" step="0.01" placeholder="0.00"></div>
           <div class="field-group"><label>Spessore (cm)</label><input type="number" id="f_spessore" step="0.1" placeholder="0.0"></div>
         </div>
-        <div class="field-row single">
-          <div class="field-group"><label>Definizione e Posizione</label><input type="text" id="f_definizione" placeholder="es. Strato di abbandono nella porzione NE del saggio"></div>
+        <div class="field-row triple">
+          <div class="field-group"><label>Quota max (m)</label><input type="number" id="f_quota_max" step="0.01" placeholder="0.00"></div><input type="text" id="f_definizione" placeholder="es. Strato di abbandono nella porzione NE del saggio"></div>
         </div>
-        <div class="field-row">
-          <div class="field-group">
-            <label>Formazione</label>
+        <div class="field-row single">
+          <div class="field-group"><label>Definizione e Posizione</label>
             <div style="display:flex;gap:20px;padding:9px 0">
               <label style="display:flex;align-items:center;gap:7px;font-family:'DM Sans',sans-serif;font-size:0.87rem;text-transform:none;letter-spacing:normal;color:var(--ink);cursor:pointer">
                 <input type="radio" name="f_formazione" id="f_formazione_nat" value="Naturale"> Naturale
@@ -663,7 +674,8 @@
           <div class="field-group"><label>Criteri di Distinzione</label><input type="text" id="f_criteri" placeholder="es. cambio di colore e consistenza"></div>
         </div>
         <div class="field-row">
-          <div class="field-group"><label>Responsabile</label><input type="text" id="f_responsabile" placeholder="Nome cognome"></div>
+          <div class="field-group">
+            <label>Formazione</label><input type="text" id="f_responsabile" placeholder="Nome cognome"></div>
           <div class="field-group"><label>Stato compilazione</label>
             <select id="f_stato" onchange="updateStatoStyle()">
               <option value="parziale">Parziale</option>
@@ -758,6 +770,17 @@
         <div class="field-row single"><div class="field-group"><label>Note interpretative</label><textarea id="f_note_interp" placeholder="Osservazioni, confronti, note…" style="min-height:90px"></textarea></div></div>
       </div>
 
+      <div class="form-section">
+        <div class="section-title">7 · Responsabili</div>
+        <div class="field-row single">
+          <div class="field-group"><label>Responsabile scientifico delle indagini</label><input type="text" id="f_responsabile_scientifico" placeholder="Nome cognome"></div>
+        </div>
+        <div class="field-row">
+          <div class="field-group"><label>Responsabile rielaborazione</label><input type="text" id="f_responsabile_rielaborazione" placeholder="Nome cognome"></div>
+          <div class="field-group"><label>Data rielaborazione</label><input type="date" id="f_data_rielaborazione"></div>
+        </div>
+      </div>
+
       <div style="padding:0 16px 24px;display:flex;gap:10px;border-top:1px solid var(--border);margin-top:8px;padding-top:16px">
         <button class="btn btn-success" style="flex:1" onclick="saveScheda()">☁ Salva su Cloud</button>
         <button class="btn btn-danger" id="btnDelete" style="display:none" onclick="deleteScheda()">🗑 Elimina</button>
@@ -832,10 +855,11 @@ const SHEET_ID  = '1iVXaplyjWp3uCx76-x5MPYEM1e3udtjW2mQxuomyggA';
 const SHEET_NAME = 'SchedeUS';
 const SCOPES = 'https://www.googleapis.com/auth/spreadsheets';
 
-const HEADERS = ['id','numero','area','saggio','tipo','pos_neg','data','definizione','formazione','criteri','responsabile','stato',
+const HEADERS = ['id','numero','anno','area','saggio','tipo','pos_neg','data','definizione','formazione','criteri','responsabile','stato',
   'colore','consistenza','composizione','umidita','inclusi_geo','inclusi_org','inclusi_art','quota_max','quota_min',
   'spessore','descrizione','osservazioni','rapporti','reperti','foto_digitali','foto_3d','foto_drone','disegni','note_doc',
-  'interpretazione','datazione','fase','affidabilita','note_interp'];
+  'interpretazione','datazione','fase','affidabilita','note_interp',
+  'stato_conservazione','stato_conservazione_note','responsabile_scientifico','responsabile_rielaborazione','data_rielaborazione'];
 
 let accessToken = null;
 let schede = [];
@@ -1120,15 +1144,17 @@ function updateStatoStyle() {
 
 // ─── FORM ─────────────────────────────────────────────────────────
 function resetForm() {
-  const ids = ['numero','area','saggio','tipo','data','definizione','criteri','responsabile','stato','colore','consistenza',
+  const ids = ['numero','anno','area','saggio','tipo','data','definizione','criteri','responsabile','stato','colore','consistenza',
    'composizione','umidita','inclusi_geo','inclusi_org','inclusi_art','quota_max','quota_min','spessore','descrizione','osservazioni',
-   'disegni','note_doc','interpretazione','datazione','fase','affidabilita','note_interp'];
+   'disegni','note_doc','interpretazione','datazione','fase','affidabilita','note_interp',
+   'stato_conservazione','stato_conservazione_note','responsabile_scientifico','responsabile_rielaborazione','data_rielaborazione'];
   ids.forEach(id => {
     const el = document.getElementById('f_' + id);
     if (el) el.value = id === 'data' ? new Date().toISOString().split('T')[0] : id === 'stato' ? 'parziale' : '';
   });
   document.querySelectorAll('input[name="f_formazione"]').forEach(r => r.checked = false);
   document.querySelectorAll('input[name="f_pos_neg"]').forEach(r => r.checked = false);
+  document.querySelectorAll('input[name="f_stato_conservazione"]').forEach(r => r.checked = false);
   ['f_foto_digitali','f_foto_3d','f_foto_drone'].forEach(id => { const el = document.getElementById(id); if (el) el.checked = false; });
   document.getElementById('rapportiList').innerHTML = '';
   document.getElementById('repertiList').innerHTML = '';
@@ -1145,12 +1171,14 @@ function openEdit(id) {
   editingId = id;
   document.getElementById('formTitle').textContent = 'Scheda US ' + s.numero;
   document.getElementById('btnDelete').style.display = 'block';
-  const fields = ['numero','area','saggio','tipo','data','definizione','criteri','responsabile','stato','colore','consistenza',
+  const fields = ['numero','anno','area','saggio','tipo','data','definizione','criteri','responsabile','stato','colore','consistenza',
    'composizione','umidita','inclusi_geo','inclusi_org','inclusi_art','quota_max','quota_min','spessore','descrizione','osservazioni',
-   'disegni','note_doc','interpretazione','datazione','fase','affidabilita','note_interp'];
+   'disegni','note_doc','interpretazione','datazione','fase','affidabilita','note_interp',
+   'stato_conservazione','stato_conservazione_note','responsabile_scientifico','responsabile_rielaborazione','data_rielaborazione'];
   fields.forEach(id => { const el = document.getElementById('f_'+id); if (el && s[id] !== undefined) el.value = s[id]; });
   document.querySelectorAll('input[name="f_formazione"]').forEach(r => { r.checked = r.value === s.formazione; });
   document.querySelectorAll('input[name="f_pos_neg"]').forEach(r => { r.checked = r.value === s.pos_neg; });
+  document.querySelectorAll('input[name="f_stato_conservazione"]').forEach(r => { r.checked = r.value === s.stato_conservazione; });
   document.getElementById('f_foto_digitali').checked = !!s.foto_digitali;
   document.getElementById('f_foto_3d').checked = !!s.foto_3d;
   document.getElementById('f_foto_drone').checked = !!s.foto_drone;
@@ -1289,6 +1317,12 @@ async function saveScheda() {
     fase: document.getElementById('f_fase').value,
     affidabilita: document.getElementById('f_affidabilita').value,
     note_interp: document.getElementById('f_note_interp').value,
+    stato_conservazione: (document.querySelector('input[name="f_stato_conservazione"]:checked') || {}).value || '',
+    stato_conservazione_note: document.getElementById('f_stato_conservazione_note').value,
+    responsabile_scientifico: document.getElementById('f_responsabile_scientifico').value,
+    responsabile_rielaborazione: document.getElementById('f_responsabile_rielaborazione').value,
+    data_rielaborazione: document.getElementById('f_data_rielaborazione').value,
+    anno: document.getElementById('f_anno').value,
   };
 
   if (editingId) schede = schede.map(s => s.id === editingId ? scheda : s);
@@ -1407,7 +1441,7 @@ function drawICCDpage(doc, s) {
     doc.setFontSize(size); doc.setFont('helvetica',style); doc.setTextColor(...color);
     doc.text(String(t||''), x, yr);
   };
-  const lbl   = (t,x,yr) => txt(t,x,yr,5.5,'normal',[80,80,80]);
+  const lbl   = (t,x,yr) => txt(t,x,yr,6,'bold',[60,60,60]);
   const val   = (t,x,yr,maxW) => {
     doc.setFontSize(7.5); doc.setFont('helvetica','normal'); doc.setTextColor(0,0,0);
     const lines = doc.splitTextToSize(String(t||''), maxW || 999);
@@ -1450,7 +1484,8 @@ function drawICCDpage(doc, s) {
   rect(ML, y, IW, 14, 0.4);
   // Cella US (sinistra)
   rect(ML, y, 14, 14, 0.4);
-  txt('US', ML+3.5, y+9, 11, 'bold');
+  txt('US', ML+1.5, y+5, 6, 'normal', [100,100,100]);
+  txt(String(s.numero||''), ML+1.5, y+12, 11, 'bold');
   // Cella centrale: ente
   rect(ML+14, y, 90, 14, 0.2);
   txt('ENTE RESPONSABILE', ML+15, y+4, 5, 'normal', [100,100,100]);
@@ -1459,7 +1494,7 @@ function drawICCDpage(doc, s) {
   // Cella destra: ANNO
   rect(ML+104, y, IW-104, 14, 0.2);
   txt('ANNO', ML+106, y+4, 5, 'normal', [100,100,100]);
-  txt(s.data ? s.data.substring(0,4) : '', ML+106, y+9, 9, 'bold');
+  txt(s.anno || (s.data ? s.data.substring(0,4) : ''), ML+106, y+9, 9, 'bold');
   y += 14;
 
   // — UFFICIO MiC —
@@ -1487,29 +1522,37 @@ function drawICCDpage(doc, s) {
   y += 9;
 
   // — AMBIENTE | POSIZIONE | SETTORE | QUADRATO | QUOTE | NAT/ART | POS/NEG —
-  const amb=IW*0.22, pos=IW*0.14, sett=IW*0.1, quad=IW*0.1, quot=IW*0.14, natart=IW*0.15, posneg=IW*0.15;
-  const rowH = 14;
+  const amb=IW*0.20, pos=IW*0.12, sett=IW*0.09, quad=IW*0.09, quot=IW*0.12, natart=IW*0.19, posneg=IW*0.19;
+  const rowH = 16;
   rect(ML, y, amb, rowH, 0.2);            lbl('AMBIENTE/UNITA\' FUNZIONALE', ML+1.5, y+3.5);
-  rect(ML+amb, y, pos, rowH, 0.2);        lbl('POSIZIONE', ML+amb+1.5, y+3.5);          val(s.definizione||'', ML+amb+1.5, y+8, pos-3);
+  rect(ML+amb, y, pos, rowH, 0.2);        lbl('POSIZIONE', ML+amb+1.5, y+3.5); val(s.definizione||'', ML+amb+1.5, y+9, pos-3);
   rect(ML+amb+pos, y, sett, rowH, 0.2);   lbl('SETTORE/I', ML+amb+pos+1.5, y+3.5);
   rect(ML+amb+pos+sett, y, quad, rowH, 0.2); lbl('QUADRATO/I', ML+amb+pos+sett+1.5, y+3.5);
   // Quote (con max/min)
   const qx = ML+amb+pos+sett+quad;
-  rect(qx, y, quot, rowH, 0.2); lbl('QUOTE', qx+1.5, y+3.5);
-  lbl('max', qx+1.5, y+8); val(s.quota_max||'', qx+7, y+8, quot/2-4);
-  lbl('min', qx+quot/2+1, y+8); val(s.quota_min||'', qx+quot/2+7, y+8, quot/2-4);
+  rect(qx, y, quot, rowH, 0.2);
+  lbl('QUOTE', qx+1.5, y+3.5);
   line(qx, y+rowH/2, qx+quot, y+rowH/2);
+  lbl('max', qx+1.5, y+rowH/4+2);
+  val(s.quota_max||'', qx+8, y+rowH/4+2, quot-10);
+  lbl('min', qx+1.5, y+rowH*3/4+2);
+  val(s.quota_min||'', qx+8, y+rowH*3/4+2, quot-10);
   // Naturale/Artificiale
   const nx = qx+quot;
-  rect(nx, y, natart/2, rowH/2, 0.2); lbl('NATURALE', nx+1, y+3.5);
-  drawCB(s.formazione==='Naturale', nx+1, y+8);
-  rect(nx+natart/2, y, natart/2, rowH/2, 0.2); lbl('ARTIFICIALE', nx+natart/2+1, y+3.5);
-  drawCB(s.formazione==='Artificiale', nx+natart/2+1, y+8);
+  const cbW = natart/2;
+  rect(nx, y, cbW, rowH/2, 0.2);
+  lbl('NATURALE', nx+1.5, y+3.5);
+  drawCB(s.formazione==='Naturale', nx+1.5, y+rowH/4+2);
+  rect(nx+cbW, y, cbW, rowH/2, 0.2);
+  lbl('ARTIFICIALE', nx+cbW+1.5, y+3.5);
+  drawCB(s.formazione==='Artificiale', nx+cbW+1.5, y+rowH/4+2);
   // Positiva/Negativa
-  rect(nx, y+rowH/2, natart/2, rowH/2, 0.2); lbl('POSITIVA', nx+1, y+rowH/2+3.5);
-  drawCB(s.pos_neg==='Positiva', nx+1, y+rowH/2+8);
-  rect(nx+natart/2, y+rowH/2, natart/2, rowH/2, 0.2); lbl('NEGATIVA', nx+natart/2+1, y+rowH/2+3.5);
-  drawCB(s.pos_neg==='Negativa', nx+natart/2+1, y+rowH/2+8);
+  rect(nx, y+rowH/2, cbW, rowH/2, 0.2);
+  lbl('POSITIVA', nx+1.5, y+rowH/2+3.5);
+  drawCB(s.pos_neg==='Positiva', nx+1.5, y+rowH*3/4+2);
+  rect(nx+cbW, y+rowH/2, cbW, rowH/2, 0.2);
+  lbl('NEGATIVA', nx+cbW+1.5, y+rowH/2+3.5);
+  drawCB(s.pos_neg==='Negativa', nx+cbW+1.5, y+rowH*3/4+2);
   y += rowH;
 
   // — PIANTE | PROSPETTI | SEZIONI | FOTOGRAFIE | RIF.TABELLE —
@@ -1544,8 +1587,10 @@ function drawICCDpage(doc, s) {
   const halfW = (IW - compLabelW) / 2;
   // Label verticale "COMPONENTI"
   rect(ML, y, compLabelW, compH, 0.2);
-  doc.setFontSize(5.5); doc.setFont('helvetica','normal'); doc.setTextColor(80,80,80);
-  doc.text('COMPONENTI', ML+2, y+compH/2+1, { angle: 90 });
+  doc.setFontSize(5.5); doc.setFont('helvetica','bold'); doc.setTextColor(80,80,80);
+  const compTxt = 'COMPONENTI';
+  const compTxtW = doc.getTextWidth(compTxt);
+  doc.text(compTxt, ML + compLabelW/2 + 1, y + compH/2 + compTxtW/2, { angle: 90 });
   // Intestazioni INORGANICI / ORGANICI
   rect(ML+compLabelW, y, halfW, compH/2, 0.2);
   txt('INORGANICI', ML+compLabelW+halfW/2-8, y+4, 6, 'bold');
@@ -1570,11 +1615,14 @@ function drawICCDpage(doc, s) {
   y += 10;
 
   // — STATO DI CONSERVAZIONE —
-  rect(ML, y, IW, 10, 0.2);
+  const scH = s.stato_conservazione === 'Non conserva i limiti originari' && s.stato_conservazione_note ? 16 : 12;
+  rect(ML, y, IW, scH, 0.2);
   lbl('STATO DI CONSERVAZIONE', ML+1.5, y+3.5);
-  const statoTxt = s.stato === 'completa' ? 'Conserva i limiti' : 'In corso di rilevamento';
-  drawCB(s.stato==='completa', ML+1.5, y+8); txt(statoTxt, ML+6.5, y+8.5, 7);
-  y += 10;
+  drawCB(s.stato_conservazione === 'Conserva i limiti originari', ML+1.5, y+8);
+  txt('Conserva i limiti originari', ML+6.5, y+8.5, 7);
+  drawCB(s.stato_conservazione === 'Non conserva i limiti originari', ML+IW/2+1.5, y+8);
+  txt('Non conserva i limiti originari, in quanto: ' + (s.stato_conservazione_note||''), ML+IW/2+6.5, y+8.5, 7);
+  y += scH;
 
   // — SEQUENZA FISICA / STRATIGRAFICA —
   const rapporti = s.rapporti || [];
@@ -1584,8 +1632,10 @@ function drawICCDpage(doc, s) {
 
   // Label "SEQUENZA FISICA"
   rect(ML, y, seqLabelW, rapH, 0.2);
-  doc.setFontSize(5.5); doc.setFont('helvetica','normal'); doc.setTextColor(80,80,80);
-  doc.text('SEQUENZA FISICA', ML+2, y+rapH/2+5, { angle: 90 });
+  doc.setFontSize(5.5); doc.setFont('helvetica','bold'); doc.setTextColor(80,80,80);
+  const sfTxt = 'SEQUENZA FISICA';
+  const sfW = doc.getTextWidth(sfTxt);
+  doc.text(sfTxt, ML + seqLabelW/2 + 1, y + rapH/2 + sfW/2, { angle: 90 });
 
   const rapRowH = rapH / 5;
   const rapDefs = [
@@ -1610,13 +1660,32 @@ function drawICCDpage(doc, s) {
   // Label "SEQUENZA STRATIGRAFICA" (destra)
   const ssX = ML+seqLabelW+seqW*2;
   rect(ssX, y, seqLabelW, rapH, 0.2);
-  doc.setFontSize(5.5); doc.setFont('helvetica','normal'); doc.setTextColor(80,80,80);
-  doc.text('SEQUENZA STRATIGRAFICA', ssX+2, y+rapH/2+10, { angle: 90 });
+  doc.setFontSize(5.5); doc.setFont('helvetica','bold'); doc.setTextColor(80,80,80);
+  const ssTxt = 'SEQUENZA STRATIGRAFICA';
+  const ssW = doc.getTextWidth(ssTxt);
+  doc.text(ssTxt, ssX + seqLabelW/2 + 1, y + rapH/2 + ssW/2, { angle: 90 });
   // Posteriore / Anteriore
-  rect(ssX+seqLabelW, y, IW-(seqLabelW*2+seqW*2+seqLabelW), rapH/2, 0.2);
+  const ssColW = IW - (seqLabelW*2 + seqW*2 + seqLabelW);
+  const tipiSinistra = ['uguale_a','gli_si_appoggia','coperto_da','tagliato_da','riempito_da'];
+  const tipiDestra   = ['si_lega_a','si_appoggia_a','copre','taglia','riempie'];
+  const posterioreLines = tipiSinistra
+    .map(tipo => { const v = rapporti.filter(r=>r.tipo===tipo).map(r=>r.us).join(', '); return v ? rapDefs.find(d=>d[1]===tipo)[0]+': '+v : null; })
+    .filter(Boolean).join('  |  ') || '';
+  const anterioreLines = tipiDestra
+    .map(tipo => { const v = rapporti.filter(r=>r.tipo===tipo).map(r=>r.us).join(', '); return v ? rapDefs.find(d=>d[1]===tipo)[0]+': '+v : null; })
+    .filter(Boolean).join('  |  ') || '';
+
+  rect(ssX+seqLabelW, y, ssColW, rapH/2, 0.2);
   lbl('POSTERIORE', ssX+seqLabelW+1.5, y+3.5);
-  rect(ssX+seqLabelW, y+rapH/2, IW-(seqLabelW*2+seqW*2+seqLabelW), rapH/2, 0.2);
+  const postLines = doc.splitTextToSize(posterioreLines, ssColW-3);
+  doc.setFontSize(7); doc.setFont('helvetica','normal'); doc.setTextColor(0,0,0);
+  doc.text(postLines, ssX+seqLabelW+1.5, y+7);
+
+  rect(ssX+seqLabelW, y+rapH/2, ssColW, rapH/2, 0.2);
   lbl('ANTERIORE', ssX+seqLabelW+1.5, y+rapH/2+3.5);
+  const antLines = doc.splitTextToSize(anterioreLines, ssColW-3);
+  doc.setFontSize(7); doc.setFont('helvetica','normal'); doc.setTextColor(0,0,0);
+  doc.text(antLines, ssX+seqLabelW+1.5, y+rapH/2+7);
   y += rapH;
 
   // — FOOTER pagina 1 —
@@ -1685,7 +1754,7 @@ function drawICCDpage(doc, s) {
   // — RESPONSABILE SCIENTIFICO —
   rect(ML, y, IW, 10, 0.2);
   lbl('RESPONSABILE SCIENTIFICO DELLE INDAGINI', ML+1.5, y+3.5);
-  txt(s.responsabile||'', ML+IW/2-20, y+8, 9, 'bold');
+  txt(s.responsabile_scientifico || s.responsabile || '', ML+IW/2-20, y+8, 9, 'bold');
   y += 10;
 
   // — DATA RILEVAMENTO | RESPONSABILE COMPILAZIONE —
@@ -1694,8 +1763,8 @@ function drawICCDpage(doc, s) {
   y += 10;
 
   // — DATA RIELABORAZIONE | RESPONSABILE RIELABORAZIONE —
-  cell('DATA RIELABORAZIONE', '', ML, y, IW/2, 10);
-  cell('RESPONSABILE RIELABORAZIONE', '', ML+IW/2, y, IW/2, 10);
+  cell('DATA RIELABORAZIONE', s.data_rielaborazione||'', ML, y, IW/2, 10);
+  cell('RESPONSABILE RIELABORAZIONE', s.responsabile_rielaborazione||'', ML+IW/2, y, IW/2, 10);
   y += 10;
 
   // — FOOTER pagina 2 —
