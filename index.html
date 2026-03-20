@@ -1266,7 +1266,6 @@ async function saveScheda() {
     setSyncStatus('ok', 'Sincronizzato');
     showToast('☁ US ' + numero + ' salvata sul cloud');
     editingId = null;
-    await loadFromSheets(false);
     showView('list');
   } catch (e) {
     setSyncStatus('error', 'Errore salvataggio');
