@@ -1388,8 +1388,8 @@ function buildICCDpdf(schedeList) {
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
 
   schedeList.forEach((s, idx) => {
-    if (idx > 0) doc.addPage();
-    drawICCDpage(doc, s);
+    if (idx > 0) doc.addPage(); // pagina 1 della nuova scheda
+    drawICCDpage(doc, s);       // disegna pag.1 + aggiunge pag.2 internamente
   });
   return doc;
 }
