@@ -266,8 +266,6 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-  }
-  #view-new.active .form-header {
     position: sticky;
     top: 52px;
     z-index: 50;
@@ -656,17 +654,14 @@
             </div>
           </div>
         </div>
-        <div class="field-row triple">
-          <div class="field-group"><label>Quota max (m)</label><input type="number" id="f_quota_max" step="0.01" placeholder="0.00"></div>
           <div class="field-group"><label>Quota min (m)</label><input type="number" id="f_quota_min" step="0.01" placeholder="0.00"></div>
           <div class="field-group"><label>Spessore (cm)</label><input type="number" id="f_spessore" step="0.1" placeholder="0.0"></div>
         </div>
-        <div class="field-row single">
-          <div class="field-group"><label>Definizione e Posizione</label><input type="text" id="f_definizione" placeholder="es. Strato di abbandono nella porzione NE del saggio"></div>
+        <div class="field-row triple">
+          <div class="field-group"><label>Quota max (m)</label><input type="number" id="f_quota_max" step="0.01" placeholder="0.00"></div><input type="text" id="f_definizione" placeholder="es. Strato di abbandono nella porzione NE del saggio"></div>
         </div>
-        <div class="field-row">
-          <div class="field-group">
-            <label>Formazione</label>
+        <div class="field-row single">
+          <div class="field-group"><label>Definizione e Posizione</label>
             <div style="display:flex;gap:20px;padding:9px 0">
               <label style="display:flex;align-items:center;gap:7px;font-family:'DM Sans',sans-serif;font-size:0.87rem;text-transform:none;letter-spacing:normal;color:var(--ink);cursor:pointer">
                 <input type="radio" name="f_formazione" id="f_formazione_nat" value="Naturale"> Naturale
@@ -679,7 +674,8 @@
           <div class="field-group"><label>Criteri di Distinzione</label><input type="text" id="f_criteri" placeholder="es. cambio di colore e consistenza"></div>
         </div>
         <div class="field-row">
-          <div class="field-group"><label>Responsabile</label><input type="text" id="f_responsabile" placeholder="Nome cognome"></div>
+          <div class="field-group">
+            <label>Formazione</label><input type="text" id="f_responsabile" placeholder="Nome cognome"></div>
           <div class="field-group"><label>Stato compilazione</label>
             <select id="f_stato" onchange="updateStatoStyle()">
               <option value="parziale">Parziale</option>
@@ -1573,7 +1569,7 @@ function drawICCDpage(doc, s) {
   const amb=IW*0.20, pos=IW*0.12, sett=IW*0.09, quad=IW*0.09, quot=IW*0.12, natart=IW*0.19, posneg=IW*0.19;
   const rowH = 16;
   rect(ML, y, amb, rowH, 0.2);            lbl('AMBIENTE/UNITA\' FUNZIONALE', ML+1.5, y+3.5);
-  rect(ML+amb, y, pos, rowH, 0.2);        lbl('POSIZIONE', ML+amb+1.5, y+3.5); val(s.definizione||'', ML+amb+1.5, y+9, pos-3);
+  rect(ML+amb, y, pos, rowH, 0.2);        lbl('POSIZIONE', ML+amb+1.5, y+3.5);
   rect(ML+amb+pos, y, sett, rowH, 0.2);   lbl('SETTORE/I', ML+amb+pos+1.5, y+3.5);
   rect(ML+amb+pos+sett, y, quad, rowH, 0.2); lbl('QUADRATO/I', ML+amb+pos+sett+1.5, y+3.5);
   // Quote (con max/min)
@@ -1629,31 +1625,29 @@ function drawICCDpage(doc, s) {
   // — MODO DI FORMAZIONE —
   y += multiCell('MODO DI FORMAZIONE', s.formazione, ML, y, IW, 12);
 
-  // — COMPONENTI (tabella inorganici/organici) —
-  const compH = 22;
+  // — COMPONENTI (tabella inorganici/organici) — altezza aumentata
+  const compH = 32;
   const compLabelW = 12;
   const halfW = (IW - compLabelW) / 2;
-  // Label verticale "COMPONENTI"
   rect(ML, y, compLabelW, compH, 0.2);
   doc.setFontSize(5.5); doc.setFont('helvetica','bold'); doc.setTextColor(80,80,80);
   const compTxt = 'COMPONENTI';
   const compTxtW = doc.getTextWidth(compTxt);
   doc.text(compTxt, ML + compLabelW/2 + 1, y + compH/2 + compTxtW/2, { angle: 90 });
-  // Intestazioni INORGANICI / ORGANICI
-  rect(ML+compLabelW, y, halfW, compH/2, 0.2);
+  rect(ML+compLabelW, y, halfW, compH/3, 0.2);
   txt('INORGANICI', ML+compLabelW+halfW/2-8, y+4, 6, 'bold');
-  rect(ML+compLabelW+halfW, y, halfW, compH/2, 0.2);
+  rect(ML+compLabelW+halfW, y, halfW, compH/3, 0.2);
   txt('ORGANICI', ML+compLabelW+halfW+halfW/2-6, y+4, 6, 'bold');
-  // Righe contenuto
-  const subH = compH/2;
-  rect(ML+compLabelW, y+compH/2, halfW/2, subH, 0.2);
-  txt('Geologici', ML+compLabelW+1.5, y+compH/2+4, 6.5);
-  val(s.inclusi_geo||'', ML+compLabelW+1.5, y+compH/2+9, halfW/2-3);
-  rect(ML+compLabelW+halfW/2, y+compH/2, halfW/2, subH, 0.2);
-  txt('Artificiali', ML+compLabelW+halfW/2+1.5, y+compH/2+4, 6.5);
-  val(s.inclusi_art||'', ML+compLabelW+halfW/2+1.5, y+compH/2+9, halfW/2-3);
-  rect(ML+compLabelW+halfW, y+compH/2, halfW, subH, 0.2);
-  val(s.inclusi_org||'', ML+compLabelW+halfW+1.5, y+compH/2+9, halfW-3);
+  const subH = compH * 2/3;
+  rect(ML+compLabelW, y+compH/3, halfW/2, subH, 0.2);
+  txt('Geologici', ML+compLabelW+1.5, y+compH/3+4, 6.5);
+  val(s.inclusi_geo||'', ML+compLabelW+1.5, y+compH/3+9, halfW/2-3);
+  rect(ML+compLabelW+halfW/2, y+compH/3, halfW/2, subH, 0.2);
+  txt('Artificiali', ML+compLabelW+halfW/2+1.5, y+compH/3+4, 6.5);
+  val(s.inclusi_art||'', ML+compLabelW+halfW/2+1.5, y+compH/3+9, halfW/2-3);
+  rect(ML+compLabelW+halfW, y+compH/3, halfW, subH, 0.2);
+  txt('Organici', ML+compLabelW+halfW+1.5, y+compH/3+4, 6.5);
+  val(s.inclusi_org||'', ML+compLabelW+halfW+1.5, y+compH/3+9, halfW-3);
   y += compH;
 
   // — CONSISTENZA | COLORE | MISURE —
@@ -1663,27 +1657,36 @@ function drawICCDpage(doc, s) {
   y += 10;
 
   // — STATO DI CONSERVAZIONE —
-  const scH = s.stato_conservazione === 'Non conserva i limiti originari' && s.stato_conservazione_note ? 16 : 12;
+  const scNote = s.stato_conservazione === 'Non conserva i limiti originari' && s.stato_conservazione_note
+    ? s.stato_conservazione_note : '';
+  const scLines = doc.splitTextToSize('Non conserva i limiti originari' + (scNote ? ', in quanto: ' + scNote : ''), IW/2 - 10);
+  const scH = Math.max(12, scLines.length * 4 + 8);
   rect(ML, y, IW, scH, 0.2);
   lbl('STATO DI CONSERVAZIONE', ML+1.5, y+3.5);
   drawCB(s.stato_conservazione === 'Conserva i limiti originari', ML+1.5, y+8);
   txt('Conserva i limiti originari', ML+6.5, y+8.5, 7);
   drawCB(s.stato_conservazione === 'Non conserva i limiti originari', ML+IW/2+1.5, y+8);
-  txt('Non conserva i limiti originari, in quanto: ' + (s.stato_conservazione_note||''), ML+IW/2+6.5, y+8.5, 7);
+  doc.setFontSize(7); doc.setFont('helvetica','normal'); doc.setTextColor(0,0,0);
+  doc.text(scLines, ML+IW/2+6.5, y+8.5);
   y += scH;
 
   // — SEQUENZA FISICA / STRATIGRAFICA —
+  // Occupa tutto lo spazio fino al footer
   const rapporti = s.rapporti || [];
-  const rapH = 42;
-  const seqLabelW = 12;
-  const seqW = (IW - seqLabelW*2) / 2;
+  const footerY1 = H - MR - 5;
+  const rapH = footerY1 - y;  // riempie fino al fondo
 
-  // Label "SEQUENZA FISICA"
+  // Larghezze: FISICA più stretta (55%), STRATIGRAFICA più larga (45%)
+  const seqLabelW = 10;
+  const seqFisicaW = (IW - seqLabelW) * 0.55;
+  const seqW = seqFisicaW / 2;
+  const ssColW = IW - seqLabelW - seqFisicaW;
+
+  // Label verticale "SEQUENZA FISICA"
   rect(ML, y, seqLabelW, rapH, 0.2);
-  doc.setFontSize(5.5); doc.setFont('helvetica','bold'); doc.setTextColor(80,80,80);
+  doc.setFontSize(5); doc.setFont('helvetica','bold'); doc.setTextColor(80,80,80);
   const sfTxt = 'SEQUENZA FISICA';
-  const sfW = doc.getTextWidth(sfTxt);
-  doc.text(sfTxt, ML + seqLabelW/2 + 1, y + rapH/2 + sfW/2, { angle: 90 });
+  doc.text(sfTxt, ML + seqLabelW/2 + 1.5, y + rapH/2 + doc.getTextWidth(sfTxt)/2, { angle: 90 });
 
   const rapRowH = rapH / 5;
   const rapDefs = [
@@ -1705,36 +1708,42 @@ function drawICCDpage(doc, s) {
     val(rapporti.filter(r=>r.tipo===tipo2).map(r=>r.us).join(', '), ML+seqLabelW+seqW+1.5, ry+7, seqW-3);
   }
 
-  // Label "SEQUENZA STRATIGRAFICA" (destra)
-  const ssX = ML+seqLabelW+seqW*2;
-  rect(ssX, y, seqLabelW, rapH, 0.2);
-  doc.setFontSize(5.5); doc.setFont('helvetica','bold'); doc.setTextColor(80,80,80);
-  const ssTxt = 'SEQUENZA STRATIGRAFICA';
-  const ssW = doc.getTextWidth(ssTxt);
-  doc.text(ssTxt, ssX + seqLabelW/2 + 1, y + rapH/2 + ssW/2, { angle: 90 });
-  // Posteriore / Anteriore
-  const ssColW = IW - (seqLabelW*2 + seqW*2 + seqLabelW);
-  const tipiSinistra = ['uguale_a','gli_si_appoggia','coperto_da','tagliato_da','riempito_da'];
-  const tipiDestra   = ['si_lega_a','si_appoggia_a','copre','taglia','riempie'];
-  const posterioreLines = tipiSinistra
-    .map(tipo => { const v = rapporti.filter(r=>r.tipo===tipo).map(r=>r.us).join(', '); return v ? rapDefs.find(d=>d[1]===tipo)[0]+': '+v : null; })
-    .filter(Boolean).join('  |  ') || '';
-  const anterioreLines = tipiDestra
-    .map(tipo => { const v = rapporti.filter(r=>r.tipo===tipo).map(r=>r.us).join(', '); return v ? rapDefs.find(d=>d[1]===tipo)[0]+': '+v : null; })
-    .filter(Boolean).join('  |  ') || '';
+  // SEQUENZA STRATIGRAFICA — occupa tutta l'altezza, divisa in POSTERIORE A / ANTERIORE A
+  const ssX = ML + seqLabelW + seqFisicaW;
+  const tipiPost = ['uguale_a','gli_si_appoggia','coperto_da','tagliato_da','riempito_da'];
+  const tipiAnt  = ['si_lega_a','si_appoggia_a','copre','taglia','riempie'];
 
-  rect(ssX+seqLabelW, y, ssColW, rapH/2, 0.2);
-  lbl('POSTERIORE', ssX+seqLabelW+1.5, y+3.5);
-  const postLines = doc.splitTextToSize(posterioreLines, ssColW-3);
-  doc.setFontSize(7); doc.setFont('helvetica','normal'); doc.setTextColor(0,0,0);
-  doc.text(postLines, ssX+seqLabelW+1.5, y+7);
+  // Costruiamo testo POSTERIORE raccogliendo tutti i rapporti corrispondenti
+  const postItems = rapDefs
+    .filter(([,tipo]) => tipiPost.includes(tipo))
+    .map(([label, tipo]) => {
+      const vals = rapporti.filter(r=>r.tipo===tipo).map(r=>r.us).join(', ');
+      return vals ? label + ': ' + vals : null;
+    }).filter(Boolean);
+  const antItems = rapDefs
+    .filter(([,tipo]) => tipiAnt.includes(tipo))
+    .map(([label, tipo]) => {
+      const vals = rapporti.filter(r=>r.tipo===tipo).map(r=>r.us).join(', ');
+      return vals ? label + ': ' + vals : null;
+    }).filter(Boolean);
 
-  rect(ssX+seqLabelW, y+rapH/2, ssColW, rapH/2, 0.2);
-  lbl('ANTERIORE', ssX+seqLabelW+1.5, y+rapH/2+3.5);
-  const antLines = doc.splitTextToSize(anterioreLines, ssColW-3);
+  const postTxt = postItems.join('\n');
+  const antTxt  = antItems.join('\n');
+
+  const postLines = doc.splitTextToSize(postTxt, ssColW-4);
+  const antLines  = doc.splitTextToSize(antTxt,  ssColW-4);
+
+  // Altezza dinamica: metà per POSTERIORE, metà per ANTERIORE
+  const ssHalf = rapH / 2;
+  rect(ssX, y, ssColW, ssHalf, 0.2);
+  lbl('POSTERIORE A', ssX+1.5, y+3.5);
   doc.setFontSize(7); doc.setFont('helvetica','normal'); doc.setTextColor(0,0,0);
-  doc.text(antLines, ssX+seqLabelW+1.5, y+rapH/2+7);
-  y += rapH;
+  doc.text(postLines, ssX+1.5, y+8);
+
+  rect(ssX, y+ssHalf, ssColW, ssHalf, 0.2);
+  lbl('ANTERIORE A', ssX+1.5, y+ssHalf+3.5);
+  doc.setFontSize(7); doc.setFont('helvetica','normal'); doc.setTextColor(0,0,0);
+  doc.text(antLines, ssX+1.5, y+ssHalf+8);
 
   // — FOOTER pagina 1 —
   txt('MiC – ICCD_licenza CC BY-SA 4.0 – Creative Commons Attribution-ShareAlike 4.0 International',
@@ -1746,31 +1755,38 @@ function drawICCDpage(doc, s) {
   doc.addPage();
   y = MT;
 
+  // Calcola lo spazio totale disponibile e le sezioni fisse
+  const p2FooterY = H - MR - 5;
+  const p2Fixed = 12 + 14 + 14 + 12 + 10 + 10 + 10 + 10; // datazione+elementi+reperti+camp+affid+resp+data_campo+data_rielab
+  const p2Flex = p2FooterY - y - p2Fixed;
+  // DESC 40%, OSSERV 22%, INTERP 38%
+  const descH  = Math.round(p2Flex * 0.40);
+  const osservH = Math.round(p2Flex * 0.22);
+  const interpH = p2Flex - descH - osservH;
+
   // — DESCRIZIONE —
-  const descLines = doc.splitTextToSize(String(s.descrizione||''), IW-3);
-  const descH = Math.max(30, descLines.length*4+8);
+  const descLines = doc.splitTextToSize(String(s.descrizione||''), IW-4);
   rect(ML, y, IW, descH, 0.2);
   lbl('DESCRIZIONE', ML+1.5, y+3.5);
   doc.setFontSize(7.5); doc.setFont('helvetica','normal'); doc.setTextColor(0,0,0);
-  doc.text(descLines, ML+1.5, y+7);
+  doc.text(descLines, ML+1.5, y+8);
   y += descH;
 
   // — OSSERVAZIONI —
-  const osservLines = doc.splitTextToSize(String(s.osservazioni||''), IW-3);
-  const osservH = Math.max(20, osservLines.length*4+8);
+  const osservLines = doc.splitTextToSize(String(s.osservazioni||''), IW-4);
   rect(ML, y, IW, osservH, 0.2);
   lbl('OSSERVAZIONI', ML+1.5, y+3.5);
   doc.setFontSize(7.5); doc.setFont('helvetica','normal'); doc.setTextColor(0,0,0);
-  doc.text(osservLines, ML+1.5, y+7);
+  doc.text(osservLines, ML+1.5, y+8);
   y += osservH;
 
   // — INTERPRETAZIONE —
-  const interpLines = doc.splitTextToSize(String(s.interpretazione||'') + (s.note_interp ? '\n'+s.note_interp : ''), IW-3);
-  const interpH = Math.max(30, interpLines.length*4+8);
+  const interpTxt = String(s.interpretazione||'') + (s.note_interp ? '\n' + s.note_interp : '');
+  const interpLines = doc.splitTextToSize(interpTxt, IW-4);
   rect(ML, y, IW, interpH, 0.2);
   lbl('INTERPRETAZIONE', ML+1.5, y+3.5);
   doc.setFontSize(7.5); doc.setFont('helvetica','normal'); doc.setTextColor(0,0,0);
-  doc.text(interpLines, ML+1.5, y+7);
+  doc.text(interpLines, ML+1.5, y+8);
   y += interpH;
 
   // — DATAZIONE | PERIODO | FASE | ATTIVITA —
