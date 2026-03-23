@@ -1673,16 +1673,17 @@ function drawICCDpage(doc, s) {
   y += scH;
 
   // — SEQUENZA FISICA / STRATIGRAFICA —
-  // Occupa tutto lo spazio fino al footer
+  // Occupa tutto lo spazio fino al footer (con margine per non coprirlo)
   const rapporti = s.rapporti || [];
-  const footerY1 = H - MR - 5;
-  const rapH = footerY1 - y;  // riempie fino al fondo
+  const footerY1 = H - MR - 8;
+  const rapH = footerY1 - y;
 
-  // Larghezze: FISICA più stretta (55%), STRATIGRAFICA più larga (45%)
+  // Larghezze: label 10, FISICA 65%, STRATIGRAFICA 35%
   const seqLabelW = 10;
-  const seqFisicaW = (IW - seqLabelW) * 0.55;
+  const seqFisicaW = (IW - seqLabelW) * 0.65;
   const seqW = seqFisicaW / 2;
-  const ssColW = IW - seqLabelW - seqFisicaW;
+  const ssLabelW = 10;
+  const ssColW = IW - seqLabelW - seqFisicaW - ssLabelW;
 
   // Label verticale "SEQUENZA FISICA"
   rect(ML, y, seqLabelW, rapH, 0.2);
@@ -1710,42 +1711,32 @@ function drawICCDpage(doc, s) {
     val(rapporti.filter(r=>r.tipo===tipo2).map(r=>r.us).join(', '), ML+seqLabelW+seqW+1.5, ry+7, seqW-3);
   }
 
-  // SEQUENZA STRATIGRAFICA — occupa tutta l'altezza, divisa in POSTERIORE A / ANTERIORE A
+  // Label verticale "SEQUENZA STRATIGRAFICA"
   const ssX = ML + seqLabelW + seqFisicaW;
+  rect(ssX, y, ssLabelW, rapH, 0.2);
+  doc.setFontSize(5); doc.setFont('helvetica','bold'); doc.setTextColor(80,80,80);
+  const ssTxt = 'SEQUENZA STRATIGRAFICA';
+  doc.text(ssTxt, ssX + ssLabelW/2 + 1.5, y + rapH/2 + doc.getTextWidth(ssTxt)/2, { angle: 90 });
+
+  // POSTERIORE A — solo numeri US, colonna sinistra della sequenza fisica
   const tipiPost = ['uguale_a','gli_si_appoggia','coperto_da','tagliato_da','riempito_da'];
   const tipiAnt  = ['si_lega_a','si_appoggia_a','copre','taglia','riempie'];
+  const postNums = rapporti.filter(r=>tipiPost.includes(r.tipo)).map(r=>r.us).filter(Boolean).join(', ');
+  const antNums  = rapporti.filter(r=>tipiAnt.includes(r.tipo)).map(r=>r.us).filter(Boolean).join(', ');
 
-  // Costruiamo testo POSTERIORE raccogliendo tutti i rapporti corrispondenti
-  const postItems = rapDefs
-    .filter(([,tipo]) => tipiPost.includes(tipo))
-    .map(([label, tipo]) => {
-      const vals = rapporti.filter(r=>r.tipo===tipo).map(r=>r.us).join(', ');
-      return vals ? label + ': ' + vals : null;
-    }).filter(Boolean);
-  const antItems = rapDefs
-    .filter(([,tipo]) => tipiAnt.includes(tipo))
-    .map(([label, tipo]) => {
-      const vals = rapporti.filter(r=>r.tipo===tipo).map(r=>r.us).join(', ');
-      return vals ? label + ': ' + vals : null;
-    }).filter(Boolean);
-
-  const postTxt = postItems.join('\n');
-  const antTxt  = antItems.join('\n');
-
-  const postLines = doc.splitTextToSize(postTxt, ssColW-4);
-  const antLines  = doc.splitTextToSize(antTxt,  ssColW-4);
-
-  // Altezza dinamica: metà per POSTERIORE, metà per ANTERIORE
+  const ssContentX = ssX + ssLabelW;
   const ssHalf = rapH / 2;
-  rect(ssX, y, ssColW, ssHalf, 0.2);
-  lbl('POSTERIORE A', ssX+1.5, y+3.5);
-  doc.setFontSize(7); doc.setFont('helvetica','normal'); doc.setTextColor(0,0,0);
-  doc.text(postLines, ssX+1.5, y+8);
+  rect(ssContentX, y, ssColW, ssHalf, 0.2);
+  lbl('POSTERIORE A', ssContentX+1.5, y+3.5);
+  doc.setFontSize(8); doc.setFont('helvetica','normal'); doc.setTextColor(0,0,0);
+  const postLines = doc.splitTextToSize(postNums, ssColW-3);
+  doc.text(postLines, ssContentX+1.5, y+8);
 
-  rect(ssX, y+ssHalf, ssColW, ssHalf, 0.2);
-  lbl('ANTERIORE A', ssX+1.5, y+ssHalf+3.5);
-  doc.setFontSize(7); doc.setFont('helvetica','normal'); doc.setTextColor(0,0,0);
-  doc.text(antLines, ssX+1.5, y+ssHalf+8);
+  rect(ssContentX, y+ssHalf, ssColW, ssHalf, 0.2);
+  lbl('ANTERIORE A', ssContentX+1.5, y+ssHalf+3.5);
+  doc.setFontSize(8); doc.setFont('helvetica','normal'); doc.setTextColor(0,0,0);
+  const antLines = doc.splitTextToSize(antNums, ssColW-3);
+  doc.text(antLines, ssContentX+1.5, y+ssHalf+8);
 
   // — FOOTER pagina 1 —
   txt('MiC – ICCD_licenza CC BY-SA 4.0 – Creative Commons Attribution-ShareAlike 4.0 International',
@@ -1758,7 +1749,7 @@ function drawICCDpage(doc, s) {
   y = MT;
 
   // Calcola lo spazio totale disponibile e le sezioni fisse
-  const p2FooterY = H - MR - 5;
+  const p2FooterY = H - MR - 10;
   const p2Fixed = 12 + 14 + 14 + 12 + 10 + 10 + 10 + 10; // datazione+elementi+reperti+camp+affid+resp+data_campo+data_rielab
   const p2Flex = p2FooterY - y - p2Fixed;
   // DESC 40%, OSSERV 22%, INTERP 38%
