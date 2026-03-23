@@ -656,14 +656,17 @@
             </div>
           </div>
         </div>
+        <div class="field-row triple">
+          <div class="field-group"><label>Quota max (m)</label><input type="number" id="f_quota_max" step="0.01" placeholder="0.00"></div>
           <div class="field-group"><label>Quota min (m)</label><input type="number" id="f_quota_min" step="0.01" placeholder="0.00"></div>
           <div class="field-group"><label>Spessore (cm)</label><input type="number" id="f_spessore" step="0.1" placeholder="0.0"></div>
         </div>
-        <div class="field-row triple">
-          <div class="field-group"><label>Quota max (m)</label><input type="number" id="f_quota_max" step="0.01" placeholder="0.00"></div><input type="text" id="f_definizione" placeholder="es. Strato di abbandono nella porzione NE del saggio"></div>
-        </div>
         <div class="field-row single">
-          <div class="field-group"><label>Definizione e Posizione</label>
+          <div class="field-group"><label>Definizione e Posizione</label><input type="text" id="f_definizione" placeholder="es. Strato di abbandono nella porzione NE del saggio"></div>
+        </div>
+        <div class="field-row">
+          <div class="field-group">
+            <label>Formazione</label>
             <div style="display:flex;gap:20px;padding:9px 0">
               <label style="display:flex;align-items:center;gap:7px;font-family:'DM Sans',sans-serif;font-size:0.87rem;text-transform:none;letter-spacing:normal;color:var(--ink);cursor:pointer">
                 <input type="radio" name="f_formazione" id="f_formazione_nat" value="Naturale"> Naturale
@@ -676,8 +679,7 @@
           <div class="field-group"><label>Criteri di Distinzione</label><input type="text" id="f_criteri" placeholder="es. cambio di colore e consistenza"></div>
         </div>
         <div class="field-row">
-          <div class="field-group">
-            <label>Formazione</label><input type="text" id="f_responsabile" placeholder="Nome cognome"></div>
+          <div class="field-group"><label>Responsabile</label><input type="text" id="f_responsabile" placeholder="Nome cognome"></div>
           <div class="field-group"><label>Stato compilazione</label>
             <select id="f_stato" onchange="updateStatoStyle()">
               <option value="parziale">Parziale</option>
