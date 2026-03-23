@@ -1727,13 +1727,13 @@ function drawICCDpage(doc, s) {
   const ssContentX = ssX + ssLabelW;
   const ssHalf = rapH / 2;
   rect(ssContentX, y, ssColW, ssHalf, 0.2);
-  lbl('POSTERIORE A', ssContentX+1.5, y+3.5);
+  lbl('POSTERIORE', ssContentX+1.5, y+3.5);
   doc.setFontSize(8); doc.setFont('helvetica','normal'); doc.setTextColor(0,0,0);
   const postLines = doc.splitTextToSize(postNums, ssColW-3);
   doc.text(postLines, ssContentX+1.5, y+8);
 
   rect(ssContentX, y+ssHalf, ssColW, ssHalf, 0.2);
-  lbl('ANTERIORE A', ssContentX+1.5, y+ssHalf+3.5);
+  lbl('ANTERIORE', ssContentX+1.5, y+ssHalf+3.5);
   doc.setFontSize(8); doc.setFont('helvetica','normal'); doc.setTextColor(0,0,0);
   const antLines = doc.splitTextToSize(antNums, ssColW-3);
   doc.text(antLines, ssContentX+1.5, y+ssHalf+8);
