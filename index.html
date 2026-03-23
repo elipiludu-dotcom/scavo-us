@@ -1675,7 +1675,7 @@ function drawICCDpage(doc, s) {
   // — SEQUENZA FISICA / STRATIGRAFICA —
   // Occupa tutto lo spazio fino al footer (con margine per non coprirlo)
   const rapporti = s.rapporti || [];
-  const footerY1 = H - MR - 8;
+  const footerY1 = H - MR - 11;
   const rapH = footerY1 - y;
 
   // Larghezze: label 10, FISICA 65%, STRATIGRAFICA 35%
@@ -1740,7 +1740,7 @@ function drawICCDpage(doc, s) {
 
   // — FOOTER pagina 1 —
   txt('MiC – ICCD_licenza CC BY-SA 4.0 – Creative Commons Attribution-ShareAlike 4.0 International',
-    ML, H-4, 5, 'normal', [120,120,120]);
+    ML, H-8, 5, 'normal', [120,120,120]);
 
   // ════════════════════════════════════════════════
   // PAGINA 2
@@ -1749,7 +1749,7 @@ function drawICCDpage(doc, s) {
   y = MT;
 
   // Calcola lo spazio totale disponibile e le sezioni fisse
-  const p2FooterY = H - MR - 10;
+  const p2FooterY = H - MR - 16;
   const p2Fixed = 12 + 14 + 14 + 12 + 10 + 10 + 10 + 10; // datazione+elementi+reperti+camp+affid+resp+data_campo+data_rielab
   const p2Flex = p2FooterY - y - p2Fixed;
   // DESC 40%, OSSERV 22%, INTERP 38%
@@ -1759,27 +1759,35 @@ function drawICCDpage(doc, s) {
 
   // — DESCRIZIONE —
   const descLines = doc.splitTextToSize(String(s.descrizione||''), IW-4);
+  // Calcola quante righe entrano nella cella
+  const descLineH = 4.5;
+  const descMaxLines = Math.floor((descH - 10) / descLineH);
+  const descLinesClipped = descLines.slice(0, descMaxLines);
   rect(ML, y, IW, descH, 0.2);
   lbl('DESCRIZIONE', ML+1.5, y+3.5);
   doc.setFontSize(7.5); doc.setFont('helvetica','normal'); doc.setTextColor(0,0,0);
-  doc.text(descLines, ML+1.5, y+8);
+  doc.text(descLinesClipped, ML+1.5, y+8);
   y += descH;
 
   // — OSSERVAZIONI —
   const osservLines = doc.splitTextToSize(String(s.osservazioni||''), IW-4);
+  const osservMaxLines = Math.floor((osservH - 10) / descLineH);
+  const osservLinesClipped = osservLines.slice(0, osservMaxLines);
   rect(ML, y, IW, osservH, 0.2);
   lbl('OSSERVAZIONI', ML+1.5, y+3.5);
   doc.setFontSize(7.5); doc.setFont('helvetica','normal'); doc.setTextColor(0,0,0);
-  doc.text(osservLines, ML+1.5, y+8);
+  doc.text(osservLinesClipped, ML+1.5, y+8);
   y += osservH;
 
   // — INTERPRETAZIONE —
   const interpTxt = String(s.interpretazione||'') + (s.note_interp ? '\n' + s.note_interp : '');
   const interpLines = doc.splitTextToSize(interpTxt, IW-4);
+  const interpMaxLines = Math.floor((interpH - 10) / descLineH);
+  const interpLinesClipped = interpLines.slice(0, interpMaxLines);
   rect(ML, y, IW, interpH, 0.2);
   lbl('INTERPRETAZIONE', ML+1.5, y+3.5);
   doc.setFontSize(7.5); doc.setFont('helvetica','normal'); doc.setTextColor(0,0,0);
-  doc.text(interpLines, ML+1.5, y+8);
+  doc.text(interpLinesClipped, ML+1.5, y+8);
   y += interpH;
 
   // — DATAZIONE | PERIODO | FASE | ATTIVITA —
@@ -1826,7 +1834,7 @@ function drawICCDpage(doc, s) {
 
   // — FOOTER pagina 2 —
   txt('MiC – ICCD_licenza CC BY-SA 4.0 – Creative Commons Attribution-ShareAlike 4.0 International',
-    ML, H-4, 5, 'normal', [120,120,120]);
+    ML, H-8, 5, 'normal', [120,120,120]);
 }
 
 // ─── SYNC STATUS ─────────────────────────────────────────────────
