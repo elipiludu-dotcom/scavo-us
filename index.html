@@ -678,16 +678,16 @@
           <div class="field-group"><label>Criteri di Distinzione</label><input type="text" id="f_criteri" placeholder="es. cambio di colore e consistenza"></div>
         </div>
         <div class="field-row">
-          <div class="field-group"><label>Responsabile</label><input type="text" id="f_responsabile" placeholder="Nome cognome"></div>
+          <div class="field-group"><label>Modo di formazione</label>
+            <input type="text" id="f_modo_formazione" placeholder="es. Naturale, Antropico…">
+          </div>
+          <div class="field-group"><label>Responsabile compilazione sul campo</label><input type="text" id="f_responsabile" placeholder="Nome cognome"></div>
           <div class="field-group"><label>Stato compilazione</label>
             <select id="f_stato" onchange="updateStatoStyle()">
               <option value="parziale">Parziale</option>
               <option value="completa">Completa</option>
             </select>
             <span class="munsell-hint">Default: Parziale</span>
-          </div>
-          <div class="field-group"><label>Modo di formazione</label>
-            <input type="text" id="f_modo_formazione" placeholder="es. Naturale, Antropico…">
           </div>
         </div>
       </div>
@@ -1316,7 +1316,7 @@ async function saveScheda() {
     stato_conservazione: (document.querySelector('input[name="f_stato_conservazione"]:checked') || {}).value || '',
     stato_conservazione_note: document.getElementById('f_stato_conservazione_note').value,
     responsabile_scientifico: document.getElementById('f_responsabile_scientifico').value,
-    responsabile_rielaborazione: document.getElementById('f_responsabile_rielaborazione').value,
+    responsabile_rielaborazione: document.getElementById('f_responsabile_scientifico').value,
     data_rielaborazione: document.getElementById('f_data_rielaborazione').value,
     anno: document.getElementById('f_anno').value,
   };
@@ -1689,7 +1689,7 @@ function drawICCDpage(doc, s) {
   const micH = 9, micW = micH * 3.098;
   doc.addImage(micB64, 'PNG', ML+23, y+4.5, micW, micH);
   // ICCD: ratio originale ~980x541 ≈ 1.81:1, altezza 8mm
-  const iccdH = 8, iccdW = iccdH * 1.81;
+  const iccdH = 8, iccdW = iccdH * 3.70;
   doc.addImage(iccdB64, 'JPEG', ML+23+micW+4, y+5, iccdW, iccdH);
     // Cella destra: ANNO
   const annoX = ML+22+140;
