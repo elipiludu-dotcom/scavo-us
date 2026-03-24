@@ -1444,11 +1444,11 @@ async function importFromExcel(input) {
           foto_drone:                boolVal(r['Drone/Asta']),
           disegni:                   String(r['piante'] || ''),
           note_doc:                  '',
-          interpretazione:           String(r['interpretazione'] || ''),
+          interpretazione:           '', // campo select — il testo libero va in note_interp
           datazione:                 String(r['datazione'] || ''),
           fase:                      String(r['fase'] || ''),
           affidabilita:              String(r['affidabilità'] || ''),
-          note_interp:               '',
+          note_interp:               String(r['interpretazione'] || ''),
           stato_conservazione:       stato_cons,
           stato_conservazione_note:  String(r['Non Conserva i limiti originari in quanto'] || ''),
           responsabile_scientifico:  String(r['Direttore'] || ''),
