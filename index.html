@@ -643,7 +643,7 @@
   <div class="nav-tabs">
     <div class="nav-tab active" onclick="showView('list')">Home</div>
     <div class="nav-tab" onclick="showView('new')">+ Nuova US</div>
-    <div class="nav-tab" onclick="showView('tombe')">Tombe</div>
+    <div class="nav-tab" id="tombaTab" onclick="openNewTomba()">+ Nuova Tomba</div>
     <div class="nav-tab" onclick="showView('export')">Esporta</div>
     <div class="nav-tab" onclick="showView('import')">Importa</div>
     <div class="nav-tab" onclick="signOut()" style="margin-left:auto">Esci</div>
@@ -858,7 +858,7 @@
       <div class="list-toolbar">
         <button class="btn btn-secondary" onclick="showView('list')" style="white-space:nowrap">← Home</button>
         <input class="search-box" type="search" placeholder="Cerca per numero tomba, area, descrizione…" oninput="renderTombe(this.value)">
-        <button class="btn btn-primary" onclick="openNewTomba()">+ Nuova Tomba</button>
+        <button class="btn btn-secondary" onclick="loadTombe().then(renderTombe)" title="Sincronizza">↻</button>
       </div>
       <div class="us-list" id="tombaList"></div>
     </div>
@@ -1459,9 +1459,10 @@ function showView(v) {
   const idx = {list:0,new:1,tombe:2,export:3,import:4}[v];
   if (idx !== undefined) document.querySelectorAll('.nav-tab')[idx].classList.add('active');
   if (v === 'new' && editingId === null) resetForm();
-  if (v === 'list') { editingId = null; renderList(); renderStats(); updateNewTabLabel(); }
+  if (v === 'list') { editingId = null; renderList(); renderStats(); updateNewTabLabel(); updateTombaTabLabel(); }
   if (v === 'schede') { renderList(); }
-  if (v === 'tombe') { renderTombe(); }
+  if (v === 'tombe') { renderTombe(); updateTombaTabLabel(); }
+  if (v === 'tomba-form') { updateTombaTabLabel(); }
   if (v === 'new') updateNewTabLabel();
 }
 
@@ -1472,6 +1473,17 @@ function updateNewTabLabel() {
     tab.textContent = s ? '✏ US ' + s.numero : '✏ Modifica';
   } else {
     tab.textContent = '+ Nuova US';
+  }
+}
+
+function updateTombaTabLabel() {
+  const tab = document.getElementById('tombaTab');
+  if (!tab) return;
+  if (editingTombaId) {
+    const t = tombe.find(x => x.id === editingTombaId);
+    tab.textContent = t ? '✏ T. ' + t.numero : '✏ Modifica';
+  } else {
+    tab.textContent = '+ Nuova Tomba';
   }
 }
 
@@ -1519,12 +1531,18 @@ function renderStats() {
   const total = schede.length;
   const complete = schede.filter(s => s.stato === 'completa').length;
   const tipi = [...new Set(schede.map(s=>s.tipo).filter(Boolean))].length;
+  const totalTombe = tombe.length;
   document.getElementById('statsGrid').innerHTML = `
     <div class="stat-box"><span class="stat-num">${total}</span><span class="stat-label">Schede US</span></div>
-    <div class="stat-box"><span class="stat-num">${complete}</span><span class="stat-label">Complete</span></div>
-    <div class="stat-box stat-box-link" onclick="showView('schede')" title="Vedi tutte le schede">
+    <div class="stat-box"><span class="stat-num">${totalTombe}</span><span class="stat-label">Tombe</span></div>
+    <div class="stat-box stat-box-link" onclick="showView('schede')" title="Vedi tutte le schede US">
       <span class="stat-num">${total}</span>
-      <span class="stat-label">Schede Catalogate</span>
+      <span class="stat-label">Schede US Catalogate</span>
+      <span class="stat-arrow">→</span>
+    </div>
+    <div class="stat-box stat-box-link" onclick="showView('tombe')" title="Vedi tutte le tombe">
+      <span class="stat-num">${totalTombe}</span>
+      <span class="stat-label">Tombe Catalogate</span>
       <span class="stat-arrow">→</span>
     </div>
   `;
@@ -1826,6 +1844,7 @@ async function loadTombe() {
       return obj;
     });
   } catch(e) { console.error('loadTombe error', e); }
+  renderStats();
 }
 
 // ─── TOMBE — RENDER ───────────────────────────────────────────────
@@ -1978,6 +1997,7 @@ function openNewTomba() {
   document.getElementById('btnDeleteTomba').style.display = 'none';
   window._editTombaOrigin = 'view-tombe';
   showView('tomba-form');
+  updateTombaTabLabel();
 }
 
 function openEditTomba(id) {
@@ -1990,6 +2010,7 @@ function openEditTomba(id) {
   document.getElementById('btnDeleteTomba').style.display = 'inline-block';
   window._editTombaOrigin = document.querySelector('.view.active')?.id || 'view-tombe';
   showView('tomba-form');
+  updateTombaTabLabel();
 }
 
 async function saveTomba() {
@@ -2008,6 +2029,7 @@ async function saveTomba() {
     setSyncStatus('ok', 'Sincronizzato');
     showToast('☁ Tomba ' + numero + ' salvata');
     editingTombaId = null;
+    updateTombaTabLabel();
     showView('tombe');
   } catch(e) {
     setSyncStatus('error', 'Errore salvataggio');
@@ -2038,6 +2060,7 @@ async function deleteTomba() {
     setSyncStatus('ok', 'Sincronizzato');
     showToast('🗑 Tomba ' + t.numero + ' eliminata');
     editingTombaId = null;
+    updateTombaTabLabel();
     showView('tombe');
   } catch(e) {
     setSyncStatus('error', 'Errore');
