@@ -1581,7 +1581,8 @@ function drawICCDpage(doc, s) {
   const qx = ML+amb+pos+sett+quad;
   const natartW = natart/2;
   const posnegW = posneg/2;
-  const quotW = IW - (amb+pos+sett+quad) - natart - posneg;
+  const nx = ML + IW - natart - posneg; // ancorato al margine destro
+  const quotW = nx - qx;
   rect(qx, y, quotW, rowH, 0.2);
   lbl('QUOTE (cm)', qx+1.5, y+3.5);
   line(qx, y+rowH/2, qx+quotW, y+rowH/2);
@@ -1590,7 +1591,6 @@ function drawICCDpage(doc, s) {
   lbl('min', qx+1.5, y+rowH*3/4+2);
   val(s.quota_min||'', qx+12, y+rowH*3/4+2, quotW-14);
   // Naturale/Artificiale
-  const nx = qx+quotW;
   rect(nx, y, natartW, rowH/2, 0.2);
   lbl('NATURALE', nx+1.5, y+3.5);
   drawCB(s.formazione==='Naturale', nx+1.5, y+rowH/4+2);
