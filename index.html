@@ -592,6 +592,7 @@
     <div class="nav-tab active" onclick="showView('list')">Schede US</div>
     <div class="nav-tab" onclick="showView('new')">+ Nuova US</div>
     <div class="nav-tab" onclick="showView('export')">Esporta</div>
+    <div class="nav-tab" onclick="showView('import')">Importa</div>
     <div class="nav-tab" onclick="signOut()" style="margin-left:auto">Esci</div>
   </div>
 
@@ -796,11 +797,7 @@
     <!-- EXPORT -->
     <div id="view-export" class="view">
       <div class="export-section">
-        <div class="export-card">
-          <h3>Google Sheets</h3>
-          <p>Apri direttamente il foglio Google Sheets condiviso con il team.</p>
-          <a href="https://docs.google.com/spreadsheets/d/1iVXaplyjWp3uCx76-x5MPYEM1e3udtjW2mQxuomyggA/edit" target="_blank" class="btn btn-primary" style="display:inline-block;text-decoration:none">Apri Google Sheets</a>
-        </div>
+
         <div class="export-card">
           <h3>Esporta CSV</h3>
           <p>Scarica tutte le schede in formato CSV, compatibile con Excel e GIS.</p>
@@ -825,6 +822,18 @@
           <h3>Stampa PDF – Tutte le schede</h3>
           <p>Genera un unico PDF con tutte le schede US in formato ICCD, una per pagina.</p>
           <button class="btn btn-primary" onclick="exportPDFTutte()">⬇ PDF Completo</button>
+        </div>
+
+
+      </div>
+    </div>
+
+  <div id="view-import" class="view">
+      <div class="export-section">
+        <div class="export-card">
+          <h3>Google Sheets</h3>
+          <p>Apri direttamente il foglio Google Sheets condiviso con il team.</p>
+          <a href="https://docs.google.com/spreadsheets/d/1iVXaplyjWp3uCx76-x5MPYEM1e3udtjW2mQxuomyggA/edit" target="_blank" class="btn btn-primary" style="display:inline-block;text-decoration:none">Apri Google Sheets</a>
         </div>
         <div class="export-card">
           <h3>📥 Importa da Excel</h3>
@@ -1016,7 +1025,7 @@ async function loadFromSheets(showMsg = false) {
   setSyncStatus('syncing', 'Sync…');
   try {
     await ensureHeaders();
-    const data = await sheetsGet(`${SHEET_NAME}!A1:AM1000`);
+    const data = await sheetsGet(`${SHEET_NAME}!A1:AM5000`);
     const rows = data.values || [];
     if (rows.length <= 1) { schede = []; }
     else {
@@ -1056,15 +1065,70 @@ async function loadFromSheets(showMsg = false) {
   }
 }
 
+// Serializza una scheda in riga per Sheets
+function schedaToRow(s) {
+  return HEADERS.map(h => {
+    if (h === 'rapporti' || h === 'reperti') return JSON.stringify(s[h] || []);
+    return s[h] !== undefined ? String(s[h]) : '';
+  });
+}
+
+// Salva/aggiorna una singola scheda cercando la sua riga nel foglio.
+// Se esiste aggiorna solo quella riga; se non esiste la aggiunge in append.
+async function saveSchedaToSheets(scheda) {
+  await ensureHeaders();
+  // Legge tutte le righe per trovare quella con lo stesso id
+  const data = await sheetsGet(`${SHEET_NAME}!A2:A10000`);
+  const idRows = (data.values || []);
+  const rowIndex = idRows.findIndex(r => r[0] === scheda.id);
+  const row = schedaToRow(scheda);
+  if (rowIndex >= 0) {
+    // Riga trovata: aggiorna in place (riga sheet = rowIndex + 2, +1 header +1 base-1)
+    const sheetRow = rowIndex + 2;
+    await sheetsUpdate(`${SHEET_NAME}!A${sheetRow}`, [row]);
+  } else {
+    // Nuova scheda: append
+    await sheetsAppend([row]);
+  }
+}
+
+// Elimina una singola riga dal foglio tramite batchUpdate (deleteRows)
+async function deleteSchedaFromSheets(id) {
+  await ensureHeaders();
+  const data = await sheetsGet(`${SHEET_NAME}!A2:A10000`);
+  const idRows = (data.values || []);
+  const rowIndex = idRows.findIndex(r => r[0] === id);
+  if (rowIndex < 0) return; // non trovata, niente da fare
+  const sheetRow = rowIndex + 1; // 0-based per batchUpdate (riga 2 = index 1)
+
+  // Recupera lo sheetId del foglio
+  const metaRes = await fetch(
+    `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}?fields=sheets.properties`,
+    { headers: { Authorization: 'Bearer ' + accessToken } }
+  );
+  const meta = await metaRes.json();
+  const sheetId = meta.sheets.find(s => s.properties.title === SHEET_NAME)?.properties.sheetId ?? 0;
+
+  const url = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}:batchUpdate`;
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { Authorization: 'Bearer ' + accessToken, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ requests: [{
+      deleteDimension: {
+        range: { sheetId, dimension: 'ROWS', startIndex: sheetRow, endIndex: sheetRow + 1 }
+      }
+    }]})
+  });
+  if (!res.ok) throw new Error('Delete row error ' + res.status);
+}
+
+// writeAllToSheets: usata solo per importazione massiva (sovrascrive tutto)
 async function writeAllToSheets() {
   await ensureHeaders();
   const range = `${SHEET_NAME}!A2:AM10000`;
   await sheetsClear(range);
   if (schede.length > 0) {
-    const rows = schede.map(s => HEADERS.map(h => {
-      if (h === 'rapporti' || h === 'reperti') return JSON.stringify(s[h] || []);
-      return s[h] !== undefined ? String(s[h]) : '';
-    }));
+    const rows = schede.map(schedaToRow);
     await sheetsUpdate(`${SHEET_NAME}!A2`, rows);
   }
 }
@@ -1074,7 +1138,7 @@ function showView(v) {
   document.querySelectorAll('.view').forEach(el => el.classList.remove('active'));
   document.querySelectorAll('.nav-tab').forEach(el => el.classList.remove('active'));
   document.getElementById('view-' + v).classList.add('active');
-  const idx = {list:0,new:1,export:2}[v];
+  const idx = {list:0,new:1,export:2,import:3}[v];
   if (idx !== undefined) document.querySelectorAll('.nav-tab')[idx].classList.add('active');
   if (v === 'new' && editingId === null) resetForm();
   if (v === 'list') { editingId = null; renderList(); renderStats(); updateNewTabLabel(); }
@@ -1325,7 +1389,7 @@ async function saveScheda() {
   else schede.push(scheda);
 
   try {
-    await writeAllToSheets();
+    await saveSchedaToSheets(scheda);
     setSyncStatus('ok', 'Sincronizzato');
     showToast('☁ US ' + numero + ' salvata sul cloud');
     editingId = null;
@@ -1341,10 +1405,11 @@ async function deleteScheda() {
   if (!editingId) return;
   const s = schede.find(x => x.id === editingId);
   if (!confirm('Eliminare definitivamente US ' + s.numero + '?')) return;
-  schede = schede.filter(x => x.id !== editingId);
+  const deletingId = editingId;
+  schede = schede.filter(x => x.id !== deletingId);
   setSyncStatus('syncing', 'Eliminazione…');
   try {
-    await writeAllToSheets();
+    await deleteSchedaFromSheets(deletingId);
     setSyncStatus('ok', 'Sincronizzato');
     showToast('🗑 US ' + s.numero + ' eliminata');
     editingId = null;
@@ -1374,6 +1439,9 @@ async function importFromExcel(input) {
       if (!rows.length) { status.textContent = '⚠ Nessuna riga trovata nel file.'; return; }
 
       status.textContent = `📋 ${rows.length} righe trovate. Conversione in corso…`;
+
+      // Pulizia: rimuove _x000d_ (carriage return codificato da Excel) da tutti i valori
+      const cleanVal = v => String(v || '').replace(/_x000d_/gi, '').replace(/\r/g, '').trim();
 
       const nuove = rows.map(r => {
         // — Rapporti stratigrafici —
@@ -1420,46 +1488,46 @@ async function importFromExcel(input) {
         return {
           id,
           numero:                    parseInt(r['us']) || 0,
-          anno:                      String(r['anno'] || ''),
-          area:                      String(r['area'] || ''),
-          saggio:                    String(r['settore'] || ''),
+          anno:                      cleanVal(r['anno']),
+          area:                      cleanVal(r['area']),
+          saggio:                    cleanVal(r['settore']),
           tipo:                      '',
           pos_neg:                   '',
           data:                      '',
-          definizione:               String(r['definizione e posizione'] || ''),
+          definizione:               cleanVal(r['definizione e posizione']),
           formazione,
-          criteri:                   String(r['criteri di distinzione'] || ''),
-          responsabile:              String(r['responsabile'] || ''),
+          criteri:                   cleanVal(r['criteri di distinzione']),
+          responsabile:              cleanVal(r['responsabile']),
           stato:                     '',
-          colore:                    String(r['colore'] || ''),
-          consistenza:               String(r['consistenza'] || ''),
+          colore:                    cleanVal(r['colore']),
+          consistenza:               cleanVal(r['consistenza']),
           composizione:              '',
           umidita:                   '',
-          inclusi_geo:               String(r['componenti geologici'] || ''),
-          inclusi_org:               String(r['componenti organici'] || ''),
-          inclusi_art:               String(r['componenti artificiali'] || ''),
-          quota_max:                 String(r['quota max'] !== '' ? r['quota max'] : ''),
-          quota_min:                 String(r['quota min'] !== '' ? r['quota min'] : ''),
+          inclusi_geo:               cleanVal(r['componenti geologici']),
+          inclusi_org:               cleanVal(r['componenti organici']),
+          inclusi_art:               cleanVal(r['componenti artificiali']),
+          quota_max:                 cleanVal(r['quota max']),
+          quota_min:                 cleanVal(r['quota min']),
           spessore:                  '',
-          descrizione:               String(r['descrizione'] || ''),
-          osservazioni:              String(r['osservazioni'] || ''),
+          descrizione:               cleanVal(r['descrizione']),
+          osservazioni:              cleanVal(r['osservazioni']),
           rapporti,
           reperti:                   [],
           foto_digitali:             boolVal(r['Digitali']),
           foto_3d:                   boolVal(r['3D/Laser Scanner']),
           foto_drone:                boolVal(r['Drone/Asta']),
-          disegni:                   String(r['piante'] || ''),
+          disegni:                   cleanVal(r['piante']),
           note_doc:                  '',
           interpretazione:           '', // campo select — il testo libero va in note_interp
-          datazione:                 String(r['datazione'] || ''),
-          fase:                      String(r['fase'] || ''),
-          affidabilita:              String(r['affidabilità'] || ''),
-          note_interp:               String(r['interpretazione'] || ''),
-          modo_formazione:           String(r['modo di formazione'] || ''),
+          datazione:                 cleanVal(r['datazione']),
+          fase:                      cleanVal(r['fase']),
+          affidabilita:              cleanVal(r['affidabilità']),
+          note_interp:               cleanVal(r['interpretazione']),
+          modo_formazione:           cleanVal(r['modo di formazione']),
           stato_conservazione:       stato_cons,
-          stato_conservazione_note:  String(r['Non Conserva i limiti originari in quanto'] || ''),
-          responsabile_scientifico:  String(r['Direttore'] || ''),
-          responsabile_rielaborazione: String(r['Compilatore della scheda'] || ''),
+          stato_conservazione_note:  cleanVal(r['Non Conserva i limiti originari in quanto']),
+          responsabile_scientifico:  cleanVal(r['Direttore']),
+          responsabile_rielaborazione: cleanVal(r['Compilatore della scheda']),
           data_rielaborazione:       '',
         };
       });
