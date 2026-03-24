@@ -396,6 +396,22 @@
   .reperto-item .btn-rm:hover { color: var(--accent); }
 
   .stats-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; padding: 16px; }
+  .stat-box-link {
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s;
+    position: relative;
+  }
+  .stat-box-link:hover {
+    border-color: var(--earth);
+    background: rgba(201,150,58,0.08);
+  }
+  .stat-arrow {
+    position: absolute;
+    bottom: 8px; right: 10px;
+    font-size: 1rem;
+    color: var(--earth);
+    opacity: 0.7;
+  }
   .stat-box {
     background: var(--parchment);
     border: 1px solid var(--border);
@@ -451,6 +467,37 @@
     letter-spacing: 0.01em;
   }
   .export-card p { font-size: 0.82rem; color: var(--muted); margin-bottom: 14px; line-height: 1.6; }
+
+  /* MODAL CONFERMA */
+  .confirm-overlay {
+    display:none; position:fixed; inset:0; background:rgba(0,0,0,0.6);
+    z-index:1000; align-items:center; justify-content:center;
+  }
+  .confirm-overlay.show { display:flex; }
+  .confirm-box {
+    background:#2e2b26; border:1px solid var(--border); border-radius:6px;
+    padding:28px 28px 22px; max-width:380px; width:90%; box-shadow:0 8px 32px rgba(0,0,0,0.5);
+  }
+  .confirm-box .confirm-icon { font-size:2rem; margin-bottom:12px; }
+  .confirm-box h3 {
+    font-family:'Cormorant Garamond',serif; font-size:1.3rem; color:var(--earth);
+    margin-bottom:8px;
+  }
+  .confirm-box p { font-size:0.85rem; color:var(--muted); line-height:1.6; margin-bottom:6px; }
+  .confirm-box .confirm-detail {
+    font-family:'Space Mono',monospace; font-size:0.72rem; color:var(--ink);
+    background:var(--parchment); border:1px solid var(--border); border-radius:3px;
+    padding:8px 10px; margin:12px 0 20px; white-space:pre-line; word-break:break-word;
+  }
+  .confirm-box .confirm-buttons { display:flex; gap:10px; justify-content:flex-end; }
+  .confirm-box input[type="text"] {
+    width:100%; padding:8px 10px; margin:8px 0 16px;
+    background:var(--parchment-light); border:1px solid var(--border);
+    border-radius:3px; color:var(--ink); font-family:'Space Mono',monospace;
+    font-size:0.8rem; outline:none;
+  }
+  .confirm-box input[type="text"]:focus { border-color:var(--accent); }
+  .confirm-box input[type="text"].valid { border-color:var(--green-field); }
 
   .toast {
     position: fixed;
@@ -598,10 +645,15 @@
 
   <div class="content">
 
-    <!-- LIST -->
+    <!-- LIST (homepage con stats) -->
     <div id="view-list" class="view active">
       <div class="stats-grid" id="statsGrid"></div>
+    </div>
+
+    <!-- SCHEDE CATALOGATE -->
+    <div id="view-schede" class="view">
       <div class="list-toolbar">
+        <button class="btn btn-secondary" onclick="showView('list')" style="white-space:nowrap">← Home</button>
         <input class="search-box" type="search" placeholder="Cerca per numero US, area, descrizione…" oninput="renderList(this.value)">
         <button class="btn btn-secondary" onclick="loadFromSheets(true)" title="Sincronizza">↻</button>
       </div>
@@ -850,6 +902,24 @@
       </div>
     </div>
 
+  </div>
+</div>
+
+<!-- Modal di conferma custom -->
+<div id="confirmOverlay" class="confirm-overlay">
+  <div class="confirm-box">
+    <div class="confirm-icon" id="confirmIcon">⚠️</div>
+    <h3 id="confirmTitle">Conferma azione</h3>
+    <p id="confirmMessage"></p>
+    <div class="confirm-detail" id="confirmDetail" style="display:none"></div>
+    <div id="confirmInputWrap" style="display:none">
+      <p id="confirmInputLabel" style="margin-bottom:0"></p>
+      <input type="text" id="confirmInput" autocomplete="off" oninput="checkConfirmInput()">
+    </div>
+    <div class="confirm-buttons">
+      <button class="btn btn-secondary" onclick="resolveConfirm(false)">Annulla</button>
+      <button class="btn btn-danger" id="confirmOkBtn" onclick="resolveConfirm(true)">Conferma</button>
+    </div>
   </div>
 </div>
 
@@ -1142,6 +1212,7 @@ function showView(v) {
   if (idx !== undefined) document.querySelectorAll('.nav-tab')[idx].classList.add('active');
   if (v === 'new' && editingId === null) resetForm();
   if (v === 'list') { editingId = null; renderList(); renderStats(); updateNewTabLabel(); }
+  if (v === 'schede') { renderList(); }
   if (v === 'new') updateNewTabLabel();
 }
 
@@ -1164,7 +1235,7 @@ function renderList(q = '') {
     (s.area||'').toLowerCase().includes(term) ||
     (s.descrizione||'').toLowerCase().includes(term) ||
     (s.tipo||'').toLowerCase().includes(term)
-  ).sort((a,b) => a.numero - b.numero);
+  ).sort((a,b) => Math.abs(a.numero) - Math.abs(b.numero));
 
   if (!filtered.length) {
     list.innerHTML = `<div class="empty-state"><div class="icon">🏺</div><p>${schede.length ? 'Nessun risultato.' : 'Nessuna scheda US ancora.<br>Tocca "+ Nuova US" per iniziare.'}</p></div>`;
@@ -1195,7 +1266,11 @@ function renderStats() {
   document.getElementById('statsGrid').innerHTML = `
     <div class="stat-box"><span class="stat-num">${total}</span><span class="stat-label">Schede US</span></div>
     <div class="stat-box"><span class="stat-num">${complete}</span><span class="stat-label">Complete</span></div>
-    <div class="stat-box"><span class="stat-num">${tipi}</span><span class="stat-label">Tipi US</span></div>
+    <div class="stat-box stat-box-link" onclick="showView('schede')" title="Vedi tutte le schede">
+      <span class="stat-num">${total}</span>
+      <span class="stat-label">Schede Catalogate</span>
+      <span class="stat-arrow">→</span>
+    </div>
   `;
   populatePDFSelect();
 }
@@ -1235,6 +1310,8 @@ function openEdit(id) {
   const s = schede.find(x => x.id === id);
   if (!s) return;
   editingId = id;
+  // Memorizza da quale view si proviene per tornare dopo salvataggio/delete
+  window._editOrigin = document.querySelector('.view.active')?.id || 'view-list';
   document.getElementById('formTitle').textContent = 'Scheda US ' + s.numero;
   document.getElementById('btnDelete').style.display = 'block';
   const fields = ['numero','anno','area','saggio','tipo','data','definizione','criteri','responsabile','stato','colore','consistenza',
@@ -1393,7 +1470,8 @@ async function saveScheda() {
     setSyncStatus('ok', 'Sincronizzato');
     showToast('☁ US ' + numero + ' salvata sul cloud');
     editingId = null;
-    showView('list');
+    const origin = (window._editOrigin || 'view-list').replace('view-', '');
+    showView(origin);
   } catch (e) {
     setSyncStatus('error', 'Errore salvataggio');
     showToast('⚠ Errore durante il salvataggio');
@@ -1401,10 +1479,72 @@ async function saveScheda() {
   }
 }
 
+// ─── MODAL CONFERMA ──────────────────────────────────────────────
+let _confirmResolve = null;
+
+function showConfirm({ icon='⚠️', title, message, detail='', inputLabel='', inputMatch='', okLabel='Conferma', okClass='btn-danger' }) {
+  document.getElementById('confirmIcon').textContent = icon;
+  document.getElementById('confirmTitle').textContent = title;
+  document.getElementById('confirmMessage').textContent = message;
+
+  const detailEl = document.getElementById('confirmDetail');
+  if (detail) { detailEl.textContent = detail; detailEl.style.display = 'block'; }
+  else { detailEl.style.display = 'none'; }
+
+  const inputWrap = document.getElementById('confirmInputWrap');
+  const inputEl   = document.getElementById('confirmInput');
+  if (inputLabel) {
+    document.getElementById('confirmInputLabel').textContent = inputLabel;
+    inputEl.value = '';
+    inputEl.className = '';
+    inputEl.dataset.match = inputMatch;
+    inputWrap.style.display = 'block';
+  } else {
+    inputWrap.style.display = 'none';
+    inputEl.dataset.match = '';
+  }
+
+  const okBtn = document.getElementById('confirmOkBtn');
+  okBtn.textContent = okLabel;
+  okBtn.className = 'btn ' + okClass;
+  // Se c'è input richiesto, disabilita OK finché non è corretto
+  okBtn.disabled = !!inputLabel;
+
+  document.getElementById('confirmOverlay').classList.add('show');
+  if (inputLabel) inputEl.focus();
+
+  return new Promise(resolve => { _confirmResolve = resolve; });
+}
+
+function checkConfirmInput() {
+  const inputEl = document.getElementById('confirmInput');
+  const match   = inputEl.dataset.match;
+  const ok      = inputEl.value.trim() === match;
+  inputEl.className = ok ? 'valid' : '';
+  document.getElementById('confirmOkBtn').disabled = !ok;
+}
+
+function resolveConfirm(result) {
+  document.getElementById('confirmOverlay').classList.remove('show');
+  document.getElementById('confirmInput').value = '';
+  if (_confirmResolve) { _confirmResolve(result); _confirmResolve = null; }
+}
+
+// ─── SAVE / DELETE ────────────────────────────────────────────────
 async function deleteScheda() {
   if (!editingId) return;
   const s = schede.find(x => x.id === editingId);
-  if (!confirm('Eliminare definitivamente US ' + s.numero + '?')) return;
+  const okDel = await showConfirm({
+    icon: '🗑',
+    title: 'Eliminare la scheda?',
+    message: 'Questa azione è irreversibile. La scheda verrà rimossa dal cloud per tutti gli utenti.',
+    detail: 'US ' + s.numero + (s.definizione ? '  —  ' + s.definizione.substring(0,60) + (s.definizione.length>60?'…':'') : ''),
+    inputLabel: 'Scrivi il numero US per confermare:',
+    inputMatch: String(s.numero),
+    okLabel: '🗑 Elimina',
+    okClass: 'btn-danger'
+  });
+  if (!okDel) return;
   const deletingId = editingId;
   schede = schede.filter(x => x.id !== deletingId);
   setSyncStatus('syncing', 'Eliminazione…');
@@ -1413,7 +1553,8 @@ async function deleteScheda() {
     setSyncStatus('ok', 'Sincronizzato');
     showToast('🗑 US ' + s.numero + ' eliminata');
     editingId = null;
-    showView('list');
+    const origin = (window._editOrigin || 'view-list').replace('view-', '');
+    showView(origin);
   } catch (e) {
     setSyncStatus('error', 'Errore');
     showToast('⚠ Errore durante l\'eliminazione');
@@ -1437,6 +1578,21 @@ async function importFromExcel(input) {
       const rows = XLSX.utils.sheet_to_json(ws, { defval: '' });
 
       if (!rows.length) { status.textContent = '⚠ Nessuna riga trovata nel file.'; return; }
+
+      // Mostra quante schede verranno aggiornate vs aggiunte
+      const usNelFile = rows.map(r => String(r['us']).trim());
+      const giàPresenti = usNelFile.filter(u => schede.some(s => String(s.numero) === u)).length;
+      const nuoveCount  = usNelFile.length - giàPresenti;
+
+      const okImport = await showConfirm({
+        icon: '📥',
+        title: 'Conferma importazione',
+        message: 'Stai per importare dati da: ' + file.name,
+        detail: `${rows.length} schede totali nel file\n${nuoveCount} nuove  •  ${giàPresenti} aggiornate (sovrascrivono i dati esistenti)`,
+        okLabel: '📥 Importa',
+        okClass: 'btn-success'
+      });
+      if (!okImport) { status.textContent = ''; input.value = ''; return; }
 
       status.textContent = `📋 ${rows.length} righe trovate. Conversione in corso…`;
 
