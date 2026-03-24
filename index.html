@@ -636,7 +636,7 @@
 
 <div id="appShell" style="display:none">
   <div class="nav-tabs">
-    <div class="nav-tab active" onclick="showView('list')">Schede US</div>
+    <div class="nav-tab active" onclick="showView('list')">Home</div>
     <div class="nav-tab" onclick="showView('new')">+ Nuova US</div>
     <div class="nav-tab" onclick="showView('export')">Esporta</div>
     <div class="nav-tab" onclick="showView('import')">Importa</div>
@@ -1235,7 +1235,7 @@ function renderList(q = '') {
     (s.area||'').toLowerCase().includes(term) ||
     (s.descrizione||'').toLowerCase().includes(term) ||
     (s.tipo||'').toLowerCase().includes(term)
-  ).sort((a,b) => Math.abs(a.numero) - Math.abs(b.numero));
+  ).sort((a,b) => Math.abs(b.numero) - Math.abs(a.numero));
 
   if (!filtered.length) {
     list.innerHTML = `<div class="empty-state"><div class="icon">🏺</div><p>${schede.length ? 'Nessun risultato.' : 'Nessuna scheda US ancora.<br>Tocca "+ Nuova US" per iniziare.'}</p></div>`;
