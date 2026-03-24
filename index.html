@@ -621,6 +621,7 @@
   }
 </style>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
 </head>
 <body>
 
@@ -1107,6 +1108,13 @@
           <h3>Google Sheets</h3>
           <p>Apri direttamente il foglio Google Sheets condiviso con il team.</p>
           <a href="https://docs.google.com/spreadsheets/d/1iVXaplyjWp3uCx76-x5MPYEM1e3udtjW2mQxuomyggA/edit" target="_blank" class="btn btn-primary" style="display:inline-block;text-decoration:none">Apri Google Sheets</a>
+        </div>
+        <div class="export-card">
+          <h3>📄 Importa Schede Tombe da PDF</h3>
+          <p>Carica uno o più PDF delle schede sepoltura compilate. I dati vengono estratti automaticamente e salvati come schede tombe — potrai verificarle prima del salvataggio definitivo.</p>
+          <input type="file" id="pdfImportInput" accept=".pdf" multiple style="display:none" onchange="importFromPDF(this)">
+          <button class="btn btn-primary" onclick="document.getElementById('pdfImportInput').click()">📂 Scegli PDF</button>
+          <div id="pdfImportStatus" style="margin-top:10px;font-family:'Space Mono',monospace;font-size:0.7rem;color:var(--muted);min-height:18px;white-space:pre-line"></div>
         </div>
         <div class="export-card">
           <h3>📥 Importa da Excel</h3>
@@ -2153,6 +2161,204 @@ async function deleteScheda() {
 }
 
 // ─── EXPORT CSV ───────────────────────────────────────────────────
+
+// ─── IMPORTA DA PDF (Schede Tombe) ───────────────────────────────
+async function importFromPDF(input) {
+  const files = Array.from(input.files);
+  if (!files.length) return;
+  const status = document.getElementById('pdfImportStatus');
+  status.textContent = `⏳ Lettura di ${files.length} PDF in corso…`;
+
+  // Configura PDF.js worker
+  if (typeof pdfjsLib !== 'undefined') {
+    pdfjsLib.GlobalWorkerOptions.workerSrc =
+      'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
+  }
+
+  const results = [];
+  const errors  = [];
+
+  for (const file of files) {
+    try {
+      const arrayBuffer = await file.arrayBuffer();
+      const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+
+      // Estrai testo da tutte le pagine
+      let pages = [];
+      for (let i = 1; i <= pdf.numPages; i++) {
+        const page = await pdf.getPage(i);
+        const tc   = await page.getTextContent();
+        pages.push(tc.items.map(it => it.str).join(' '));
+      }
+      const p1 = pages[0] || '';
+      const p2 = pages[1] || '';
+
+      const t = parseTombaPDF(p1, p2, file.name);
+      results.push({ tomba: t, filename: file.name });
+    } catch(e) {
+      errors.push(file.name + ': ' + e.message);
+    }
+  }
+
+  if (!results.length) {
+    status.textContent = '⚠ Nessuna scheda estratta.\n' + errors.join('\n');
+    input.value = ''; return;
+  }
+
+  // Mostra anteprima e chiedi conferma
+  const preview = results.map(r =>
+    `T.${r.tomba.numero || '?'} — ${r.tomba.localita || ''} ${r.tomba.anno || ''} — ${r.filename}`
+  ).join('\n');
+
+  const ok = await showConfirm({
+    icon: '📄',
+    title: `Importare ${results.length} scheda/e tomba?`,
+    message: 'Verranno create le seguenti schede tomba (potrai modificarle dopo):',
+    detail: preview,
+    okLabel: '📥 Importa',
+    okClass: 'btn-success'
+  });
+  if (!ok) { status.textContent = ''; input.value = ''; return; }
+
+  // Salva
+  let salvate = 0, aggiornate = 0;
+  for (const { tomba } of results) {
+    const existing = tombe.findIndex(t => t.numero === tomba.numero);
+    if (existing >= 0) { tombe[existing] = { ...tombe[existing], ...tomba, id: tombe[existing].id }; aggiornate++; }
+    else { tombe.push(tomba); salvate++; }
+    try { await saveTombaToSheets(tomba); } catch(e) { console.error(e); }
+  }
+
+  renderTombe();
+  renderStats();
+  status.textContent = `✓ Completato: ${salvate} nuove, ${aggiornate} aggiornate.` +
+    (errors.length ? '\n⚠ Errori: ' + errors.join(', ') : '');
+  input.value = '';
+}
+
+function parseTombaPDF(p1, p2, filename) {
+  const t = { id: Date.now().toString(36) + Math.random().toString(36).slice(2), stato: 'parziale' };
+
+  // ── Intestazione: estrai tutti i numeri e ricostruisci ──────────
+  // Cerca la riga con anno + numeri us + scheda
+  const headerM = p1.match(/([A-Za-zÀ-ÿ][^\d]+?)\s+(20\d{2}|19\d{2})\s+(.+?)\s+(\d+)\s+(\d+)\s+(\d+|\S+)/);
+  if (headerM) {
+    t.localita = headerM[1].trim().replace(/LOCALITA\s*/i,'').replace(/ANNO.*/,'').trim();
+    t.anno = headerM[2];
+    const rest = headerM[3], n1 = parseInt(headerM[4]), n2 = parseInt(headerM[5]);
+    const p3 = headerM[6];
+    // US è il numero più grande, scheda il secondo, eventuale suffisso = pianta
+    const sorted = [[n1, headerM[4]], [n2, headerM[5]]].sort((a,b)=>b[0]-a[0]);
+    t.us_collegate = sorted[0][1];
+    t.numero       = parseInt(sorted[1][1]);
+    t.pianta_n     = p3;
+    // Area = testo tra anno e US
+    const usPos   = p1.indexOf(sorted[0][1]);
+    const annoPos = p1.indexOf(t.anno);
+    if (usPos > annoPos) {
+      const middle = p1.slice(annoPos + t.anno.length, usPos).trim();
+      t.area = middle.replace(new RegExp('\\b' + sorted[1][1] + '\\b'), '').trim();
+    }
+  }
+  // Fallback: dal nome file (es. us_3208_Tb_297.pdf)
+  if (!t.numero) {
+    const fm = filename.match(/Tb[_\s]*(\d+)/i);
+    if (fm) t.numero = parseInt(fm[1]);
+  }
+  if (!t.us_collegate) {
+    const fm = filename.match(/us[_\s]*(\d+)/i);
+    if (fm) t.us_collegate = fm[1];
+  }
+
+  // ── Quote ───────────────────────────────────────────────────────
+  const preM = p1.match(/QUOTE pre-scavo\s+([\d,\.\-]+(?:\s*\([^)]+\))?;?\s*[\d,\.\-]+(?:\s*\([^)]+\))?)/i);
+  if (preM) {
+    const vals = preM[1].match(/-?\d+[,\.]\d+/g) || [];
+    if (vals.length) t.quota_pre_min = vals[0];
+    if (vals.length > 1) t.quota_pre_max = vals[vals.length-1];
+  }
+  const postM = p1.match(/QUOTE post-scavo\s+([\d,\.\-]+(?:\s*\([^)]+\))?;?\s*[\d,\.\-]+(?:\s*\([^)]+\))?)/i);
+  if (postM) {
+    const vals = postM[1].match(/-?\d+[,\.]\d+/g) || [];
+    if (vals.length) t.quota_post_min = vals[0];
+    if (vals.length > 1) t.quota_post_max = vals[vals.length-1];
+  }
+
+  // ── Checkbox (IZ] = spuntato nel testo estratto da PDF.js) ──────
+  const checked = (pattern) => new RegExp('IZ\\]\\s*' + pattern, 'i').test(p1) ||
+                               new RegExp('IZ\\]\\s*' + pattern, 'i').test(p1.replace(/\s+/g,' '));
+
+  if (checked('primaria')) t.giacitura = 'primaria';
+  else if (checked('secondaria')) t.giacitura = 'secondaria';
+
+  if (checked('singola') || /ILJ\s*singola/i.test(p1)) t.tipologia_num = 'singola';
+  else if (checked('bisoma')) t.tipologia_num = 'bisoma';
+  else if (checked('multipla')) t.tipologia_num = 'multipla';
+
+  for (const tip of ['cappuccina','cassa','terra','urna','pietra','anfora','altro']) {
+    if (new RegExp('(IZ\\]|171)\\s*' + tip,'i').test(p1)) { t.tipologia = tip; break; }
+  }
+
+  const oeM = p1.match(/(N\/S|E\/O|O\/E|N-S|E-O|O-E|OE|NS|NE|NO|SE|SO)\s+(Buon\w+|Discret\w+|Scar\w+|Catt\w+)/i);
+  if (oeM) { t.orientamento = oeM[1]; t.condizioni = oeM[2]; }
+
+  const affM = p1.match(/STRATIGRAFICA\s+([\w]+)/i) || p1.match(/(Ottima|Buona|Discreta|Scarsa)/i);
+  if (affM) t.affidabilita = affM[1];
+
+  if (checked('supino')) t.posizione_scheletro = 'supino';
+  else if (/IZ\]\s*rannicchiata su fianco destro/i.test(p1)) t.posizione_scheletro = 'rannicchiata_dx';
+  else if (/IZ\]\s*rannicchiata su fianco sinistro/i.test(p1)) t.posizione_scheletro = 'rannicchiata_sx';
+
+  for (const osso of ['cranio','vertebre','torace','bacino','braccia','gambe','mani','piedi']) {
+    t['osso_'+osso] = checked(osso);
+  }
+
+  // ── Blocchi testo libero ────────────────────────────────────────
+  const block = (start, end) => {
+    const r = new RegExp(start + '\\s+(.+?)(?=' + end + ')', 'is');
+    const m = p1.match(r); return m ? m[1].trim() : '';
+  };
+  t.descrizione        = block('DESCRIZIONE', 'REPERTI IN CONNESSIONE');
+  t.reperti_connessione= block('REPERTI IN CONNESSIONE CON LO SCHELETRO', 'ELEMENTI COSTITUENTI');
+  t.elementi_copertura = block('ELEMENTI COSTITUENTI LA COPERTURA E REPERTI CONNESSI', 'ELEMENTI DATANTI');
+  t.osservazioni       = block('OSSERVAZIONI E INTERPRETAZIONE', 'BIBLIOGRAFIA');
+
+  const datBlock = block('ELEMENTI DATANTI', 'OSSERVAZIONI');
+  if (datBlock) {
+    const dp = datBlock.split(/DATAZION[EI]\s*/i);
+    t.elementi_datanti = dp[0].trim();
+    t.datazione = dp[1] ? dp[1].trim() : '';
+  }
+
+  // Compilatore
+  const compM = p1.match(/COMPILATORE\s+DATA CONTROLLO\s+([\w,\s]+?)(?:\s{3,}|$)/i) ||
+                p1.match(/COMPILATORE\s*\n?([\w,\s]+?)(?=DATA CONTROLLO|\n\n)/i);
+  if (compM) t.compilatore = compM[1].trim();
+
+  // ── Caratteri morfologici (pag.2) ───────────────────────────────
+  const morf = (label, opts) => {
+    for (const opt of opts) {
+      if (new RegExp(label + '.{0,80}' + opt.slice(0,5), 'is').test(p2)) return opt;
+    }
+    return '';
+  };
+  t.morf_arcate        = morf('arcate sopracciliari',  ['lievi','pronunciate']);
+  t.morf_margini       = morf('margini sopraorbitari', ['taglienti','arrotondati']);
+  t.morf_frontale      = morf('frontale',              ['verticale','sfuggente']);
+  t.morf_mandibola     = morf('mandibola',             ['gracile','robusta']);
+  t.morf_mento         = morf('mento',                 ['arrotondato','squadrato']);
+  t.morf_protub_occ    = morf('protub. occipitale',    ['lieve','evidente']);
+  t.morf_orbite        = morf('orbite',                ['circolare','quadrangolare']);
+  t.morf_angolo_pubico = morf('angolo pubico',         ['ottuso','acuto']);
+  t.morf_ali_iliache   = morf('ali iliache',           ['basse, larghe','alte, strette']);
+  t.morf_incisura      = morf('incisura ischiatica',   ['bassa, larga','alta, stretta']);
+
+  // Sesso
+  if (/SESSO[^F]*F[^M]*DM\b/i.test(p2) || /DM\b/.test(p2)) t.sesso = 'M';
+  else if (/D\s*F/i.test(p2) || /\bF\b.*SESSO/i.test(p2)) t.sesso = 'F';
+
+  return t;
+}
 
 // ─── IMPORTA DA EXCEL ─────────────────────────────────────────────
 async function importFromExcel(input) {
