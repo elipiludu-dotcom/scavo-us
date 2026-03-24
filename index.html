@@ -1572,15 +1572,15 @@ function drawICCDpage(doc, s) {
   // Le 4 celle dx (NATURALE, ARTIFICIALE, POSITIVA, NEGATIVA) hanno larghezza fissa
   // e sono ancorate al margine destro (ML+IW). QUOTE riempie il resto.
   const rowH = 16;
-  const cellNat = IW * 0.10; // NATURALE
-  const cellArt = IW * 0.10; // ARTIFICIALE
-  const cellPos = IW * 0.10; // POSITIVA
-  const cellNeg = IW * 0.10; // NEGATIVA
-  // Posizioni dal margine destro
-  const xNeg = ML + IW - cellNeg;
-  const xPos = xNeg - cellPos;
-  const xArt = xPos - cellArt;
-  const xNat = xArt - cellNat;
+  // Le 4 celle dx hanno larghezza fissa e partono tutte dallo stesso xNat,
+  // così NATURALE+ARTIFICIALE e POSITIVA+NEGATIVA sono perfettamente allineate
+  // e la riga finisce esattamente al margine destro (ML+IW).
+  const cellW2 = IW * 0.11; // larghezza di ciascuna delle 4 celle
+  const xNat = ML + IW - cellW2 * 2; // inizio blocco dx (sia riga sup che inf)
+  const xArt = xNat + cellW2;
+  const xPos = xNat;           // riga inferiore: stessa x di partenza
+  const xNeg = xNat + cellW2;
+  const cellNat = cellW2, cellArt = cellW2, cellPos = cellW2, cellNeg = cellW2;
   // Colonne sinistre
   const amb=IW*0.18, pos=IW*0.10, sett=IW*0.10, quad=IW*0.08;
   rect(ML, y, amb, rowH, 0.2);            lbl('AMBIENTE/UNITA\' FUNZIONALE', ML+1.5, y+3.5);
