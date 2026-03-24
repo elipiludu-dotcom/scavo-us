@@ -1569,20 +1569,28 @@ function drawICCDpage(doc, s) {
   y += 9;
 
   // — AMBIENTE | POSIZIONE | SETTORE | QUADRATO | QUOTE | NAT/ART | POS/NEG —
-  // Proporzioni ridistribuite per coprire esattamente IW (totale = 1.00)
-  const amb=IW*0.18, pos=IW*0.10, sett=IW*0.10, quad=IW*0.08, natart=IW*0.20, posneg=IW*0.18;
+  // Le 4 celle dx (NATURALE, ARTIFICIALE, POSITIVA, NEGATIVA) hanno larghezza fissa
+  // e sono ancorate al margine destro (ML+IW). QUOTE riempie il resto.
   const rowH = 16;
+  const cellNat = IW * 0.10; // NATURALE
+  const cellArt = IW * 0.10; // ARTIFICIALE
+  const cellPos = IW * 0.10; // POSITIVA
+  const cellNeg = IW * 0.10; // NEGATIVA
+  // Posizioni dal margine destro
+  const xNeg = ML + IW - cellNeg;
+  const xPos = xNeg - cellPos;
+  const xArt = xPos - cellArt;
+  const xNat = xArt - cellNat;
+  // Colonne sinistre
+  const amb=IW*0.18, pos=IW*0.10, sett=IW*0.10, quad=IW*0.08;
   rect(ML, y, amb, rowH, 0.2);            lbl('AMBIENTE/UNITA\' FUNZIONALE', ML+1.5, y+3.5);
   rect(ML+amb, y, pos, rowH, 0.2);        lbl('POSIZIONE', ML+amb+1.5, y+3.5);
   rect(ML+amb+pos, y, sett, rowH, 0.2);   lbl('SETTORE/I', ML+amb+pos+1.5, y+3.5);
   val(s.saggio||'', ML+amb+pos+1.5, y+9, sett-3);
   rect(ML+amb+pos+sett, y, quad, rowH, 0.2); lbl('QUADRATO/I', ML+amb+pos+sett+1.5, y+3.5);
-  // Quote (con max/min) — occupa tutto lo spazio rimasto tra quad e nat/art
+  // QUOTE occupa esattamente lo spazio tra QUADRATO e NATURALE
   const qx = ML+amb+pos+sett+quad;
-  const natartW = natart/2;
-  const posnegW = posneg/2;
-  const nx = ML + IW - natart - posneg; // ancorato al margine destro
-  const quotW = nx - qx;
+  const quotW = xNat - qx;
   rect(qx, y, quotW, rowH, 0.2);
   lbl('QUOTE (cm)', qx+1.5, y+3.5);
   line(qx, y+rowH/2, qx+quotW, y+rowH/2);
@@ -1590,20 +1598,20 @@ function drawICCDpage(doc, s) {
   val(s.quota_max||'', qx+12, y+rowH/4+2, quotW-14);
   lbl('min', qx+1.5, y+rowH*3/4+2);
   val(s.quota_min||'', qx+12, y+rowH*3/4+2, quotW-14);
-  // Naturale/Artificiale
-  rect(nx, y, natartW, rowH/2, 0.2);
-  lbl('NATURALE', nx+1.5, y+3.5);
-  drawCB(s.formazione==='Naturale', nx+1.5, y+rowH/4+2);
-  rect(nx+natartW, y, natartW, rowH/2, 0.2);
-  lbl('ARTIFICIALE', nx+natartW+1.5, y+3.5);
-  drawCB(s.formazione==='Artificiale', nx+natartW+1.5, y+rowH/4+2);
-  // Positiva/Negativa
-  rect(nx, y+rowH/2, posnegW, rowH/2, 0.2);
-  lbl('POSITIVA', nx+1.5, y+rowH/2+3.5);
-  drawCB(s.pos_neg==='Positiva', nx+1.5, y+rowH*3/4+2);
-  rect(nx+posnegW, y+rowH/2, posnegW, rowH/2, 0.2);
-  lbl('NEGATIVA', nx+posnegW+1.5, y+rowH/2+3.5);
-  drawCB(s.pos_neg==='Negativa', nx+posnegW+1.5, y+rowH*3/4+2);
+  // NATURALE | ARTIFICIALE — riga superiore, ancorate al margine destro
+  rect(xNat, y, cellNat, rowH/2, 0.2);
+  lbl('NATURALE', xNat+1.5, y+3.5);
+  drawCB(s.formazione==='Naturale', xNat+1.5, y+rowH/4+2);
+  rect(xArt, y, cellArt, rowH/2, 0.2);
+  lbl('ARTIFICIALE', xArt+1.5, y+3.5);
+  drawCB(s.formazione==='Artificiale', xArt+1.5, y+rowH/4+2);
+  // POSITIVA | NEGATIVA — riga inferiore, ancorate al margine destro
+  rect(xPos, y+rowH/2, cellPos, rowH/2, 0.2);
+  lbl('POSITIVA', xPos+1.5, y+rowH/2+3.5);
+  drawCB(s.pos_neg==='Positiva', xPos+1.5, y+rowH*3/4+2);
+  rect(xNeg, y+rowH/2, cellNeg, rowH/2, 0.2);
+  lbl('NEGATIVA', xNeg+1.5, y+rowH/2+3.5);
+  drawCB(s.pos_neg==='Negativa', xNeg+1.5, y+rowH*3/4+2);
   y += rowH;
 
   // — PIANTE | PROSPETTI | SEZIONI | FOTOGRAFIE | RIF.TABELLE —
