@@ -1588,16 +1588,28 @@ function drawICCDpage(doc, s) {
   rect(ML+amb+pos, y, sett, rowH, 0.2);   lbl('SETTORE/I', ML+amb+pos+1.5, y+3.5);
   val(s.saggio||'', ML+amb+pos+1.5, y+9, sett-3);
   rect(ML+amb+pos+sett, y, quad, rowH, 0.2); lbl('QUADRATO/I', ML+amb+pos+sett+1.5, y+3.5);
-  // QUOTE occupa esattamente lo spazio tra QUADRATO e NATURALE
+  // QUOTE: etichetta verticale a sinistra + due celle uguali (max/min) a destra
   const qx = ML+amb+pos+sett+quad;
   const quotW = xNat - qx;
+  const quotLabelW = quotW * 0.30; // larghezza etichetta "QUOTE (cm)"
+  const quotValW = quotW - quotLabelW; // larghezza colonna valori
+  // Bordo esterno
   rect(qx, y, quotW, rowH, 0.2);
-  lbl('QUOTE (cm)', qx+1.5, y+3.5);
-  line(qx, y+rowH/2, qx+quotW, y+rowH/2);
-  lbl('max', qx+1.5, y+rowH/4+2);
-  val(s.quota_max||'', qx+12, y+rowH/4+2, quotW-14);
-  lbl('min', qx+1.5, y+rowH*3/4+2);
-  val(s.quota_min||'', qx+12, y+rowH*3/4+2, quotW-14);
+  // Linea verticale tra etichetta e valori
+  doc.setLineWidth(0.2); doc.setDrawColor(0,0,0);
+  doc.line(qx+quotLabelW, y, qx+quotLabelW, y+rowH);
+  // Etichetta centrata verticalmente
+  doc.setFontSize(5.5); doc.setFont('helvetica','bold'); doc.setTextColor(80,80,80);
+  doc.text('QUOTE', qx+quotLabelW/2, y+rowH*0.38, {align:'center'});
+  doc.text('(cm)', qx+quotLabelW/2, y+rowH*0.62, {align:'center'});
+  // Linea orizzontale che divide max e min a metà
+  doc.line(qx+quotLabelW, y+rowH/2, qx+quotW, y+rowH/2);
+  // max
+  lbl('max', qx+quotLabelW+1.5, y+3.5);
+  val(s.quota_max||'', qx+quotLabelW+9, y+rowH/4+2, quotValW-11);
+  // min
+  lbl('min', qx+quotLabelW+1.5, y+rowH/2+3.5);
+  val(s.quota_min||'', qx+quotLabelW+9, y+rowH*3/4+2, quotValW-11);
   // NATURALE | ARTIFICIALE — riga superiore, ancorate al margine destro
   rect(xNat, y, cellNat, rowH/2, 0.2);
   lbl('NATURALE', xNat+1.5, y+3.5);
