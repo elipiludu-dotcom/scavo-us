@@ -469,6 +469,11 @@
   .export-card p { font-size: 0.82rem; color: var(--muted); margin-bottom: 14px; line-height: 1.6; }
 
   /* MODAL CONFERMA */
+  .radio-group { display:flex; gap:12px; flex-wrap:wrap; align-items:center; padding:6px 0; }
+  .radio-label { display:flex; align-items:center; gap:5px; font-size:0.82rem;
+    color:var(--ink); cursor:pointer; user-select:none; }
+  .radio-label input { accent-color:var(--earth); cursor:pointer; }
+
   .confirm-overlay {
     display:none; position:fixed; inset:0; background:rgba(0,0,0,0.6);
     z-index:1000; align-items:center; justify-content:center;
@@ -638,6 +643,7 @@
   <div class="nav-tabs">
     <div class="nav-tab active" onclick="showView('list')">Home</div>
     <div class="nav-tab" onclick="showView('new')">+ Nuova US</div>
+    <div class="nav-tab" onclick="showView('tombe')">Tombe</div>
     <div class="nav-tab" onclick="showView('export')">Esporta</div>
     <div class="nav-tab" onclick="showView('import')">Importa</div>
     <div class="nav-tab" onclick="signOut()" style="margin-left:auto">Esci</div>
@@ -847,6 +853,221 @@
     </div>
 
     <!-- EXPORT -->
+    <!-- TOMBE LIST -->
+    <div id="view-tombe" class="view">
+      <div class="list-toolbar">
+        <button class="btn btn-secondary" onclick="showView('list')" style="white-space:nowrap">← Home</button>
+        <input class="search-box" type="search" placeholder="Cerca per numero tomba, area, descrizione…" oninput="renderTombe(this.value)">
+        <button class="btn btn-primary" onclick="openNewTomba()">+ Nuova Tomba</button>
+      </div>
+      <div class="us-list" id="tombaList"></div>
+    </div>
+
+    <!-- TOMBA FORM -->
+    <div id="view-tomba-form" class="view">
+      <div class="form-header">
+        <h2 id="tombaFormTitle">Nuova Scheda Tomba</h2>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button class="btn btn-secondary" onclick="showView('tombe')">Annulla</button>
+          <button class="btn btn-danger" id="btnDeleteTomba" style="display:none" onclick="deleteTomba()">🗑 Elimina</button>
+          <button class="btn btn-success" onclick="saveTomba()">Salva</button>
+        </div>
+      </div>
+
+      <!-- SEZ 1: IDENTIFICAZIONE -->
+      <div class="form-section">
+        <div class="section-title">1 · Identificazione</div>
+        <div class="field-row">
+          <div class="field-group"><label>Scheda N. *</label><input type="number" id="t_numero" placeholder="es. 334"></div>
+          <div class="field-group"><label>Anno</label><input type="text" id="t_anno" placeholder="es. 2024"></div>
+          <div class="field-group"><label>Area</label><input type="text" id="t_area" placeholder="es. A"></div>
+        </div>
+        <div class="field-row">
+          <div class="field-group"><label>Località</label><input type="text" id="t_localita" placeholder="es. Colle Mustarola, Peccioli"></div>
+          <div class="field-group"><label>Pianta N.</label><input type="text" id="t_pianta_n" placeholder="es. 12"></div>
+        </div>
+        <div class="field-row single">
+          <div class="field-group">
+            <label>US collegate <span style="font-size:0.75rem;color:var(--muted)">(numeri separati da virgola)</span></label>
+            <input type="text" id="t_us_collegate" placeholder="es. 101, -174, 2627">
+          </div>
+        </div>
+      </div>
+
+      <!-- SEZ 2: QUOTE -->
+      <div class="form-section">
+        <div class="section-title">2 · Quote</div>
+        <div class="field-row">
+          <div class="field-group"><label>Pre-scavo min</label><input type="text" id="t_quota_pre_min" placeholder="cm"></div>
+          <div class="field-group"><label>Pre-scavo max</label><input type="text" id="t_quota_pre_max" placeholder="cm"></div>
+          <div class="field-group"><label>Post-scavo min</label><input type="text" id="t_quota_post_min" placeholder="cm"></div>
+          <div class="field-group"><label>Post-scavo max</label><input type="text" id="t_quota_post_max" placeholder="cm"></div>
+        </div>
+      </div>
+
+      <!-- SEZ 3: CARATTERI SEPOLTURA -->
+      <div class="form-section">
+        <div class="section-title">3 · Caratteri della Sepoltura</div>
+        <div class="field-row">
+          <div class="field-group">
+            <label>Giacitura</label>
+            <div class="radio-group">
+              <label class="radio-label"><input type="radio" name="t_giacitura" value="primaria"> Primaria</label>
+              <label class="radio-label"><input type="radio" name="t_giacitura" value="secondaria"> Secondaria</label>
+            </div>
+          </div>
+          <div class="field-group">
+            <label>Tipologia</label>
+            <div class="radio-group" style="flex-wrap:wrap">
+              <label class="radio-label"><input type="radio" name="t_tipologia" value="singola"> Singola</label>
+              <label class="radio-label"><input type="radio" name="t_tipologia" value="bisoma"> Bisoma</label>
+              <label class="radio-label"><input type="radio" name="t_tipologia" value="multipla"> Multipla</label>
+              <label class="radio-label"><input type="radio" name="t_tipologia" value="cappuccina"> Cappuccina</label>
+              <label class="radio-label"><input type="radio" name="t_tipologia" value="pietra"> Pietra</label>
+              <label class="radio-label"><input type="radio" name="t_tipologia" value="anfora"> Anfora</label>
+              <label class="radio-label"><input type="radio" name="t_tipologia" value="cassa"> Cassa</label>
+              <label class="radio-label"><input type="radio" name="t_tipologia" value="terra"> Terra</label>
+              <label class="radio-label"><input type="radio" name="t_tipologia" value="urna"> Urna</label>
+              <label class="radio-label"><input type="radio" name="t_tipologia" value="altro"> Altro</label>
+            </div>
+          </div>
+        </div>
+        <div class="field-row">
+          <div class="field-group"><label>Orientamento</label><input type="text" id="t_orientamento" placeholder="es. N-S, E-O…"></div>
+          <div class="field-group"><label>Condizioni</label><input type="text" id="t_condizioni" placeholder="es. buone, parziale…"></div>
+          <div class="field-group"><label>Altre sepolture in sequenza</label><input type="text" id="t_altre_sepolture" placeholder="es. T.335"></div>
+        </div>
+        <div class="field-row">
+          <div class="field-group"><label>Affidabilità stratigrafica</label>
+            <select id="t_affidabilita"><option value="">— seleziona —</option><option>Buona</option><option>Discreta</option><option>Scarsa</option></select>
+          </div>
+          <div class="field-group">
+            <label>Posizione scheletro</label>
+            <div class="radio-group" style="flex-wrap:wrap">
+              <label class="radio-label"><input type="radio" name="t_posizione" value="supino"> Supino</label>
+              <label class="radio-label"><input type="radio" name="t_posizione" value="rannicchiata_dx"> Rannicchiata su fianco destro</label>
+              <label class="radio-label"><input type="radio" name="t_posizione" value="rannicchiata_sx"> Rannicchiata su fianco sinistro</label>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- SEZ 4: OSSA IN CONNESSIONE -->
+      <div class="form-section">
+        <div class="section-title">4 · Ossa in Connessione</div>
+        <div class="field-row" style="flex-wrap:wrap;gap:6px 20px">
+          <label class="radio-label"><input type="checkbox" id="t_cranio"> Cranio</label>
+          <label class="radio-label"><input type="checkbox" id="t_vertebre"> Vertebre</label>
+          <label class="radio-label"><input type="checkbox" id="t_torace"> Torace</label>
+          <label class="radio-label"><input type="checkbox" id="t_bacino"> Bacino</label>
+          <label class="radio-label"><input type="checkbox" id="t_braccia"> Braccia</label>
+          <label class="radio-label"><input type="checkbox" id="t_gambe"> Gambe</label>
+          <label class="radio-label"><input type="checkbox" id="t_mani"> Mani</label>
+          <label class="radio-label"><input type="checkbox" id="t_piedi"> Piedi</label>
+        </div>
+      </div>
+
+      <!-- SEZ 5: DESCRIZIONE E DOCUMENTAZIONE -->
+      <div class="form-section">
+        <div class="section-title">5 · Descrizione e Documentazione</div>
+        <div class="field-row single"><div class="field-group"><label>Descrizione</label><textarea id="t_descrizione" style="min-height:90px"></textarea></div></div>
+        <div class="field-row single"><div class="field-group"><label>Reperti in connessione con lo scheletro</label><textarea id="t_reperti_connessione" style="min-height:70px"></textarea></div></div>
+        <div class="field-row single"><div class="field-group"><label>Elementi costituenti la copertura e reperti connessi</label><textarea id="t_elementi_copertura" style="min-height:70px"></textarea></div></div>
+        <div class="field-row">
+          <div class="field-group"><label>Elementi datanti</label><input type="text" id="t_elementi_datanti"></div>
+          <div class="field-group"><label>Datazione</label><input type="text" id="t_datazione" placeholder="es. IV-V sec. d.C."></div>
+        </div>
+        <div class="field-row single"><div class="field-group"><label>Osservazioni e interpretazione</label><textarea id="t_osservazioni" style="min-height:90px"></textarea></div></div>
+        <div class="field-row single"><div class="field-group"><label>Bibliografia</label><textarea id="t_bibliografia" style="min-height:60px"></textarea></div></div>
+      </div>
+
+      <!-- SEZ 6: DATI ANTROPOLOGICI -->
+      <div class="form-section">
+        <div class="section-title">6 · Dati Antropologici — Caratteri Metrici</div>
+        <div class="field-row">
+          <div class="field-group"><label>Sesso</label>
+            <div class="radio-group">
+              <label class="radio-label"><input type="radio" name="t_sesso" value="F"> F</label>
+              <label class="radio-label"><input type="radio" name="t_sesso" value="M"> M</label>
+              <label class="radio-label"><input type="radio" name="t_sesso" value="indet"> Indet.</label>
+            </div>
+          </div>
+        </div>
+        <div class="section-title" style="font-size:0.7rem;margin:10px 0 6px">Cranio</div>
+        <div class="field-row">
+          <div class="field-group"><label>Lungh. max</label><input type="text" id="t_cranio_lungh_max" placeholder="mm"></div>
+          <div class="field-group"><label>Largh. max</label><input type="text" id="t_cranio_largh_max" placeholder="mm"></div>
+          <div class="field-group"><label>Alt. max faccia</label><input type="text" id="t_cranio_alt_faccia" placeholder="mm"></div>
+          <div class="field-group"><label>Largh. max faccia</label><input type="text" id="t_cranio_largh_faccia" placeholder="mm"></div>
+        </div>
+        <div class="section-title" style="font-size:0.7rem;margin:10px 0 6px">Arti</div>
+        <div class="field-row">
+          <div class="field-group"><label>Lungh. omero</label><input type="text" id="t_omero_lungh" placeholder="mm"></div>
+          <div class="field-group"><label>Lungh. femore</label><input type="text" id="t_femore_lungh" placeholder="mm"></div>
+          <div class="field-group"><label>Dist. omero-omero</label><input type="text" id="t_omero_omero_dist" placeholder="mm"></div>
+        </div>
+        <div class="section-title" style="font-size:0.7rem;margin:10px 0 6px">Bacino</div>
+        <div class="field-row">
+          <div class="field-group"><label>Lungh. max</label><input type="text" id="t_bacino_lungh_max" placeholder="mm"></div>
+          <div class="field-group"><label>Largh. max</label><input type="text" id="t_bacino_largh_max" placeholder="mm"></div>
+        </div>
+      </div>
+
+      <!-- SEZ 7: CARATTERI MORFOLOGICI -->
+      <div class="form-section">
+        <div class="section-title">7 · Dati Antropologici — Caratteri Morfologici</div>
+        <div class="field-row" style="flex-wrap:wrap">
+          <div class="field-group"><label>Arcate sopracciliari</label>
+            <select id="t_morf_arcate"><option value="">—</option><option>Lievi</option><option>Pronunciate</option></select>
+          </div>
+          <div class="field-group"><label>Margini sopraorbitari</label>
+            <select id="t_morf_margini"><option value="">—</option><option>Taglienti</option><option>Arrotondati</option></select>
+          </div>
+          <div class="field-group"><label>Frontale</label>
+            <select id="t_morf_frontale"><option value="">—</option><option>Verticale</option><option>Sfuggente</option></select>
+          </div>
+          <div class="field-group"><label>Mandibola</label>
+            <select id="t_morf_mandibola"><option value="">—</option><option>Gracile</option><option>Robusta</option></select>
+          </div>
+          <div class="field-group"><label>Mento</label>
+            <select id="t_morf_mento"><option value="">—</option><option>Arrotondato</option><option>Squadrato</option></select>
+          </div>
+          <div class="field-group"><label>Protub. occipitale</label>
+            <select id="t_morf_protub_occ"><option value="">—</option><option>Lieve</option><option>Evidente</option></select>
+          </div>
+          <div class="field-group"><label>Orbite</label>
+            <select id="t_morf_orbite"><option value="">—</option><option>Circolare</option><option>Quadrangolare</option></select>
+          </div>
+          <div class="field-group"><label>Angolo pubico</label>
+            <select id="t_morf_angolo_pubico"><option value="">—</option><option>Ottuso</option><option>Acuto</option></select>
+          </div>
+          <div class="field-group"><label>Ali iliache</label>
+            <select id="t_morf_ali_iliache"><option value="">—</option><option>Basse, larghe</option><option>Alte, strette</option></select>
+          </div>
+          <div class="field-group"><label>Incisura ischiatica</label>
+            <select id="t_morf_incisura"><option value="">—</option><option>Bassa, larga</option><option>Alta, stretta</option></select>
+          </div>
+        </div>
+        <div class="field-row single"><div class="field-group"><label>Note antropologiche</label><textarea id="t_note_antropologiche" style="min-height:80px"></textarea></div></div>
+      </div>
+
+      <!-- SEZ 8: AMMINISTRATIVO -->
+      <div class="form-section">
+        <div class="section-title">8 · Amministrativo</div>
+        <div class="field-row">
+          <div class="field-group"><label>Compilatore</label><input type="text" id="t_compilatore" placeholder="Nome cognome"></div>
+          <div class="field-group"><label>Data controllo</label><input type="date" id="t_data_controllo"></div>
+          <div class="field-group"><label>Stato compilazione</label>
+            <select id="t_stato" onchange="updateTombaStatoStyle()">
+              <option value="parziale">Parziale</option>
+              <option value="completa">Completa</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
     <div id="view-export" class="view">
       <div class="export-section">
 
@@ -952,6 +1173,29 @@ const SHEET_ID  = '1iVXaplyjWp3uCx76-x5MPYEM1e3udtjW2mQxuomyggA';
 const SHEET_NAME = 'SchedeUS';
 const SCOPES = 'https://www.googleapis.com/auth/spreadsheets';
 
+const SHEET_TOMBE = 'Tombe';
+const HEADERS_TOMBE = [
+  'id','numero','localita','anno','area','us_collegate','pianta_n',
+  'quota_pre_min','quota_pre_max','quota_post_min','quota_post_max',
+  'giacitura','tipologia','orientamento','condizioni',
+  'altre_sepolture','affidabilita',
+  'osso_cranio','osso_vertebre','osso_torace','osso_bacino',
+  'osso_braccia','osso_gambe','osso_mani','osso_piedi',
+  'posizione_scheletro','descrizione','reperti_connessione',
+  'elementi_copertura','elementi_datanti','datazione',
+  'osservazioni','bibliografia','compilatore','data_controllo',
+  'stato',
+  // Dati antropologici - caratteri metrici
+  'cranio_lungh_max','cranio_largh_max','cranio_alt_faccia','cranio_largh_faccia',
+  'omero_lungh','femore_lungh','omero_omero_dist',
+  'bacino_lungh_max','bacino_largh_max',
+  // Caratteri morfologici
+  'morf_arcate','morf_margini','morf_frontale','morf_mandibola',
+  'morf_mento','morf_protub_occ','morf_orbite',
+  'morf_angolo_pubico','morf_ali_iliache','morf_incisura',
+  'sesso','note_antropologiche'
+];
+
 const HEADERS = ['id','numero','anno','area','saggio','tipo','pos_neg','data','definizione','formazione','criteri','responsabile','stato',
   'colore','consistenza','composizione','umidita','inclusi_geo','inclusi_org','inclusi_art','quota_max','quota_min',
   'spessore','descrizione','osservazioni','rapporti','reperti','foto_digitali','foto_3d','foto_drone','disegni','note_doc',
@@ -960,7 +1204,9 @@ const HEADERS = ['id','numero','anno','area','saggio','tipo','pos_neg','data','d
 
 let accessToken = null;
 let schede = [];
+let tombe = [];
 let editingId = null;
+let editingTombaId = null;
 let rapportiCount = 0;
 let repertiCount = 0;
 
@@ -1027,12 +1273,14 @@ function onAuthenticated() {
   editingId = null;
   setSyncStatus('syncing', 'Caricamento…');
   loadFromSheets(false);
+  loadTombe();
 }
 
 function signOut() {
   google.accounts.id.disableAutoSelect();
   accessToken = null;
   schede = [];
+  tombe = [];
   showLogin();
 }
 
@@ -1208,11 +1456,12 @@ function showView(v) {
   document.querySelectorAll('.view').forEach(el => el.classList.remove('active'));
   document.querySelectorAll('.nav-tab').forEach(el => el.classList.remove('active'));
   document.getElementById('view-' + v).classList.add('active');
-  const idx = {list:0,new:1,export:2,import:3}[v];
+  const idx = {list:0,new:1,tombe:2,export:3,import:4}[v];
   if (idx !== undefined) document.querySelectorAll('.nav-tab')[idx].classList.add('active');
   if (v === 'new' && editingId === null) resetForm();
   if (v === 'list') { editingId = null; renderList(); renderStats(); updateNewTabLabel(); }
   if (v === 'schede') { renderList(); }
+  if (v === 'tombe') { renderTombe(); }
   if (v === 'new') updateNewTabLabel();
 }
 
@@ -1227,6 +1476,12 @@ function updateNewTabLabel() {
 }
 
 // ─── RENDER LIST ─────────────────────────────────────────────────
+function getTombePerUS(numeroUS) {
+  return tombe.filter(t =>
+    String(t.us_collegate || '').split(',').map(s => s.trim()).includes(String(numeroUS))
+  );
+}
+
 function renderList(q = '') {
   const list = document.getElementById('usList');
   const term = q.toLowerCase();
@@ -1249,6 +1504,7 @@ function renderList(q = '') {
           <strong>${s.tipo || 'Tipo non definito'}</strong>
           ${s.area ? 'Area ' + s.area : ''}${s.saggio ? ' · ' + s.saggio : ''}
           ${s.datazione ? '<br><span style="font-size:0.75rem;color:var(--muted)">'+s.datazione+'</span>' : ''}
+          ${getTombePerUS(s.numero).map(t => `<span onclick="event.stopPropagation();openEditTomba('${t.id}')" style="display:inline-block;margin-top:3px;margin-right:4px;padding:1px 7px;border-radius:10px;font-size:0.68rem;background:rgba(201,150,58,0.15);border:1px solid var(--earth);color:var(--earth);cursor:pointer">⚰ T.${t.numero}</span>`).join('')}
         </div>
       </div>
       <div style="display:flex;align-items:center;gap:10px">
@@ -1478,6 +1734,318 @@ async function saveScheda() {
     console.error(e);
   }
 }
+
+// ─── TOMBE — SHEETS ──────────────────────────────────────────────
+async function ensureHeadersTombe() {
+  try {
+    const data = await sheetsGetT(`${SHEET_TOMBE}!A1:BJ1`);
+    const existing = (data.values && data.values[0]) || [];
+    const match = HEADERS_TOMBE.every((h,i) => existing[i] === h) && existing.length === HEADERS_TOMBE.length;
+    if (!match) await sheetsUpdateT(`${SHEET_TOMBE}!A1`, [HEADERS_TOMBE]);
+  } catch { await sheetsUpdateT(`${SHEET_TOMBE}!A1`, [HEADERS_TOMBE]); }
+}
+
+async function sheetsGetT(range) {
+  const url = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(range)}`;
+  const res = await fetch(url, { headers: { Authorization: 'Bearer ' + accessToken } });
+  if (!res.ok) throw new Error('Sheets GET error ' + res.status);
+  return res.json();
+}
+async function sheetsUpdateT(range, values) {
+  const url = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(range)}?valueInputOption=RAW`;
+  const res = await fetch(url, {
+    method: 'PUT',
+    headers: { Authorization: 'Bearer ' + accessToken, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ values })
+  });
+  if (!res.ok) throw new Error('Sheets PUT error ' + res.status);
+  return res.json();
+}
+async function sheetsAppendT(values) {
+  const url = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(SHEET_TOMBE)}:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`;
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { Authorization: 'Bearer ' + accessToken, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ values })
+  });
+  if (!res.ok) throw new Error('Sheets APPEND error ' + res.status);
+  return res.json();
+}
+
+function tombaToRow(t) {
+  return HEADERS_TOMBE.map(h => t[h] !== undefined ? String(t[h]) : '');
+}
+
+async function saveTombaToSheets(tomba) {
+  await ensureHeadersTombe();
+  const data = await sheetsGetT(`${SHEET_TOMBE}!A2:A10000`);
+  const idRows = (data.values || []);
+  const rowIndex = idRows.findIndex(r => r[0] === tomba.id);
+  const row = tombaToRow(tomba);
+  if (rowIndex >= 0) {
+    await sheetsUpdateT(`${SHEET_TOMBE}!A${rowIndex + 2}`, [row]);
+  } else {
+    await sheetsAppendT([row]);
+  }
+}
+
+async function deleteTombaFromSheets(id) {
+  await ensureHeadersTombe();
+  const data = await sheetsGetT(`${SHEET_TOMBE}!A2:A10000`);
+  const rowIndex = (data.values || []).findIndex(r => r[0] === id);
+  if (rowIndex < 0) return;
+  const metaRes = await fetch(
+    `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}?fields=sheets.properties`,
+    { headers: { Authorization: 'Bearer ' + accessToken } }
+  );
+  const meta = await metaRes.json();
+  const sheetId = meta.sheets.find(s => s.properties.title === SHEET_TOMBE)?.properties.sheetId ?? 1;
+  await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}:batchUpdate`, {
+    method: 'POST',
+    headers: { Authorization: 'Bearer ' + accessToken, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ requests: [{ deleteDimension: {
+      range: { sheetId, dimension: 'ROWS', startIndex: rowIndex + 1, endIndex: rowIndex + 2 }
+    }}]})
+  });
+}
+
+async function loadTombe() {
+  try {
+    await ensureHeadersTombe();
+    const data = await sheetsGetT(`${SHEET_TOMBE}!A1:BJ5000`);
+    const rows = data.values || [];
+    if (rows.length <= 1) { tombe = []; return; }
+    const hdrs = rows[0];
+    tombe = rows.slice(1).map(row => {
+      const obj = {};
+      hdrs.forEach((h,i) => obj[h] = row[i] || '');
+      obj.numero = parseInt(obj.numero) || 0;
+      ['osso_cranio','osso_vertebre','osso_torace','osso_bacino',
+       'osso_braccia','osso_gambe','osso_mani','osso_piedi']
+        .forEach(k => { obj[k] = obj[k] === 'true'; });
+      return obj;
+    });
+  } catch(e) { console.error('loadTombe error', e); }
+}
+
+// ─── TOMBE — RENDER ───────────────────────────────────────────────
+function renderTombe(q = '') {
+  const list = document.getElementById('tombaList');
+  const term = (q || '').toLowerCase();
+  const filtered = tombe.filter(t =>
+    String(t.numero).includes(term) ||
+    (t.area||'').toLowerCase().includes(term) ||
+    (t.descrizione||'').toLowerCase().includes(term) ||
+    (t.us_collegate||'').toLowerCase().includes(term)
+  ).sort((a,b) => Math.abs(b.numero) - Math.abs(a.numero));
+
+  if (!filtered.length) {
+    list.innerHTML = `<div class="empty-state"><div class="icon">⚰</div><p>${tombe.length ? 'Nessun risultato.' : 'Nessuna tomba ancora.<br>Tocca "+ Nuova Tomba" per iniziare.'}</p></div>`;
+    return;
+  }
+  list.innerHTML = filtered.map(t => `
+    <div class="us-card" onclick="openEditTomba('${t.id}')">
+      <div class="us-card-left">
+        <div class="us-number">T. ${t.numero}</div>
+        <div class="us-meta">
+          <strong>${t.tipologia || ''} ${t.giacitura || ''}</strong>
+          ${t.area ? ' — Area ' + t.area : ''}
+          ${t.us_collegate ? '<br><span style="font-size:0.75rem;color:var(--earth)">US: ' + t.us_collegate + '</span>' : ''}
+          ${t.datazione ? '<br><span style="font-size:0.75rem;color:var(--muted)">'+t.datazione+'</span>' : ''}
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;gap:10px">
+        <span class="us-badge ${t.stato||'parziale'}">${t.stato||'parziale'}</span>
+        <button class="btn-edit-card" onclick="event.stopPropagation();openEditTomba('${t.id}')">✏ Modifica</button>
+      </div>
+    </div>
+  `).join('');
+}
+
+// ─── TOMBE — FORM ────────────────────────────────────────────────
+function resetTombaForm() {
+  ['t_numero','t_anno','t_area','t_localita','t_pianta_n','t_us_collegate',
+   't_quota_pre_min','t_quota_pre_max','t_quota_post_min','t_quota_post_max',
+   't_orientamento','t_condizioni','t_altre_sepolture',
+   't_descrizione','t_reperti_connessione','t_elementi_copertura',
+   't_elementi_datanti','t_datazione','t_osservazioni','t_bibliografia',
+   't_compilatore',
+   't_cranio_lungh_max','t_cranio_largh_max','t_cranio_alt_faccia','t_cranio_largh_faccia',
+   't_omero_lungh','t_femore_lungh','t_omero_omero_dist',
+   't_bacino_lungh_max','t_bacino_largh_max','t_note_antropologiche']
+    .forEach(id => { const el = document.getElementById(id); if(el) el.value = ''; });
+  ['t_giacitura','t_tipologia','t_posizione','t_sesso']
+    .forEach(n => document.querySelectorAll(`input[name="${n}"]`).forEach(r => r.checked = false));
+  ['t_cranio','t_vertebre','t_torace','t_bacino','t_braccia','t_gambe','t_mani','t_piedi']
+    .forEach(id => { const el = document.getElementById(id); if(el) el.checked = false; });
+  ['t_affidabilita','t_morf_arcate','t_morf_margini','t_morf_frontale',
+   't_morf_mandibola','t_morf_mento','t_morf_protub_occ','t_morf_orbite',
+   't_morf_angolo_pubico','t_morf_ali_iliache','t_morf_incisura','t_stato']
+    .forEach(id => { const el = document.getElementById(id); if(el) el.value = id === 't_stato' ? 'parziale' : ''; });
+  const dc = document.getElementById('t_data_controllo'); if(dc) dc.value = '';
+}
+
+function loadTombaForm(t) {
+  ['numero','anno','area','localita','pianta_n','us_collegate',
+   'quota_pre_min','quota_pre_max','quota_post_min','quota_post_max',
+   'orientamento','condizioni','altre_sepolture',
+   'descrizione','reperti_connessione','elementi_copertura',
+   'elementi_datanti','datazione','osservazioni','bibliografia','compilatore',
+   'cranio_lungh_max','cranio_largh_max','cranio_alt_faccia','cranio_largh_faccia',
+   'omero_lungh','femore_lungh','omero_omero_dist',
+   'bacino_lungh_max','bacino_largh_max','note_antropologiche']
+    .forEach(k => { const el = document.getElementById('t_'+k); if(el) el.value = t[k] || ''; });
+  ['giacitura','tipologia','posizione_scheletro','sesso']
+    .forEach(k => {
+      const nm = k === 'posizione_scheletro' ? 't_posizione' : 't_'+k;
+      document.querySelectorAll(`input[name="${nm}"]`).forEach(r => { r.checked = r.value === t[k]; });
+    });
+  ['cranio','vertebre','torace','bacino','braccia','gambe','mani','piedi']
+    .forEach(k => { const el = document.getElementById('t_'+k); if(el) el.checked = t['osso_'+k] === 'true' || t['osso_'+k] === true; });
+  ['affidabilita','morf_arcate','morf_margini','morf_frontale','morf_mandibola',
+   'morf_mento','morf_protub_occ','morf_orbite','morf_angolo_pubico',
+   'morf_ali_iliache','morf_incisura','stato']
+    .forEach(k => { const el = document.getElementById('t_'+k); if(el) el.value = t[k] || ''; });
+  const dc = document.getElementById('t_data_controllo'); if(dc) dc.value = t.data_controllo || '';
+}
+
+function getTombaFromForm(id) {
+  return {
+    id: id || editingTombaId || Date.now().toString(36) + Math.random().toString(36).slice(2),
+    numero: parseInt(document.getElementById('t_numero').value) || 0,
+    anno: document.getElementById('t_anno').value,
+    area: document.getElementById('t_area').value,
+    localita: document.getElementById('t_localita').value,
+    pianta_n: document.getElementById('t_pianta_n').value,
+    us_collegate: document.getElementById('t_us_collegate').value,
+    quota_pre_min: document.getElementById('t_quota_pre_min').value,
+    quota_pre_max: document.getElementById('t_quota_pre_max').value,
+    quota_post_min: document.getElementById('t_quota_post_min').value,
+    quota_post_max: document.getElementById('t_quota_post_max').value,
+    giacitura: (document.querySelector('input[name="t_giacitura"]:checked')||{}).value||'',
+    tipologia: (document.querySelector('input[name="t_tipologia"]:checked')||{}).value||'',
+    orientamento: document.getElementById('t_orientamento').value,
+    condizioni: document.getElementById('t_condizioni').value,
+    altre_sepolture: document.getElementById('t_altre_sepolture').value,
+    affidabilita: document.getElementById('t_affidabilita').value,
+    posizione_scheletro: (document.querySelector('input[name="t_posizione"]:checked')||{}).value||'',
+    osso_cranio: document.getElementById('t_cranio').checked,
+    osso_vertebre: document.getElementById('t_vertebre').checked,
+    osso_torace: document.getElementById('t_torace').checked,
+    osso_bacino: document.getElementById('t_bacino').checked,
+    osso_braccia: document.getElementById('t_braccia').checked,
+    osso_gambe: document.getElementById('t_gambe').checked,
+    osso_mani: document.getElementById('t_mani').checked,
+    osso_piedi: document.getElementById('t_piedi').checked,
+    descrizione: document.getElementById('t_descrizione').value,
+    reperti_connessione: document.getElementById('t_reperti_connessione').value,
+    elementi_copertura: document.getElementById('t_elementi_copertura').value,
+    elementi_datanti: document.getElementById('t_elementi_datanti').value,
+    datazione: document.getElementById('t_datazione').value,
+    osservazioni: document.getElementById('t_osservazioni').value,
+    bibliografia: document.getElementById('t_bibliografia').value,
+    compilatore: document.getElementById('t_compilatore').value,
+    data_controllo: document.getElementById('t_data_controllo').value,
+    stato: document.getElementById('t_stato').value,
+    cranio_lungh_max: document.getElementById('t_cranio_lungh_max').value,
+    cranio_largh_max: document.getElementById('t_cranio_largh_max').value,
+    cranio_alt_faccia: document.getElementById('t_cranio_alt_faccia').value,
+    cranio_largh_faccia: document.getElementById('t_cranio_largh_faccia').value,
+    omero_lungh: document.getElementById('t_omero_lungh').value,
+    femore_lungh: document.getElementById('t_femore_lungh').value,
+    omero_omero_dist: document.getElementById('t_omero_omero_dist').value,
+    bacino_lungh_max: document.getElementById('t_bacino_lungh_max').value,
+    bacino_largh_max: document.getElementById('t_bacino_largh_max').value,
+    morf_arcate: document.getElementById('t_morf_arcate').value,
+    morf_margini: document.getElementById('t_morf_margini').value,
+    morf_frontale: document.getElementById('t_morf_frontale').value,
+    morf_mandibola: document.getElementById('t_morf_mandibola').value,
+    morf_mento: document.getElementById('t_morf_mento').value,
+    morf_protub_occ: document.getElementById('t_morf_protub_occ').value,
+    morf_orbite: document.getElementById('t_morf_orbite').value,
+    morf_angolo_pubico: document.getElementById('t_morf_angolo_pubico').value,
+    morf_ali_iliache: document.getElementById('t_morf_ali_iliache').value,
+    morf_incisura: document.getElementById('t_morf_incisura').value,
+    sesso: (document.querySelector('input[name="t_sesso"]:checked')||{}).value||'',
+    note_antropologiche: document.getElementById('t_note_antropologiche').value,
+  };
+}
+
+function openNewTomba() {
+  editingTombaId = null;
+  resetTombaForm();
+  document.getElementById('tombaFormTitle').textContent = 'Nuova Scheda Tomba';
+  document.getElementById('btnDeleteTomba').style.display = 'none';
+  window._editTombaOrigin = 'view-tombe';
+  showView('tomba-form');
+}
+
+function openEditTomba(id) {
+  const t = tombe.find(x => x.id === id);
+  if (!t) return;
+  editingTombaId = id;
+  resetTombaForm();
+  loadTombaForm(t);
+  document.getElementById('tombaFormTitle').textContent = 'Tomba ' + t.numero;
+  document.getElementById('btnDeleteTomba').style.display = 'inline-block';
+  window._editTombaOrigin = document.querySelector('.view.active')?.id || 'view-tombe';
+  showView('tomba-form');
+}
+
+async function saveTomba() {
+  const numero = parseInt(document.getElementById('t_numero').value);
+  if (!numero) { showToast('⚠ Inserisci il numero tomba'); return; }
+  const duplicate = tombe.find(t => t.numero === numero && t.id !== editingTombaId);
+  if (duplicate) { showToast('⚠ Tomba ' + numero + ' già presente'); return; }
+
+  setSyncStatus('syncing', 'Salvataggio…');
+  const tomba = getTombaFromForm();
+  if (editingTombaId) tombe = tombe.map(t => t.id === editingTombaId ? tomba : t);
+  else tombe.push(tomba);
+
+  try {
+    await saveTombaToSheets(tomba);
+    setSyncStatus('ok', 'Sincronizzato');
+    showToast('☁ Tomba ' + numero + ' salvata');
+    editingTombaId = null;
+    showView('tombe');
+  } catch(e) {
+    setSyncStatus('error', 'Errore salvataggio');
+    showToast('⚠ Errore durante il salvataggio');
+    console.error(e);
+  }
+}
+
+async function deleteTomba() {
+  if (!editingTombaId) return;
+  const t = tombe.find(x => x.id === editingTombaId);
+  const ok = await showConfirm({
+    icon: '🗑',
+    title: 'Eliminare la tomba?',
+    message: 'Questa azione è irreversibile.',
+    detail: 'Tomba ' + t.numero + (t.descrizione ? '  —  ' + t.descrizione.substring(0,60) : ''),
+    inputLabel: 'Scrivi il numero tomba per confermare:',
+    inputMatch: String(t.numero),
+    okLabel: '🗑 Elimina',
+    okClass: 'btn-danger'
+  });
+  if (!ok) return;
+  const deletingId = editingTombaId;
+  tombe = tombe.filter(x => x.id !== deletingId);
+  setSyncStatus('syncing', 'Eliminazione…');
+  try {
+    await deleteTombaFromSheets(deletingId);
+    setSyncStatus('ok', 'Sincronizzato');
+    showToast('🗑 Tomba ' + t.numero + ' eliminata');
+    editingTombaId = null;
+    showView('tombe');
+  } catch(e) {
+    setSyncStatus('error', 'Errore');
+    showToast('⚠ Errore eliminazione');
+  }
+}
+
+function updateTombaStatoStyle() {}
 
 // ─── MODAL CONFERMA ──────────────────────────────────────────────
 let _confirmResolve = null;
