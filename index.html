@@ -568,6 +568,7 @@
     margin: 0 auto 28px;
   }
 </style>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 </head>
 <body>
 
@@ -821,6 +822,13 @@
           <h3>Stampa PDF – Tutte le schede</h3>
           <p>Genera un unico PDF con tutte le schede US in formato ICCD, una per pagina.</p>
           <button class="btn btn-primary" onclick="exportPDFTutte()">⬇ PDF Completo</button>
+        </div>
+        <div class="export-card">
+          <h3>📥 Importa da Excel</h3>
+          <p>Carica un file <strong>.xlsx</strong> con le schede US (una riga per scheda) e importale nel cloud. Le schede esistenti con lo stesso numero US verranno aggiornate.</p>
+          <input type="file" id="xlsxImportInput" accept=".xlsx" style="display:none" onchange="importFromExcel(this)">
+          <button class="btn btn-primary" onclick="document.getElementById('xlsxImportInput').click()">📂 Scegli file .xlsx</button>
+          <div id="xlsxImportStatus" style="margin-top:10px;font-family:'Space Mono',monospace;font-size:0.7rem;color:var(--muted);min-height:18px"></div>
         </div>
         <div class="export-card">
           <h3>🧪 PDF di test</h3>
@@ -1342,6 +1350,138 @@ async function deleteScheda() {
 }
 
 // ─── EXPORT CSV ───────────────────────────────────────────────────
+
+// ─── IMPORTA DA EXCEL ─────────────────────────────────────────────
+async function importFromExcel(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const status = document.getElementById('xlsxImportStatus');
+  status.textContent = '⏳ Lettura file in corso…';
+
+  const reader = new FileReader();
+  reader.onload = async (e) => {
+    try {
+      const wb = XLSX.read(e.target.result, { type: 'array' });
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(ws, { defval: '' });
+
+      if (!rows.length) { status.textContent = '⚠ Nessuna riga trovata nel file.'; return; }
+
+      status.textContent = `📋 ${rows.length} righe trovate. Conversione in corso…`;
+
+      const nuove = rows.map(r => {
+        // — Rapporti stratigrafici —
+        const rapporti = [];
+        const addRap = (tipo, val) => {
+          if (!val && val !== 0) return;
+          String(val).split(',').map(s => s.trim()).filter(Boolean).forEach(us => {
+            rapporti.push({ tipo, us });
+          });
+        };
+        addRap('uguale_a',        r['uguale a']);
+        addRap('gli_si_appoggia', r['gli si appoggia']);
+        addRap('coperto_da',      r['coperto da']);
+        addRap('tagliato_da',     r['tagliato da']);
+        addRap('riempito_da',     r['riempito da']);
+        addRap('si_lega_a',       r['si lega a']);
+        addRap('si_appoggia_a',   r['si appoggia a']);
+        addRap('copre',           r['copre']);
+        addRap('taglia',          r['taglia']);
+        addRap('riempie',         r['riempie']);
+        // POSTERIORE (sopra) / ANTERIORE (sotto) → come rapporti stratigraifci virtuali
+        // vengono salvati nel campo speciale per la sequenza stratigrafica
+        addRap('posteriore',      r['sopra']);
+        addRap('anteriore',       r['sotto']);
+
+        // — Stato conservazione —
+        let stato_cons = '';
+        if (r['Conserva i limiti originari'] === true || r['Conserva i limiti originari'] === 'TRUE' || r['Conserva i limiti originari'] === 1)
+          stato_cons = 'Conserva i limiti originari';
+        else if (r['Non Conserva i limiti originari'] === true || r['Non Conserva i limiti originari'] === 'TRUE' || r['Non Conserva i limiti originari'] === 1)
+          stato_cons = 'Non conserva i limiti originari';
+
+        // — Formazione —
+        let formazione = '';
+        if (r['Naturale'] === true || r['Naturale'] === 'TRUE' || r['Naturale'] === 1) formazione = 'Naturale';
+        else if (r['Artificiale'] === true || r['Artificiale'] === 'TRUE' || r['Artificiale'] === 1) formazione = 'Artificiale';
+
+        // — Foto —
+        const boolVal = v => (v === true || v === 'TRUE' || v === 1 || v === 'true');
+
+        // — ID univoco —
+        const id = 'xl_' + String(r['us']).trim() + '_' + Date.now();
+
+        return {
+          id,
+          numero:                    parseInt(r['us']) || 0,
+          anno:                      String(r['anno'] || ''),
+          area:                      String(r['area'] || ''),
+          saggio:                    String(r['settore'] || ''),
+          tipo:                      '',
+          pos_neg:                   '',
+          data:                      '',
+          definizione:               String(r['definizione e posizione'] || ''),
+          formazione,
+          criteri:                   String(r['criteri di distinzione'] || ''),
+          responsabile:              String(r['responsabile'] || ''),
+          stato:                     '',
+          colore:                    String(r['colore'] || ''),
+          consistenza:               String(r['consistenza'] || ''),
+          composizione:              '',
+          umidita:                   '',
+          inclusi_geo:               String(r['componenti geologici'] || ''),
+          inclusi_org:               String(r['componenti organici'] || ''),
+          inclusi_art:               String(r['componenti artificiali'] || ''),
+          quota_max:                 String(r['quota max'] !== '' ? r['quota max'] : ''),
+          quota_min:                 String(r['quota min'] !== '' ? r['quota min'] : ''),
+          spessore:                  '',
+          descrizione:               String(r['descrizione'] || ''),
+          osservazioni:              String(r['osservazioni'] || ''),
+          rapporti,
+          reperti:                   [],
+          foto_digitali:             boolVal(r['Digitali']),
+          foto_3d:                   boolVal(r['3D/Laser Scanner']),
+          foto_drone:                boolVal(r['Drone/Asta']),
+          disegni:                   String(r['piante'] || ''),
+          note_doc:                  '',
+          interpretazione:           String(r['interpretazione'] || ''),
+          datazione:                 String(r['datazione'] || ''),
+          fase:                      String(r['fase'] || ''),
+          affidabilita:              String(r['affidabilità'] || ''),
+          note_interp:               '',
+          stato_conservazione:       stato_cons,
+          stato_conservazione_note:  String(r['Non Conserva i limiti originari in quanto'] || ''),
+          responsabile_scientifico:  String(r['Direttore'] || ''),
+          responsabile_rielaborazione: String(r['Compilatore della scheda'] || ''),
+          data_rielaborazione:       '',
+        };
+      });
+
+      // Merge: aggiorna esistenti (stesso numero), aggiunge nuove
+      let aggiunte = 0, aggiornate = 0;
+      nuove.forEach(n => {
+        const idx = schede.findIndex(s => s.numero === n.numero);
+        if (idx >= 0) { schede[idx] = { ...schede[idx], ...n, id: schede[idx].id }; aggiornate++; }
+        else { schede.push(n); aggiunte++; }
+      });
+
+      status.textContent = `⏳ Salvataggio su cloud (${nuove.length} schede)…`;
+      setSyncStatus('syncing', 'Salvataggio…');
+      await writeAllToSheets();
+      setSyncStatus('ok', 'Sincronizzato');
+      renderList(); renderStats();
+      status.textContent = `✓ Importazione completata: ${aggiunte} nuove, ${aggiornate} aggiornate.`;
+      showToast(`✓ Importate ${nuove.length} schede da Excel`);
+    } catch(err) {
+      status.textContent = '⚠ Errore: ' + err.message;
+      console.error(err);
+    }
+    // Reset input per poter reimportare lo stesso file
+    input.value = '';
+  };
+  reader.readAsArrayBuffer(file);
+}
+
 function exportCSV() {
   if (!schede.length) { showToast('Nessuna scheda da esportare'); return; }
   const rows = schede.map(s => HEADERS.map(h => {
