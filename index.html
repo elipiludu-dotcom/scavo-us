@@ -1569,26 +1569,26 @@ function drawICCDpage(doc, s) {
   y += 9;
 
   // — AMBIENTE | POSIZIONE | SETTORE | QUADRATO | QUOTE | NAT/ART | POS/NEG —
-  const amb=IW*0.18, pos=IW*0.12, sett=IW*0.10, quad=IW*0.09, quot=IW*0.12, natart=IW*0.20, posneg=IW*0.19;
+  // Proporzioni ridistribuite per coprire esattamente IW (totale = 1.00)
+  const amb=IW*0.18, pos=IW*0.10, sett=IW*0.10, quad=IW*0.08, natart=IW*0.20, posneg=IW*0.18;
   const rowH = 16;
   rect(ML, y, amb, rowH, 0.2);            lbl('AMBIENTE/UNITA\' FUNZIONALE', ML+1.5, y+3.5);
   rect(ML+amb, y, pos, rowH, 0.2);        lbl('POSIZIONE', ML+amb+1.5, y+3.5);
   rect(ML+amb+pos, y, sett, rowH, 0.2);   lbl('SETTORE/I', ML+amb+pos+1.5, y+3.5);
   val(s.saggio||'', ML+amb+pos+1.5, y+9, sett-3);
   rect(ML+amb+pos+sett, y, quad, rowH, 0.2); lbl('QUADRATO/I', ML+amb+pos+sett+1.5, y+3.5);
-  // Quote (con max/min) — si estende fino alla fine della riga
+  // Quote (con max/min) — occupa tutto lo spazio rimasto tra quad e nat/art
   const qx = ML+amb+pos+sett+quad;
   const natartW = natart/2;
   const posnegW = posneg/2;
-  // Larghezza quote: tutto ciò che rimane sottraendo nat/art e pos/neg
   const quotW = IW - (amb+pos+sett+quad) - natart - posneg;
   rect(qx, y, quotW, rowH, 0.2);
   lbl('QUOTE (cm)', qx+1.5, y+3.5);
   line(qx, y+rowH/2, qx+quotW, y+rowH/2);
   lbl('max', qx+1.5, y+rowH/4+2);
-  val(s.quota_max||'', qx+8, y+rowH/4+2, quotW-10);
+  val(s.quota_max||'', qx+12, y+rowH/4+2, quotW-14);
   lbl('min', qx+1.5, y+rowH*3/4+2);
-  val(s.quota_min||'', qx+8, y+rowH*3/4+2, quotW-10);
+  val(s.quota_min||'', qx+12, y+rowH*3/4+2, quotW-14);
   // Naturale/Artificiale
   const nx = qx+quotW;
   rect(nx, y, natartW, rowH/2, 0.2);
