@@ -1526,36 +1526,38 @@ function drawICCDpage(doc, s) {
   let y = MT;
 
   // — INTESTAZIONE —
-  // Bordo esterno intestazione
-  rect(ML, y, IW, 14, 0.4);
-  // Cella US (sinistra)
-  rect(ML, y, 14, 14, 0.4);
+  rect(ML, y, IW, 18, 0.4);
+  // Cella US (sinistra) — più grande
+  rect(ML, y, 22, 18, 0.4);
   txt('US', ML+1.5, y+5, 6, 'normal', [100,100,100]);
-  txt(String(s.numero||''), ML+1.5, y+12, 11, 'bold');
+  txt(String(s.numero||''), ML+1.5, y+15, 14, 'bold');
   // Cella centrale: ente
-  rect(ML+14, y, 90, 14, 0.2);
-  txt('ENTE RESPONSABILE', ML+15, y+4, 5, 'normal', [100,100,100]);
-  txt('MINISTERO DELLA CULTURA', ML+15, y+8, 7, 'bold');
-  txt('Istituto Centrale per il Catalogo e la Documentazione', ML+15, y+12, 5.5, 'normal', [60,60,60]);
-  // Cella destra: ANNO
-  rect(ML+104, y, IW-104, 14, 0.2);
-  txt('ANNO', ML+106, y+4, 5, 'normal', [100,100,100]);
-  txt(s.anno || (s.data ? s.data.substring(0,4) : ''), ML+106, y+9, 9, 'bold');
-  y += 14;
+  rect(ML+22, y, 140, 18, 0.2);
+  txt('ENTE RESPONSABILE', ML+23, y+4, 5, 'normal', [100,100,100]);
+  txt('MINISTERO DELLA CULTURA', ML+23, y+9, 7, 'bold');
+  txt('Istituto Centrale per il Catalogo e la Documentazione', ML+23, y+14, 5.5, 'normal', [60,60,60]);
+  // Cella destra: ANNO — più piccola, font grande
+  const annoX = ML+22+140;
+  const annoW = IW - 22 - 140;
+  rect(annoX, y, annoW, 18, 0.2);
+  txt('ANNO', annoX+1.5, y+5, 5, 'normal', [100,100,100]);
+  txt(s.anno || (s.data ? s.data.substring(0,4) : ''), annoX+1.5, y+15, 14, 'bold');
+  y += 18;
 
   // — UFFICIO MiC —
   rect(ML, y, IW*0.55, 10, 0.2);
   lbl('UFFICIO MiC COMPETENTE PER TUTELA', ML+1.5, y+3.5);
-  val('Soprintendenza Archeologica Belle Arti e Paesaggio', ML+1.5, y+7, IW*0.55-3);
+  const ufficioLines = doc.splitTextToSize('Soprintendenza Archeologica Belle Arti e Paesaggio per le province di PISA e LIVORNO', IW*0.55-3);
+  doc.setFontSize(7); doc.setFont('helvetica','normal'); doc.setTextColor(0,0,0);
+  doc.text(ufficioLines, ML+1.5, y+7);
   rect(ML+IW*0.55, y, IW*0.45, 10, 0.2);
   lbl('IDENTIFICATIVO SAGGIO / STRUTTURA DI RIFERIMENTO', ML+IW*0.55+1.5, y+3.5);
-  txt(s.saggio||'', ML+IW*0.55+1.5, y+8.5, 9, 'bold');
   y += 10;
 
-  // — LOCALITA —
+  // — LOCALITA — testo fisso
   rect(ML, y, IW, 9, 0.2);
   lbl('LOCALITA\'', ML+1.5, y+3.5);
-  val(s.definizione || '', ML+1.5, y+7.5, IW-3);
+  val('Area Archeologica di Santa Mustiola \u2013 Loc. Colle Mustarola, Peccioli (PI)', ML+1.5, y+7.5, IW-3);
   y += 9;
 
   // — AREA / SAGGIO —
@@ -1564,41 +1566,44 @@ function drawICCDpage(doc, s) {
   val(s.area||'', ML+1.5, y+7.5, IW*0.65-3);
   rect(ML+IW*0.65, y, IW*0.35, 9, 0.2);
   lbl('SAGGIO', ML+IW*0.65+1.5, y+3.5);
-  val(s.saggio||'', ML+IW*0.65+1.5, y+7.5, IW*0.35-3);
   y += 9;
 
   // — AMBIENTE | POSIZIONE | SETTORE | QUADRATO | QUOTE | NAT/ART | POS/NEG —
-  const amb=IW*0.20, pos=IW*0.12, sett=IW*0.09, quad=IW*0.09, quot=IW*0.12, natart=IW*0.19, posneg=IW*0.19;
+  const amb=IW*0.18, pos=IW*0.12, sett=IW*0.10, quad=IW*0.09, quot=IW*0.12, natart=IW*0.20, posneg=IW*0.19;
   const rowH = 16;
   rect(ML, y, amb, rowH, 0.2);            lbl('AMBIENTE/UNITA\' FUNZIONALE', ML+1.5, y+3.5);
   rect(ML+amb, y, pos, rowH, 0.2);        lbl('POSIZIONE', ML+amb+1.5, y+3.5);
   rect(ML+amb+pos, y, sett, rowH, 0.2);   lbl('SETTORE/I', ML+amb+pos+1.5, y+3.5);
+  val(s.saggio||'', ML+amb+pos+1.5, y+9, sett-3);
   rect(ML+amb+pos+sett, y, quad, rowH, 0.2); lbl('QUADRATO/I', ML+amb+pos+sett+1.5, y+3.5);
-  // Quote (con max/min)
+  // Quote (con max/min) — si estende fino alla fine della riga
   const qx = ML+amb+pos+sett+quad;
-  rect(qx, y, quot, rowH, 0.2);
-  lbl('QUOTE', qx+1.5, y+3.5);
-  line(qx, y+rowH/2, qx+quot, y+rowH/2);
+  const natartW = natart/2;
+  const posnegW = posneg/2;
+  // Larghezza quote: tutto ciò che rimane sottraendo nat/art e pos/neg
+  const quotW = IW - (amb+pos+sett+quad) - natart - posneg;
+  rect(qx, y, quotW, rowH, 0.2);
+  lbl('QUOTE (cm)', qx+1.5, y+3.5);
+  line(qx, y+rowH/2, qx+quotW, y+rowH/2);
   lbl('max', qx+1.5, y+rowH/4+2);
-  val(s.quota_max||'', qx+8, y+rowH/4+2, quot-10);
+  val(s.quota_max||'', qx+8, y+rowH/4+2, quotW-10);
   lbl('min', qx+1.5, y+rowH*3/4+2);
-  val(s.quota_min||'', qx+8, y+rowH*3/4+2, quot-10);
+  val(s.quota_min||'', qx+8, y+rowH*3/4+2, quotW-10);
   // Naturale/Artificiale
-  const nx = qx+quot;
-  const cbW = natart/2;
-  rect(nx, y, cbW, rowH/2, 0.2);
+  const nx = qx+quotW;
+  rect(nx, y, natartW, rowH/2, 0.2);
   lbl('NATURALE', nx+1.5, y+3.5);
   drawCB(s.formazione==='Naturale', nx+1.5, y+rowH/4+2);
-  rect(nx+cbW, y, cbW, rowH/2, 0.2);
-  lbl('ARTIFICIALE', nx+cbW+1.5, y+3.5);
-  drawCB(s.formazione==='Artificiale', nx+cbW+1.5, y+rowH/4+2);
+  rect(nx+natartW, y, natartW, rowH/2, 0.2);
+  lbl('ARTIFICIALE', nx+natartW+1.5, y+3.5);
+  drawCB(s.formazione==='Artificiale', nx+natartW+1.5, y+rowH/4+2);
   // Positiva/Negativa
-  rect(nx, y+rowH/2, cbW, rowH/2, 0.2);
+  rect(nx, y+rowH/2, posnegW, rowH/2, 0.2);
   lbl('POSITIVA', nx+1.5, y+rowH/2+3.5);
   drawCB(s.pos_neg==='Positiva', nx+1.5, y+rowH*3/4+2);
-  rect(nx+cbW, y+rowH/2, cbW, rowH/2, 0.2);
-  lbl('NEGATIVA', nx+cbW+1.5, y+rowH/2+3.5);
-  drawCB(s.pos_neg==='Negativa', nx+cbW+1.5, y+rowH*3/4+2);
+  rect(nx+posnegW, y+rowH/2, posnegW, rowH/2, 0.2);
+  lbl('NEGATIVA', nx+posnegW+1.5, y+rowH/2+3.5);
+  drawCB(s.pos_neg==='Negativa', nx+posnegW+1.5, y+rowH*3/4+2);
   y += rowH;
 
   // — PIANTE | PROSPETTI | SEZIONI | FOTOGRAFIE | RIF.TABELLE —
@@ -1627,29 +1632,33 @@ function drawICCDpage(doc, s) {
   // — MODO DI FORMAZIONE —
   y += multiCell('MODO DI FORMAZIONE', s.formazione, ML, y, IW, 12);
 
-  // — COMPONENTI (tabella inorganici/organici) — altezza aumentata
-  const compH = 32;
+  // — COMPONENTI —
+  const compH = 34;
   const compLabelW = 12;
-  const halfW = (IW - compLabelW) / 2;
+  const compHdrH = compH * 0.18;   // intestazione più bassa
+  const compSubH = compH - compHdrH; // celle contenuto più alte
+  const inorgW = (IW - compLabelW) * 0.62; // INORGANICI più largo
+  const orgW   = (IW - compLabelW) * 0.38; // ORGANICI più stretto
   rect(ML, y, compLabelW, compH, 0.2);
   doc.setFontSize(5.5); doc.setFont('helvetica','bold'); doc.setTextColor(80,80,80);
   const compTxt = 'COMPONENTI';
-  const compTxtW = doc.getTextWidth(compTxt);
-  doc.text(compTxt, ML + compLabelW/2 + 1, y + compH/2 + compTxtW/2, { angle: 90 });
-  rect(ML+compLabelW, y, halfW, compH/3, 0.2);
-  txt('INORGANICI', ML+compLabelW+halfW/2-8, y+4, 6, 'bold');
-  rect(ML+compLabelW+halfW, y, halfW, compH/3, 0.2);
-  txt('ORGANICI', ML+compLabelW+halfW+halfW/2-6, y+4, 6, 'bold');
-  const subH = compH * 2/3;
-  rect(ML+compLabelW, y+compH/3, halfW/2, subH, 0.2);
-  txt('Geologici', ML+compLabelW+1.5, y+compH/3+4, 6.5);
-  val(s.inclusi_geo||'', ML+compLabelW+1.5, y+compH/3+9, halfW/2-3);
-  rect(ML+compLabelW+halfW/2, y+compH/3, halfW/2, subH, 0.2);
-  txt('Artificiali', ML+compLabelW+halfW/2+1.5, y+compH/3+4, 6.5);
-  val(s.inclusi_art||'', ML+compLabelW+halfW/2+1.5, y+compH/3+9, halfW/2-3);
-  rect(ML+compLabelW+halfW, y+compH/3, halfW, subH, 0.2);
-  txt('Organici', ML+compLabelW+halfW+1.5, y+compH/3+4, 6.5);
-  val(s.inclusi_org||'', ML+compLabelW+halfW+1.5, y+compH/3+9, halfW-3);
+  doc.text(compTxt, ML + compLabelW/2 + 1, y + compH/2 + doc.getTextWidth(compTxt)/2, { angle: 90 });
+  // Intestazioni INORGANICI / ORGANICI
+  rect(ML+compLabelW, y, inorgW, compHdrH, 0.2);
+  txt('INORGANICI', ML+compLabelW+inorgW/2-8, y+compHdrH*0.75, 6, 'bold');
+  rect(ML+compLabelW+inorgW, y, orgW, compHdrH, 0.2);
+  txt('ORGANICI', ML+compLabelW+inorgW+orgW/2-6, y+compHdrH*0.75, 6, 'bold');
+  // Celle contenuto
+  const geoW = inorgW / 2;
+  rect(ML+compLabelW, y+compHdrH, geoW, compSubH, 0.2);
+  txt('Geologici', ML+compLabelW+1.5, y+compHdrH+4, 6.5);
+  val(s.inclusi_geo||'', ML+compLabelW+1.5, y+compHdrH+9, geoW-3);
+  rect(ML+compLabelW+geoW, y+compHdrH, geoW, compSubH, 0.2);
+  txt('Artificiali', ML+compLabelW+geoW+1.5, y+compHdrH+4, 6.5);
+  val(s.inclusi_art||'', ML+compLabelW+geoW+1.5, y+compHdrH+9, geoW-3);
+  // Organici — senza etichetta ripetuta, testo parte dalla stessa altezza
+  rect(ML+compLabelW+inorgW, y+compHdrH, orgW, compSubH, 0.2);
+  val(s.inclusi_org||'', ML+compLabelW+inorgW+1.5, y+compHdrH+9, orgW-3);
   y += compH;
 
   // — CONSISTENZA | COLORE | MISURE —
@@ -1758,15 +1767,13 @@ function drawICCDpage(doc, s) {
   const interpH = p2Flex - descH - osservH;
 
   // — DESCRIZIONE —
-  const descLines = doc.splitTextToSize(String(s.descrizione||''), IW-4);
-  // Calcola quante righe entrano nella cella
-  const descLineH = 4.5;
-  const descMaxLines = Math.floor((descH - 10) / descLineH);
-  const descLinesClipped = descLines.slice(0, descMaxLines);
   rect(ML, y, IW, descH, 0.2);
   lbl('DESCRIZIONE', ML+1.5, y+3.5);
   doc.setFontSize(7.5); doc.setFont('helvetica','normal'); doc.setTextColor(0,0,0);
-  doc.text(descLinesClipped, ML+1.5, y+8);
+  const descAllLines = doc.splitTextToSize(String(s.descrizione||''), IW-5);
+  const descLineH = 4.2;
+  const descMaxL = Math.floor((descH - 10) / descLineH);
+  doc.text(descAllLines.slice(0, descMaxL), ML+1.5, y+8);
   y += descH;
 
   // — OSSERVAZIONI —
@@ -1819,7 +1826,7 @@ function drawICCDpage(doc, s) {
   // — RESPONSABILE SCIENTIFICO —
   rect(ML, y, IW, 10, 0.2);
   lbl('RESPONSABILE SCIENTIFICO DELLE INDAGINI', ML+1.5, y+3.5);
-  txt(s.responsabile_scientifico || s.responsabile || '', ML+IW/2-20, y+8, 9, 'bold');
+  val(s.responsabile_scientifico || s.responsabile || '', ML+1.5, y+8, IW-3);
   y += 10;
 
   // — DATA RILEVAMENTO | RESPONSABILE COMPILAZIONE —
