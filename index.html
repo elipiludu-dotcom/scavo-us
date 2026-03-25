@@ -1848,7 +1848,7 @@ async function loadTombe() {
       obj.numero = parseInt(obj.numero) || 0;
       ['osso_cranio','osso_vertebre','osso_torace','osso_bacino',
        'osso_braccia','osso_gambe','osso_mani','osso_piedi']
-        .forEach(k => { obj[k] = obj[k] === 'true'; });
+        .forEach(k => { obj[k] = obj[k] === 'true' || obj[k] === 'SI'; });
       return obj;
     });
   } catch(e) { console.error('loadTombe error', e); }
@@ -1928,7 +1928,7 @@ function loadTombaForm(t) {
       document.querySelectorAll(`input[name="${nm}"]`).forEach(r => { r.checked = r.value === t[k]; });
     });
   ['cranio','vertebre','torace','bacino','braccia','gambe','mani','piedi']
-    .forEach(k => { const el = document.getElementById('t_'+k); if(el) el.checked = t['osso_'+k] === 'true' || t['osso_'+k] === true; });
+    .forEach(k => { const el = document.getElementById('t_'+k); if(el) el.checked = t['osso_'+k] === 'true' || t['osso_'+k] === true || t['osso_'+k] === 'SI'; });
   ['affidabilita','morf_arcate','morf_margini','morf_frontale','morf_mandibola',
    'morf_mento','morf_protub_occ','morf_orbite','morf_angolo_pubico',
    'morf_ali_iliache','morf_incisura','stato']
