@@ -2246,98 +2246,98 @@ async function importFromPDF(input) {
 }
 
 function parseTombaPDF(tokens1, p2, filename) {
-  // tokens1 = array di {str, x, y} dalla pagina 1 con coordinate
+  // tokens1 = array di {str, x, y} con coordinate JS (y = page_height - pdf_y, cresce verso il basso)
   const t = { id: Date.now().toString(36) + Math.random().toString(36).slice(2), stato: 'parziale' };
 
-  // Helper: testo nella zona rettangolare
+  // Helper: testo nella zona rettangolare (y cresce verso il BASSO in JS)
   const zone = (xMin, xMax, yMin, yMax) =>
     tokens1.filter(w => w.x >= xMin && w.x <= xMax && w.y >= yMin && w.y <= yMax)
            .map(w => w.str).join(' ').trim();
 
-  // Helper: testo full page (ordinato per y poi x)
-  const p1_full = tokens1.slice().sort((a,b) => a.y !== b.y ? a.y-b.y : a.x-b.x)
-                          .map(w => w.str).join(' ');
-
-  // ── Intestazione ─────────────────────────────────────────────
-  t.localita     = zone(0,   100, 65, 95);
-  t.anno         = zone(100, 165, 65, 82);
-  t.area         = zone(165, 237, 65, 82);
-  t.us_collegate = zone(237, 300, 65, 82);
-  const schedaT  = zone(300, 365, 65, 82);
+  // ── Intestazione (JS_y: etichette ~784, valori ~767-770) ──────
+  t.localita     = zone(0,   110, 750, 775);   // C. Mustarola + PECCIOLI
+  const peccioli = zone(0, 100, 748, 760);
+  if (peccioli && !t.localita.includes(peccioli)) t.localita += ' ' + peccioli;
+  t.anno         = zone(100, 165, 762, 778);   // 2023
+  t.area         = zone(165, 237, 760, 775);   // Settore 4
+  t.us_collegate = zone(237, 300, 760, 775);   // 3208
+  const schedaT  = zone(300, 365, 762, 778);   // 297
   t.numero       = parseInt(schedaT) || 0;
-  t.pianta_n     = zone(365, 425, 65, 82);
+  t.pianta_n     = zone(365, 425, 762, 778);   // gis
 
-  // Fallback dal filename (es. Tb_297 o us_3208)
-  if (!t.numero) { const fm = filename.match(/Tb[_\s]*(\d+)/i); if (fm) t.numero = parseInt(fm[1]); }
+  // Fallback dal filename
+  if (!t.numero)       { const fm = filename.match(/Tb[_\s]*(\d+)/i); if (fm) t.numero = parseInt(fm[1]); }
   if (!t.us_collegate) { const fm = filename.match(/us[_\s]*(\d+)/i); if (fm) t.us_collegate = fm[1]; }
 
-  // ── Quote ─────────────────────────────────────────────────────
-  const getVals = (yMin, yMax) => {
-    const txt = zone(428, 580, yMin, yMax);
-    return (txt.match(/-?\d+[,\.]\d+/g) || []);
-  };
-  let v = getVals(75, 90);
+  // ── Quote (JS_y: pre~761, post~736) ──────────────────────────
+  const getVals = (yMin, yMax) => (zone(428, 580, yMin, yMax).match(/-?\d+[,\.]\d+/g) || []);
+  let v = getVals(755, 768);  // pre-scavo
   if (v.length) t.quota_pre_min = v[0];
   if (v.length > 1) t.quota_pre_max = v[v.length-1];
-  v = getVals(100, 115);
+  v = getVals(728, 742);      // post-scavo
   if (v.length) t.quota_post_min = v[0];
   if (v.length > 1) t.quota_post_max = v[v.length-1];
 
-  // ── Giacitura ─────────────────────────────────────────────────
-  const giacToks = tokens1.filter(w => w.x < 80 && w.y > 118 && w.y < 150);
+  // ── Giacitura (IZ] a x<80, js_y~715) ─────────────────────────
+  const giacToks = tokens1.filter(w => w.x < 80 && w.y > 705 && w.y < 725);
   if (giacToks.some(w => w.str === 'IZ]')) t.giacitura = 'primaria';
-  else if (giacToks.some(w => w.str.toLowerCase().includes('secondaria'))) t.giacitura = 'secondaria';
+  else if (giacToks.some(w => w.str.toLowerCase() === 'd') &&
+           tokens1.some(w => w.x > 40 && w.x < 80 && w.y > 693 && w.y < 710 && w.str.toLowerCase().includes('seconda')))
+    t.giacitura = 'secondaria';
 
-  // ── Tipologia num ─────────────────────────────────────────────
-  const tipLeft = tokens1.filter(w => w.x > 108 && w.x < 175 && w.y > 108 && w.y < 150);
-  if (tipLeft.some(w => w.str === 'ILJ') || (tipLeft.some(w=>w.str==='IZ]') && zone(108,175,108,150).includes('singola')))
-    t.tipologia_num = 'singola';
-  else if (tipLeft.some(w=>w.str.includes('bisoma'))) t.tipologia_num = 'bisoma';
-  else if (tipLeft.some(w=>w.str.includes('multipla'))) t.tipologia_num = 'multipla';
-  if (!t.tipologia_num && tipLeft.some(w=>w.str==='ILJ')) t.tipologia_num = 'singola';
+  // ── Tipologia singola/bisoma/multipla (ILJ/IZ] a x108-175, js_y~717-730) ──
+  const tipLeft = tokens1.filter(w => w.x > 108 && w.x < 175 && w.y > 715 && w.y < 735);
+  if (tipLeft.some(w => w.str === 'ILJ')) t.tipologia_num = 'singola';
+  else if (tipLeft.some(w => w.str === 'IZ]')) {
+    const singola = tokens1.some(w => w.x > 118 && w.x < 175 && w.y > 717 && w.y < 732 && w.str === 'singola');
+    if (singola) t.tipologia_num = 'singola';
+  }
+  const bisoma = tokens1.filter(w => w.x > 108 && w.x < 175 && w.y > 692 && w.y < 715);
+  if (!t.tipologia_num && bisoma.some(w => w.str === 'IZ]')) t.tipologia_num = 'bisoma';
 
-  // ── Tipologia sepoltura ───────────────────────────────────────
-  const tipZone = tokens1.filter(w => w.x > 175 && w.x < 420 && w.y > 118 && w.y < 150);
-  const tipKeywords = ['cappuccina','pietra','anfora','cassa','terra','urna','altro'];
+  // ── Tipologia sepoltura (js_y ~700-720) ───────────────────────
+  const tipZone = tokens1.filter(w => w.x > 175 && w.x < 420 && w.y > 693 && w.y < 722);
+  const tipKws  = ['cappuccina','pietra','anfora','cassa','terra','urna','altro'];
   for (const w of tipZone) {
     const txt = w.str.toLowerCase().replace(/^o/,'');
-    if (tipKeywords.includes(txt)) {
-      const spunta = tipZone.filter(s => (s.str==='IZ]'||s.str==='171') && Math.abs(s.y-w.y)<8 && s.x < w.x);
+    if (tipKws.includes(txt)) {
+      const spunta = tipZone.filter(s => (s.str==='IZ]'||s.str==='171') && Math.abs(s.y-w.y)<10 && s.x<w.x);
       if (spunta.length) { t.tipologia = txt; break; }
     }
   }
+  // Fallback 171 (terra)
   if (!t.tipologia) {
     const s171 = tipZone.find(w => w.str === '171');
     if (s171) {
-      const after = tipZone.filter(w => w.x > s171.x && Math.abs(w.y - s171.y) < 10);
+      const after = tipZone.filter(w => w.x > s171.x && Math.abs(w.y - s171.y) < 12);
       if (after.length) t.tipologia = after[0].str.toLowerCase();
     }
   }
 
-  // ── Orientamento / Condizioni ─────────────────────────────────
-  t.orientamento = zone(428, 497, 128, 145);
-  t.condizioni   = zone(497, 560, 128, 145);
+  // ── Orientamento / Condizioni (js_y ~706) ────────────────────
+  t.orientamento = zone(428, 497, 698, 715);
+  t.condizioni   = zone(497, 560, 698, 715);
 
-  // ── Affidabilità ──────────────────────────────────────────────
-  t.affidabilita = zone(497, 560, 170, 185);
+  // ── Affidabilità (js_y ~666 = "Ottima") ──────────────────────
+  t.affidabilita = zone(497, 560, 658, 674);
 
-  // ── Posizione scheletro ───────────────────────────────────────
-  const posZone = tokens1.filter(w => w.x > 340 && w.x < 500 && w.y > 155 && w.y < 200);
+  // ── Posizione scheletro (IZ] a x367, js_y ~678) ──────────────
+  const posZone = tokens1.filter(w => w.x > 340 && w.x < 500 && w.y > 655 && w.y < 695);
   for (const w of posZone) {
     if (w.str === 'IZ]') {
-      const after = posZone.filter(s => s.x > w.x && Math.abs(s.y - w.y) < 8).map(s=>s.str).join(' ').toLowerCase();
+      const after = posZone.filter(s => s.x > w.x && Math.abs(s.y - w.y) < 10).map(s=>s.str).join(' ').toLowerCase();
       if (after.includes('supino')) t.posizione_scheletro = 'supino';
       else if (after.includes('destro')) t.posizione_scheletro = 'rannicchiata_dx';
       else if (after.includes('sinistro')) t.posizione_scheletro = 'rannicchiata_sx';
     }
   }
 
-  // ── Ossa ──────────────────────────────────────────────────────
-  const ossaZone = tokens1.filter(w => w.x > 167 && w.x < 340 && w.y > 155 && w.y < 210);
+  // ── Ossa in connessione (js_y ~640-690) ───────────────────────
+  const ossaZone = tokens1.filter(w => w.x > 167 && w.x < 340 && w.y > 632 && w.y < 695);
   for (const osso of ['cranio','vertebre','torace','bacino','braccia','gambe','mani','piedi']) {
     const ow = ossaZone.find(w => w.str.toLowerCase() === osso);
     if (ow) {
-      const spunta = ossaZone.filter(s => s.str==='IZ]' && Math.abs(s.y-ow.y)<8 && s.x < ow.x);
+      const spunta = ossaZone.filter(s => s.str==='IZ]' && Math.abs(s.y-ow.y)<10 && s.x < ow.x);
       t['osso_'+osso] = spunta.length > 0;
     } else { t['osso_'+osso] = false; }
   }
@@ -2390,8 +2390,11 @@ function parseTombaPDF(tokens1, p2, filename) {
       }
     }
   }
-  if (/DM\b/.test(p2)) t.sesso = 'M';
-  else if (/D\s*F\b/.test(p2)) t.sesso = 'F';
+  // Sesso: la scheda mostra "SESSO F DM" — DM = casella vuota M, D = casella vuota F
+  // Nessuno spuntato in questa scheda → non impostare nulla
+  // Se ci fosse una spunta sarebbe "IZ] F" o "IZ] M"
+  if (/IZ\]\s*M\b/i.test(p2)) t.sesso = 'M';
+  else if (/IZ\]\s*F\b/i.test(p2)) t.sesso = 'F';
 
   return t;
 }
