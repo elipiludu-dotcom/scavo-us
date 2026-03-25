@@ -2183,17 +2183,26 @@ async function importFromPDF(input) {
       const arrayBuffer = await file.arrayBuffer();
       const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
 
-      // Estrai testo da tutte le pagine
-      let pages = [];
-      for (let i = 1; i <= pdf.numPages; i++) {
-        const page = await pdf.getPage(i);
-        const tc   = await page.getTextContent();
-        pages.push(tc.items.map(it => it.str).join(' '));
-      }
-      const p1 = pages[0] || '';
-      const p2 = pages[1] || '';
+      // Pagina 1: estrai token con coordinate
+      const page1 = await pdf.getPage(1);
+      const tc1 = await page1.getTextContent();
+      const vp1 = page1.getViewport({ scale: 1 });
+      // Converti coordinate PDF (origine in basso) in coordinate schermo (origine in alto)
+      const tokens1 = tc1.items.map(it => ({
+        str: it.str,
+        x: it.transform[4],
+        y: vp1.height - it.transform[5]
+      })).filter(w => w.str.trim());
 
-      const t = parseTombaPDF(p1, p2, file.name);
+      // Pagina 2: testo semplice per caratteri morfologici
+      let p2 = '';
+      if (pdf.numPages >= 2) {
+        const page2 = await pdf.getPage(2);
+        const tc2 = await page2.getTextContent();
+        p2 = tc2.items.map(it => it.str).join(' ');
+      }
+
+      const t = parseTombaPDF(tokens1, p2, file.name);
       results.push({ tomba: t, filename: file.name });
     } catch(e) {
       errors.push(file.name + ': ' + e.message);
@@ -2236,126 +2245,153 @@ async function importFromPDF(input) {
   input.value = '';
 }
 
-function parseTombaPDF(p1, p2, filename) {
+function parseTombaPDF(tokens1, p2, filename) {
+  // tokens1 = array di {str, x, y} dalla pagina 1 con coordinate
   const t = { id: Date.now().toString(36) + Math.random().toString(36).slice(2), stato: 'parziale' };
 
-  // ── Intestazione: estrai tutti i numeri e ricostruisci ──────────
-  // Cerca la riga con anno + numeri us + scheda
-  const headerM = p1.match(/([A-Za-zÀ-ÿ][^\d]+?)\s+(20\d{2}|19\d{2})\s+(.+?)\s+(\d+)\s+(\d+)\s+(\d+|\S+)/);
-  if (headerM) {
-    t.localita = headerM[1].trim().replace(/LOCALITA\s*/i,'').replace(/ANNO.*/,'').trim();
-    t.anno = headerM[2];
-    const rest = headerM[3], n1 = parseInt(headerM[4]), n2 = parseInt(headerM[5]);
-    const p3 = headerM[6];
-    // US è il numero più grande, scheda il secondo, eventuale suffisso = pianta
-    const sorted = [[n1, headerM[4]], [n2, headerM[5]]].sort((a,b)=>b[0]-a[0]);
-    t.us_collegate = sorted[0][1];
-    t.numero       = parseInt(sorted[1][1]);
-    t.pianta_n     = p3;
-    // Area = testo tra anno e US
-    const usPos   = p1.indexOf(sorted[0][1]);
-    const annoPos = p1.indexOf(t.anno);
-    if (usPos > annoPos) {
-      const middle = p1.slice(annoPos + t.anno.length, usPos).trim();
-      t.area = middle.replace(new RegExp('\\b' + sorted[1][1] + '\\b'), '').trim();
+  // Helper: testo nella zona rettangolare
+  const zone = (xMin, xMax, yMin, yMax) =>
+    tokens1.filter(w => w.x >= xMin && w.x <= xMax && w.y >= yMin && w.y <= yMax)
+           .map(w => w.str).join(' ').trim();
+
+  // Helper: testo full page (ordinato per y poi x)
+  const p1_full = tokens1.slice().sort((a,b) => a.y !== b.y ? a.y-b.y : a.x-b.x)
+                          .map(w => w.str).join(' ');
+
+  // ── Intestazione ─────────────────────────────────────────────
+  t.localita     = zone(0,   100, 65, 95);
+  t.anno         = zone(100, 165, 65, 82);
+  t.area         = zone(165, 237, 65, 82);
+  t.us_collegate = zone(237, 300, 65, 82);
+  const schedaT  = zone(300, 365, 65, 82);
+  t.numero       = parseInt(schedaT) || 0;
+  t.pianta_n     = zone(365, 425, 65, 82);
+
+  // Fallback dal filename (es. Tb_297 o us_3208)
+  if (!t.numero) { const fm = filename.match(/Tb[_\s]*(\d+)/i); if (fm) t.numero = parseInt(fm[1]); }
+  if (!t.us_collegate) { const fm = filename.match(/us[_\s]*(\d+)/i); if (fm) t.us_collegate = fm[1]; }
+
+  // ── Quote ─────────────────────────────────────────────────────
+  const getVals = (yMin, yMax) => {
+    const txt = zone(428, 580, yMin, yMax);
+    return (txt.match(/-?\d+[,\.]\d+/g) || []);
+  };
+  let v = getVals(75, 90);
+  if (v.length) t.quota_pre_min = v[0];
+  if (v.length > 1) t.quota_pre_max = v[v.length-1];
+  v = getVals(100, 115);
+  if (v.length) t.quota_post_min = v[0];
+  if (v.length > 1) t.quota_post_max = v[v.length-1];
+
+  // ── Giacitura ─────────────────────────────────────────────────
+  const giacToks = tokens1.filter(w => w.x < 80 && w.y > 118 && w.y < 150);
+  if (giacToks.some(w => w.str === 'IZ]')) t.giacitura = 'primaria';
+  else if (giacToks.some(w => w.str.toLowerCase().includes('secondaria'))) t.giacitura = 'secondaria';
+
+  // ── Tipologia num ─────────────────────────────────────────────
+  const tipLeft = tokens1.filter(w => w.x > 108 && w.x < 175 && w.y > 108 && w.y < 150);
+  if (tipLeft.some(w => w.str === 'ILJ') || (tipLeft.some(w=>w.str==='IZ]') && zone(108,175,108,150).includes('singola')))
+    t.tipologia_num = 'singola';
+  else if (tipLeft.some(w=>w.str.includes('bisoma'))) t.tipologia_num = 'bisoma';
+  else if (tipLeft.some(w=>w.str.includes('multipla'))) t.tipologia_num = 'multipla';
+  if (!t.tipologia_num && tipLeft.some(w=>w.str==='ILJ')) t.tipologia_num = 'singola';
+
+  // ── Tipologia sepoltura ───────────────────────────────────────
+  const tipZone = tokens1.filter(w => w.x > 175 && w.x < 420 && w.y > 118 && w.y < 150);
+  const tipKeywords = ['cappuccina','pietra','anfora','cassa','terra','urna','altro'];
+  for (const w of tipZone) {
+    const txt = w.str.toLowerCase().replace(/^o/,'');
+    if (tipKeywords.includes(txt)) {
+      const spunta = tipZone.filter(s => (s.str==='IZ]'||s.str==='171') && Math.abs(s.y-w.y)<8 && s.x < w.x);
+      if (spunta.length) { t.tipologia = txt; break; }
     }
   }
-  // Fallback: dal nome file (es. us_3208_Tb_297.pdf)
-  if (!t.numero) {
-    const fm = filename.match(/Tb[_\s]*(\d+)/i);
-    if (fm) t.numero = parseInt(fm[1]);
-  }
-  if (!t.us_collegate) {
-    const fm = filename.match(/us[_\s]*(\d+)/i);
-    if (fm) t.us_collegate = fm[1];
+  if (!t.tipologia) {
+    const s171 = tipZone.find(w => w.str === '171');
+    if (s171) {
+      const after = tipZone.filter(w => w.x > s171.x && Math.abs(w.y - s171.y) < 10);
+      if (after.length) t.tipologia = after[0].str.toLowerCase();
+    }
   }
 
-  // ── Quote ───────────────────────────────────────────────────────
-  const preM = p1.match(/QUOTE pre-scavo\s+([\d,\.\-]+(?:\s*\([^)]+\))?;?\s*[\d,\.\-]+(?:\s*\([^)]+\))?)/i);
-  if (preM) {
-    const vals = preM[1].match(/-?\d+[,\.]\d+/g) || [];
-    if (vals.length) t.quota_pre_min = vals[0];
-    if (vals.length > 1) t.quota_pre_max = vals[vals.length-1];
-  }
-  const postM = p1.match(/QUOTE post-scavo\s+([\d,\.\-]+(?:\s*\([^)]+\))?;?\s*[\d,\.\-]+(?:\s*\([^)]+\))?)/i);
-  if (postM) {
-    const vals = postM[1].match(/-?\d+[,\.]\d+/g) || [];
-    if (vals.length) t.quota_post_min = vals[0];
-    if (vals.length > 1) t.quota_post_max = vals[vals.length-1];
-  }
+  // ── Orientamento / Condizioni ─────────────────────────────────
+  t.orientamento = zone(428, 497, 128, 145);
+  t.condizioni   = zone(497, 560, 128, 145);
 
-  // ── Checkbox (IZ] = spuntato nel testo estratto da PDF.js) ──────
-  const checked = (pattern) => new RegExp('IZ\\]\\s*' + pattern, 'i').test(p1) ||
-                               new RegExp('IZ\\]\\s*' + pattern, 'i').test(p1.replace(/\s+/g,' '));
+  // ── Affidabilità ──────────────────────────────────────────────
+  t.affidabilita = zone(497, 560, 170, 185);
 
-  if (checked('primaria')) t.giacitura = 'primaria';
-  else if (checked('secondaria')) t.giacitura = 'secondaria';
-
-  if (checked('singola') || /ILJ\s*singola/i.test(p1)) t.tipologia_num = 'singola';
-  else if (checked('bisoma')) t.tipologia_num = 'bisoma';
-  else if (checked('multipla')) t.tipologia_num = 'multipla';
-
-  for (const tip of ['cappuccina','cassa','terra','urna','pietra','anfora','altro']) {
-    if (new RegExp('(IZ\\]|171)\\s*' + tip,'i').test(p1)) { t.tipologia = tip; break; }
+  // ── Posizione scheletro ───────────────────────────────────────
+  const posZone = tokens1.filter(w => w.x > 340 && w.x < 500 && w.y > 155 && w.y < 200);
+  for (const w of posZone) {
+    if (w.str === 'IZ]') {
+      const after = posZone.filter(s => s.x > w.x && Math.abs(s.y - w.y) < 8).map(s=>s.str).join(' ').toLowerCase();
+      if (after.includes('supino')) t.posizione_scheletro = 'supino';
+      else if (after.includes('destro')) t.posizione_scheletro = 'rannicchiata_dx';
+      else if (after.includes('sinistro')) t.posizione_scheletro = 'rannicchiata_sx';
+    }
   }
 
-  const oeM = p1.match(/(N\/S|E\/O|O\/E|N-S|E-O|O-E|OE|NS|NE|NO|SE|SO)\s+(Buon\w+|Discret\w+|Scar\w+|Catt\w+)/i);
-  if (oeM) { t.orientamento = oeM[1]; t.condizioni = oeM[2]; }
-
-  const affM = p1.match(/STRATIGRAFICA\s+([\w]+)/i) || p1.match(/(Ottima|Buona|Discreta|Scarsa)/i);
-  if (affM) t.affidabilita = affM[1];
-
-  if (checked('supino')) t.posizione_scheletro = 'supino';
-  else if (/IZ\]\s*rannicchiata su fianco destro/i.test(p1)) t.posizione_scheletro = 'rannicchiata_dx';
-  else if (/IZ\]\s*rannicchiata su fianco sinistro/i.test(p1)) t.posizione_scheletro = 'rannicchiata_sx';
-
+  // ── Ossa ──────────────────────────────────────────────────────
+  const ossaZone = tokens1.filter(w => w.x > 167 && w.x < 340 && w.y > 155 && w.y < 210);
   for (const osso of ['cranio','vertebre','torace','bacino','braccia','gambe','mani','piedi']) {
-    t['osso_'+osso] = checked(osso);
+    const ow = ossaZone.find(w => w.str.toLowerCase() === osso);
+    if (ow) {
+      const spunta = ossaZone.filter(s => s.str==='IZ]' && Math.abs(s.y-ow.y)<8 && s.x < ow.x);
+      t['osso_'+osso] = spunta.length > 0;
+    } else { t['osso_'+osso] = false; }
   }
 
-  // ── Blocchi testo libero ────────────────────────────────────────
-  const block = (start, end) => {
-    const r = new RegExp(start + '\\s+(.+?)(?=' + end + ')', 'is');
-    const m = p1.match(r); return m ? m[1].trim() : '';
+  // ── Testi liberi (da p1_full ordinato per y) ──────────────────
+  // Ricostruisci testo riga per riga per i blocchi
+  const lines = [];
+  let curY = -1, curLine = [];
+  for (const w of tokens1.slice().sort((a,b) => a.y !== b.y ? a.y-b.y : a.x-b.x)) {
+    if (Math.abs(w.y - curY) > 4) { if (curLine.length) lines.push(curLine.join(' ')); curLine=[]; curY=w.y; }
+    curLine.push(w.str);
+  }
+  if (curLine.length) lines.push(curLine.join(' '));
+  const p1_lines = lines.join('\n');
+
+  const extractBlock = (text, start, end) => {
+    const re = new RegExp(start.replace(/[.*+?^${}()|[\]\\]/g,'\\$&') + '\\s*([\\s\\S]*?)(?=' +
+                          end.replace(/[.*+?^${}()|[\]\\]/g,'\\$&') + ')', 'i');
+    const m = text.match(re); return m ? m[1].trim() : '';
   };
-  t.descrizione        = block('DESCRIZIONE', 'REPERTI IN CONNESSIONE');
-  t.reperti_connessione= block('REPERTI IN CONNESSIONE CON LO SCHELETRO', 'ELEMENTI COSTITUENTI');
-  t.elementi_copertura = block('ELEMENTI COSTITUENTI LA COPERTURA E REPERTI CONNESSI', 'ELEMENTI DATANTI');
-  t.osservazioni       = block('OSSERVAZIONI E INTERPRETAZIONE', 'BIBLIOGRAFIA');
+  t.descrizione         = extractBlock(p1_lines, 'DESCRIZIONE', 'REPERTI IN CONNESSIONE');
+  t.reperti_connessione = extractBlock(p1_lines, 'REPERTI IN CONNESSIONE CON LO SCHELETRO', 'ELEMENTI COSTITUENTI');
+  t.elementi_copertura  = extractBlock(p1_lines, 'ELEMENTI COSTITUENTI LA COPERTURA E REPERTI CONNESSI', 'ELEMENTI DATANTI');
+  t.osservazioni        = extractBlock(p1_lines, 'OSSERVAZIONI E INTERPRETAZIONE', 'BIBLIOGRAFIA');
+  const datBlock = extractBlock(p1_lines, 'ELEMENTI DATANTI', 'OSSERVAZIONI');
+  const datParts = datBlock.split(/DATAZION[EI]\s*/i);
+  t.elementi_datanti = datParts[0].trim();
+  t.datazione = datParts[1] ? datParts[1].trim() : '';
 
-  const datBlock = block('ELEMENTI DATANTI', 'OSSERVAZIONI');
-  if (datBlock) {
-    const dp = datBlock.split(/DATAZION[EI]\s*/i);
-    t.elementi_datanti = dp[0].trim();
-    t.datazione = dp[1] ? dp[1].trim() : '';
-  }
+  // ── Compilatore: x 300-430, y 790-812 ────────────────────────
+  t.compilatore = zone(300, 430, 790, 812);
 
-  // Compilatore
-  const compM = p1.match(/COMPILATORE\s+DATA CONTROLLO\s+([\w,\s]+?)(?:\s{3,}|$)/i) ||
-                p1.match(/COMPILATORE\s*\n?([\w,\s]+?)(?=DATA CONTROLLO|\n\n)/i);
-  if (compM) t.compilatore = compM[1].trim();
-
-  // ── Caratteri morfologici (pag.2) ───────────────────────────────
-  const morf = (label, opts) => {
+  // ── Caratteri morfologici pag.2 ───────────────────────────────
+  const morfMap = [
+    ['arcate sopracciliari',  'morf_arcate',      ['lievi','pronunciate']],
+    ['margini sopraorbitari', 'morf_margini',     ['taglienti','arrotondati']],
+    ['frontale',              'morf_frontale',    ['verticale','sfuggente']],
+    ['mandibola',             'morf_mandibola',   ['gracile','robusta']],
+    ['mento',                 'morf_mento',       ['arrotondato','squadrato']],
+    ['protub. occipitale',    'morf_protub_occ',  ['lieve','evidente']],
+    ['orbite',                'morf_orbite',      ['circolare','quadrangolare']],
+    ['angolo pubico',         'morf_angolo_pubico',['ottuso','acuto']],
+    ['ali iliache',           'morf_ali_iliache', ['basse, larghe','alte, strette']],
+    ['incisura ischiatica',   'morf_incisura',    ['bassa, larga','alta, stretta']],
+  ];
+  for (const [label, field, opts] of morfMap) {
     for (const opt of opts) {
-      if (new RegExp(label + '.{0,80}' + opt.slice(0,5), 'is').test(p2)) return opt;
+      if (new RegExp(label.replace(/[.*+?^${}()|[\]\\]/g,'\\$&') + '[\\s\\S]{0,80}' + opt.slice(0,5), 'i').test(p2)) {
+        t[field] = opt; break;
+      }
     }
-    return '';
-  };
-  t.morf_arcate        = morf('arcate sopracciliari',  ['lievi','pronunciate']);
-  t.morf_margini       = morf('margini sopraorbitari', ['taglienti','arrotondati']);
-  t.morf_frontale      = morf('frontale',              ['verticale','sfuggente']);
-  t.morf_mandibola     = morf('mandibola',             ['gracile','robusta']);
-  t.morf_mento         = morf('mento',                 ['arrotondato','squadrato']);
-  t.morf_protub_occ    = morf('protub. occipitale',    ['lieve','evidente']);
-  t.morf_orbite        = morf('orbite',                ['circolare','quadrangolare']);
-  t.morf_angolo_pubico = morf('angolo pubico',         ['ottuso','acuto']);
-  t.morf_ali_iliache   = morf('ali iliache',           ['basse, larghe','alte, strette']);
-  t.morf_incisura      = morf('incisura ischiatica',   ['bassa, larga','alta, stretta']);
-
-  // Sesso
-  if (/SESSO[^F]*F[^M]*DM\b/i.test(p2) || /DM\b/.test(p2)) t.sesso = 'M';
-  else if (/D\s*F/i.test(p2) || /\bF\b.*SESSO/i.test(p2)) t.sesso = 'F';
+  }
+  if (/DM\b/.test(p2)) t.sesso = 'M';
+  else if (/D\s*F\b/.test(p2)) t.sesso = 'F';
 
   return t;
 }
