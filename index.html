@@ -1117,11 +1117,18 @@
           <div id="pdfImportStatus" style="margin-top:10px;font-family:'Space Mono',monospace;font-size:0.7rem;color:var(--muted);min-height:18px;white-space:pre-line"></div>
         </div>
         <div class="export-card">
-          <h3>📥 Importa da Excel</h3>
+          <h3>📥 Importa Schede US da Excel</h3>
           <p>Carica un file <strong>.xlsx</strong> con le schede US (una riga per scheda) e importale nel cloud. Le schede esistenti con lo stesso numero US verranno aggiornate.</p>
           <input type="file" id="xlsxImportInput" accept=".xlsx" style="display:none" onchange="importFromExcel(this)">
           <button class="btn btn-primary" onclick="document.getElementById('xlsxImportInput').click()">📂 Scegli file .xlsx</button>
           <div id="xlsxImportStatus" style="margin-top:10px;font-family:'Space Mono',monospace;font-size:0.7rem;color:var(--muted);min-height:18px"></div>
+        </div>
+        <div class="export-card">
+          <h3>⚰ Importa Tombe da Excel</h3>
+          <p>Carica il file <strong>tombe_estratte.xlsx</strong> generato dallo script Python. Le tombe esistenti con lo stesso numero verranno aggiornate.</p>
+          <input type="file" id="xlsxTombeInput" accept=".xlsx" style="display:none" onchange="importTombeFromExcel(this)">
+          <button class="btn btn-primary" onclick="document.getElementById('xlsxTombeInput').click()">📂 Scegli tombe_estratte.xlsx</button>
+          <div id="xlsxTombeStatus" style="margin-top:10px;font-family:'Space Mono',monospace;font-size:0.7rem;color:var(--muted);min-height:18px"></div>
         </div>
         <div class="export-card">
           <h3>🧪 PDF di test</h3>
@@ -2161,6 +2168,136 @@ async function deleteScheda() {
 }
 
 // ─── EXPORT CSV ───────────────────────────────────────────────────
+
+// ─── IMPORTA TOMBE DA EXCEL ──────────────────────────────────────
+async function importTombeFromExcel(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const status = document.getElementById('xlsxTombeStatus');
+  status.textContent = '⏳ Lettura file in corso…';
+
+  try {
+    const ab = await file.arrayBuffer();
+    const wb = XLSX.read(ab, { type: 'array' });
+    const ws = wb.Sheets[wb.SheetNames[0]];
+    const rows = XLSX.utils.sheet_to_json(ws, { defval: '' });
+
+    if (!rows.length) { status.textContent = '⚠ File vuoto.'; input.value=''; return; }
+
+    const boolOssa = v => v === true || v === 'SI' || v === 'si' || v === 'TRUE' || v === 1;
+
+    const nuove = rows.map(r => ({
+      id: Date.now().toString(36) + Math.random().toString(36).slice(2),
+      numero:              parseInt(r['numero']) || 0,
+      localita:            String(r['localita']          || '').replace(//g,''),
+      anno:                String(r['anno']               || ''),
+      area:                String(r['area']               || ''),
+      us_collegate:        String(r['us_collegate']       || ''),
+      pianta_n:            String(r['pianta_n']           || ''),
+      quota_pre_min:       String(r['quota_pre_min']      || ''),
+      quota_pre_max:       String(r['quota_pre_max']      || ''),
+      quota_post_min:      String(r['quota_post_min']     || ''),
+      quota_post_max:      String(r['quota_post_max']     || ''),
+      giacitura:           String(r['giacitura']          || ''),
+      tipologia_num:       String(r['tipologia_num']      || ''),
+      tipologia:           String(r['tipologia']          || ''),
+      orientamento:        String(r['orientamento']       || ''),
+      condizioni:          String(r['condizioni']         || ''),
+      affidabilita:        String(r['affidabilita']       || ''),
+      altre_sepolture:     String(r['altre_sepolture']    || ''),
+      posizione_scheletro: String(r['posizione_scheletro']|| ''),
+      osso_cranio:         boolOssa(r['osso_cranio']),
+      osso_vertebre:       boolOssa(r['osso_vertebre']),
+      osso_torace:         boolOssa(r['osso_torace']),
+      osso_bacino:         boolOssa(r['osso_bacino']),
+      osso_braccia:        boolOssa(r['osso_braccia']),
+      osso_gambe:          boolOssa(r['osso_gambe']),
+      osso_mani:           boolOssa(r['osso_mani']),
+      osso_piedi:          boolOssa(r['osso_piedi']),
+      descrizione:         String(r['descrizione']        || '').replace(//g,'
+'),
+      reperti_connessione: String(r['reperti_connessione']|| '').replace(//g,'
+'),
+      elementi_copertura:  String(r['elementi_copertura'] || '').replace(//g,'
+'),
+      elementi_datanti:    String(r['elementi_datanti']   || ''),
+      datazione:           String(r['datazione']          || ''),
+      osservazioni:        String(r['osservazioni']       || '').replace(//g,'
+'),
+      bibliografia:        String(r['bibliografia']       || ''),
+      compilatore:         String(r['compilatore']        || ''),
+      data_controllo:      String(r['data_controllo']     || ''),
+      cranio_lungh_max:    String(r['cranio_lungh_max']   || ''),
+      cranio_largh_max:    String(r['cranio_largh_max']   || ''),
+      cranio_alt_faccia:   String(r['cranio_alt_faccia']  || ''),
+      cranio_largh_faccia: String(r['cranio_largh_faccia']|| ''),
+      omero_lungh:         String(r['omero_lungh']        || ''),
+      femore_lungh:        String(r['femore_lungh']       || ''),
+      omero_omero_dist:    String(r['omero_omero_dist']   || ''),
+      bacino_lungh_max:    String(r['bacino_lungh_max']   || ''),
+      bacino_largh_max:    String(r['bacino_largh_max']   || ''),
+      note_antropologiche: String(r['note_antropologiche']|| ''),
+      morf_arcate:         String(r['morf_arcate']        || ''),
+      morf_margini:        String(r['morf_margini']       || ''),
+      morf_frontale:       String(r['morf_frontale']      || ''),
+      morf_mandibola:      String(r['morf_mandibola']     || ''),
+      morf_mento:          String(r['morf_mento']         || ''),
+      morf_protub_occ:     String(r['morf_protub_occ']    || ''),
+      morf_orbite:         String(r['morf_orbite']        || ''),
+      morf_angolo_pubico:  String(r['morf_angolo_pubico'] || ''),
+      morf_ali_iliache:    String(r['morf_ali_iliache']   || ''),
+      morf_incisura:       String(r['morf_incisura']      || ''),
+      sesso:               String(r['sesso']              || ''),
+      stato: 'parziale',
+    })).filter(t => t.numero > 0);
+
+    if (!nuove.length) { status.textContent = '⚠ Nessuna tomba valida trovata.'; input.value=''; return; }
+
+    // Anteprima
+    const ok = await showConfirm({
+      icon: '⚰',
+      title: `Importare ${nuove.length} schede tombe?`,
+      message: 'Le tombe esistenti con lo stesso numero verranno aggiornate.',
+      detail: nuove.slice(0,5).map(t => `T.${t.numero} — ${t.localita||'?'} ${t.anno||''}`).join('
+') +
+              (nuove.length > 5 ? `
+… e altre ${nuove.length-5}` : ''),
+      okLabel: '📥 Importa',
+      okClass: 'btn-success'
+    });
+    if (!ok) { status.textContent = ''; input.value=''; return; }
+
+    // 1. Crea/verifica foglio Tombe su Google Sheets
+    status.textContent = '☁ Creazione foglio Tombe su Google Sheets…';
+    setSyncStatus('syncing', 'Preparazione…');
+    await ensureHeadersTombe();
+
+    // 2. Merge con tombe esistenti
+    let nuoveCnt = 0, aggiornateCnt = 0;
+    for (const t of nuove) {
+      const idx = tombe.findIndex(x => x.numero === t.numero);
+      if (idx >= 0) { tombe[idx] = { ...tombe[idx], ...t, id: tombe[idx].id }; aggiornateCnt++; }
+      else { tombe.push(t); nuoveCnt++; }
+    }
+
+    // 3. Scrivi tutto su Sheets in un'unica operazione
+    status.textContent = `☁ Salvataggio ${nuove.length} schede su Google Sheets…`;
+    const allRows = [HEADERS_TOMBE, ...tombe.map(tombaToRow)];
+    await sheetsUpdateT(`${SHEET_TOMBE}!A1`, allRows);
+
+    setSyncStatus('ok', 'Sincronizzato');
+    renderTombe();
+    renderStats();
+    status.textContent = `✓ Completato: ${nuoveCnt} nuove, ${aggiornateCnt} aggiornate.`;
+    input.value = '';
+
+  } catch(e) {
+    setSyncStatus('error', 'Errore');
+    status.textContent = '⚠ Errore: ' + e.message;
+    console.error(e);
+    input.value = '';
+  }
+}
 
 // ─── IMPORTA DA PDF (Schede Tombe) ───────────────────────────────
 async function importFromPDF(input) {
