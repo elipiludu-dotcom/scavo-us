@@ -871,6 +871,7 @@
         <div style="display:flex;gap:8px;flex-wrap:wrap">
           <button class="btn btn-secondary" onclick="showView('tombe')">Annulla</button>
           <button class="btn btn-danger" id="btnDeleteTomba" style="display:none" onclick="deleteTomba()">🗑 Elimina</button>
+          <button class="btn btn-secondary" id="btnExportTombaPDF" style="display:none" onclick="exportTombaPDF()">⬇ PDF</button>
           <button class="btn btn-success" onclick="saveTomba()">Salva</button>
         </div>
       </div>
@@ -1096,6 +1097,21 @@
           <h3>Stampa PDF – Tutte le schede</h3>
           <p>Genera un unico PDF con tutte le schede US in formato ICCD, una per pagina.</p>
           <button class="btn btn-primary" onclick="exportPDFTutte()">⬇ PDF Completo</button>
+        </div>
+        <div class="export-card">
+          <h3>⚰ PDF Tombe – Scheda singola</h3>
+          <p>Genera un PDF in formato ministeriale per una singola scheda tomba.</p>
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+            <select id="pdfSelectTomba" style="flex:1;padding:9px 12px;border:1px solid var(--border);border-radius:3px;font-size:0.85rem;background:var(--parchment-light);color:var(--ink);outline:none;min-width:120px">
+              <option value="">— seleziona tomba —</option>
+            </select>
+            <button class="btn btn-primary" onclick="exportTombaPDF(document.getElementById('pdfSelectTomba').value)">⬇ PDF Tomba</button>
+          </div>
+        </div>
+        <div class="export-card">
+          <h3>⚰ PDF Tombe – Tutte le schede</h3>
+          <p>Genera un unico PDF con tutte le schede tombe in formato ministeriale, una per pagina.</p>
+          <button class="btn btn-primary" onclick="exportTombePDFTutte()">⬇ PDF Tutte le Tombe</button>
         </div>
 
 
@@ -2031,6 +2047,7 @@ function openNewTomba() {
   resetTombaForm();
   document.getElementById('tombaFormTitle').textContent = 'Nuova Scheda Tomba';
   document.getElementById('btnDeleteTomba').style.display = 'none';
+  document.getElementById('btnExportTombaPDF').style.display = 'none';
   window._editTombaOrigin = 'view-tombe';
   showView('tomba-form');
   updateTombaTabLabel();
@@ -2044,6 +2061,7 @@ function openEditTomba(id) {
   loadTombaForm(t);
   document.getElementById('tombaFormTitle').textContent = 'Tomba ' + t.numero;
   document.getElementById('btnDeleteTomba').style.display = 'inline-block';
+  document.getElementById('btnExportTombaPDF').style.display = 'inline-block';
   window._editTombaOrigin = document.querySelector('.view.active')?.id || 'view-tombe';
   showView('tomba-form');
   updateTombaTabLabel();
@@ -2729,6 +2747,17 @@ function loadJsPDF() {
 }
 
 function populatePDFSelect() {
+  // Popola select tombe
+  const selT = document.getElementById('pdfSelectTomba');
+  if (selT) {
+    selT.innerHTML = '<option value="">— seleziona tomba —</option>';
+    [...tombe].sort((a,b)=>a.numero-b.numero).forEach(t => {
+      const o = document.createElement('option');
+      o.value = t.id;
+      o.textContent = `T.${t.numero} — US ${t.us_collegate||''}`;
+      selT.appendChild(o);
+    });
+  }
   const sel = document.getElementById('pdfSelectUS');
   if (!sel) return;
   sel.innerHTML = '<option value="">— seleziona US —</option>' +
@@ -3230,6 +3259,418 @@ function drawICCDpage(doc, s) {
   // — FOOTER pagina 2 —
   txt('MiC – ICCD_licenza CC BY-SA 4.0 – Creative Commons Attribution-ShareAlike 4.0 International',
     ML, H-8, 5, 'normal', [120,120,120]);
+}
+
+
+// ─── PDF SCHEDA TOMBA ────────────────────────────────────────────
+
+function buildTombaPDF(tombeList) {
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+  tombeList.forEach((t, idx) => {
+    if (idx > 0) doc.addPage();
+    drawTombaPage1(doc, t);
+    doc.addPage();
+    drawTombaPage2(doc, t);
+  });
+  return doc;
+}
+
+function drawTombaPage1(doc, t) {
+  const W = 210, H = 297;
+  const ML = 8, MR = 8, MT = 8;
+  const IW = W - ML - MR;
+
+  const line    = (x1,y1,x2,y2,w=0.2) => { doc.setLineWidth(w); doc.setDrawColor(0); doc.line(x1,y1,x2,y2); };
+  const rect    = (x,y,w,h,lw=0.2)    => { doc.setLineWidth(lw); doc.setDrawColor(0); doc.rect(x,y,w,h); };
+  const fillRect= (x,y,w,h,r,g,b)     => { doc.setFillColor(r,g,b); doc.rect(x,y,w,h,'F'); };
+  const txt     = (s,x,y,sz=7,st='normal',col=[0,0,0]) => {
+    doc.setFontSize(sz); doc.setFont('helvetica',st); doc.setTextColor(...col);
+    doc.text(String(s||''), x, y);
+  };
+  const lbl     = (s,x,y)             => txt(s,x,y,5.5,'bold',[60,60,60]);
+  const drawCB  = (checked,x,y) => {
+    const sz=3.2; doc.setLineWidth(0.3); doc.setDrawColor(0); doc.rect(x,y-sz/2,sz,sz);
+    if(checked){ doc.setLineWidth(0.6);
+      doc.line(x+0.4,y+0.2,x+sz*0.38,y+sz*0.32);
+      doc.line(x+sz*0.38,y+sz*0.32,x+sz-0.3,y-sz*0.38); }
+  };
+  const multiTxt = (s,x,y,maxW,sz=7.5) => {
+    doc.setFontSize(sz); doc.setFont('helvetica','normal'); doc.setTextColor(0,0,0);
+    const lines = doc.splitTextToSize(String(s||''), maxW);
+    doc.text(lines, x, y);
+    return lines.length * (sz * 0.3528 * 1.3);
+  };
+
+  let y = MT;
+
+  // ── Intestazione ──────────────────────────────────────────────
+  fillRect(ML, y, IW, 9, 240,240,240);
+  rect(ML, y, IW, 9, 0.4);
+  txt('Ministero dei Beni e delle Attività Culturali', ML+2, y+4, 8, 'bold');
+  txt('Scheda recupero resti scheletrici', ML+IW*0.55, y+4, 7.5, 'normal');
+  y += 9;
+
+  // ── Griglia header ─────────────────────────────────────────────
+  // LOCALITÀ | ANNO | AREA | US | SCHEDA N. | PIANTA N. | MIN/MAX
+  const hRow = y; const hH = 16;
+  const cols = [
+    { lbl:'LOCALITÀ',  w:32 },
+    { lbl:'ANNO',      w:14 },
+    { lbl:'AREA',      w:28 },
+    { lbl:'US',        w:22 },
+    { lbl:'SCHEDA N.', w:22 },
+    { lbl:'PIANTA N.', w:20 },
+    { lbl:'MIN/MAX',   w:IW-32-14-28-22-22-20 },
+  ];
+  let cx = ML;
+  cols.forEach(c => { rect(cx,hRow,c.w,hH); cx+=c.w; });
+
+  cx = ML;
+  const qPre  = (t.quota_pre_min||'')  + (t.quota_pre_max  ? ' / '+t.quota_pre_max  : '');
+  const qPost = (t.quota_post_min||'') + (t.quota_post_max ? ' / '+t.quota_post_max : '');
+  const vals0 = [
+    t.localita, t.anno, t.area, t.us_collegate, t.numero, t.pianta_n,
+    'pre: ' + qPre + '  post: ' + qPost
+  ];
+  cols.forEach((c,i) => {
+    lbl(c.lbl, cx+1.5, hRow+3.5);
+    doc.setFontSize(7.5); doc.setFont('helvetica','normal'); doc.setTextColor(0,0,0);
+    const lines = doc.splitTextToSize(String(vals0[i]||''), c.w-3);
+    doc.text(lines, cx+1.5, hRow+7.5);
+    cx += c.w;
+  });
+  // Mini label quote
+  txt('QUOTE pre-scavo',  W-MR-cols[6].w+1.5, hRow+5.5, 5);
+  txt('QUOTE post-scavo', W-MR-cols[6].w+1.5, hRow+11,  5);
+  y += hH;
+
+  // ── Giacitura + Tipologia + Orientamento + Condizioni ─────────
+  const r2H = 18; const r2y = y;
+  rect(ML, r2y, IW, r2H);
+  line(ML+38, r2y, ML+38, r2y+r2H);
+  line(ML+38+90, r2y, ML+38+90, r2y+r2H);
+  line(ML+38+90+20, r2y, ML+38+90+20, r2y+r2H);
+
+  lbl('GIACITURA', ML+1.5, r2y+3.5);
+  lbl('TIPOLOGIA DI SEPOLTURA', ML+40, r2y+3.5);
+  lbl('ORIENTAMENTO', ML+38+90+1.5, r2y+3.5);
+  lbl('CONDIZIONI', ML+38+90+20+1.5, r2y+3.5);
+
+  // Giacitura checkboxes
+  drawCB(t.giacitura==='primaria',   ML+1.5, r2y+9);
+  txt('primaria',   ML+6,   r2y+9.3, 6.5);
+  drawCB(t.giacitura==='secondaria', ML+1.5, r2y+14);
+  txt('secondaria', ML+6,   r2y+14.3, 6.5);
+
+  // Singola/bisoma/multipla
+  drawCB(t.tipologia_num==='singola',  ML+40, r2y+7);
+  txt('singola',   ML+44.5, r2y+7.3, 6.5);
+  drawCB(t.tipologia_num==='bisoma',   ML+40, r2y+12);
+  txt('bisoma',    ML+44.5, r2y+12.3, 6.5);
+  drawCB(t.tipologia_num==='multipla', ML+40, r2y+17);
+  txt('multipla',  ML+44.5, r2y+17.3, 6.5);
+
+  // Tipologia sepoltura
+  const tips = [
+    ['cappuccina', ML+60], ['pietra', ML+80], ['anfora', ML+100], ['altro', ML+120],
+    ['cassa', ML+60],      ['terra', ML+80],  ['urna', ML+100],
+  ];
+  const tipRows = [[0,3],[4,3]];
+  [[0,1,2,3],[4,5,6]].forEach((row,ri) => {
+    row.forEach((ti) => {
+      const [label, xpos] = tips[ti];
+      const ypos = r2y + 8.5 + ri*6;
+      drawCB(t.tipologia===label, xpos-4, ypos);
+      txt(label, xpos, ypos+0.3, 6.5);
+    });
+  });
+
+  txt(t.orientamento||'', ML+38+90+1.5, r2y+10, 8, 'bold');
+  txt(t.condizioni||'',   ML+38+90+20+1.5, r2y+10, 8, 'bold');
+  y += r2H;
+
+  // ── Altre sepolture + Ossa + Posizione + Affidabilità ─────────
+  const r3H = 24; const r3y = y;
+  rect(ML, r3y, IW, r3H);
+  line(ML+45, r3y, ML+45, r3y+r3H);
+  line(ML+45+45, r3y, ML+45+45, r3y+r3H);
+  line(ML+45+45+45, r3y, ML+45+45+45, r3y+r3H);
+
+  lbl('ALTRE SEPOLTURE IN SEQUENZA', ML+1.5, r3y+3.5);
+  lbl('OSSA IN CONNESSIONE', ML+47, r3y+3.5);
+  lbl('POSIZIONE SCHELETRO', ML+91.5, r3y+3.5);
+  lbl('AFFIDABILITÀ STRATIGRAFICA', ML+136.5, r3y+3.5);
+
+  // Altre sepolture
+  doc.setFontSize(7); doc.setFont('helvetica','normal'); doc.setTextColor(0,0,0);
+  const altreLines = doc.splitTextToSize(String(t.altre_sepolture||''), 42);
+  doc.text(altreLines, ML+1.5, r3y+8);
+
+  // Ossa (2 colonne)
+  const ossaLeft  = ['cranio','vertebre','torace','bacino'];
+  const ossaRight = ['braccia','gambe','mani','piedi'];
+  ossaLeft.forEach((o,i)  => { drawCB(t['osso_'+o],ML+47,r3y+8+i*4.5); txt(o,ML+51.5,r3y+8.3+i*4.5,6.5); });
+  ossaRight.forEach((o,i) => { drawCB(t['osso_'+o],ML+67,r3y+8+i*4.5); txt(o,ML+71.5,r3y+8.3+i*4.5,6.5); });
+
+  // Posizione
+  const posizioni = [
+    ['supino','supino'],
+    ['rannicchiata_dx','rannicchiata su fianco destro'],
+    ['rannicchiata_sx','rannicchiata su fianco sinistro'],
+  ];
+  posizioni.forEach(([val,lbl2],i) => {
+    drawCB(t.posizione_scheletro===val, ML+92, r3y+8+i*5.5);
+    txt(lbl2, ML+96.5, r3y+8.3+i*5.5, 6.5);
+  });
+
+  // Affidabilità
+  txt(t.affidabilita||'', ML+138, r3y+10, 8.5, 'bold');
+  y += r3H;
+
+  // ── Blocchi testo ─────────────────────────────────────────────
+  const textBlocks = [
+    { lbl:'DESCRIZIONE',                                        field:'descrizione',         maxH:50 },
+    { lbl:'REPERTI IN CONNESSIONE CON LO SCHELETRO',            field:'reperti_connessione', maxH:25 },
+    { lbl:'ELEMENTI COSTITUENTI LA COPERTURA E REPERTI CONNESSI',field:'elementi_copertura', maxH:20 },
+  ];
+
+  textBlocks.forEach(b => {
+    if (y > H - 40) return;
+    const blockH = Math.min(b.maxH, H - y - 30);
+    rect(ML, y, IW, blockH);
+    fillRect(ML, y, IW, 5, 230,230,230);
+    lbl(b.lbl, ML+1.5, y+3.5);
+    line(ML, y+5, ML+IW, y+5, 0.15);
+    multiTxt(t[b.field]||'', ML+2, y+8.5, IW-4);
+    y += blockH;
+  });
+
+  // ── Elementi datanti + Datazione ──────────────────────────────
+  if (y < H - 30) {
+    const datH = 20;
+    rect(ML, y, IW*0.55, datH);
+    rect(ML+IW*0.55, y, IW*0.45, datH);
+    fillRect(ML, y, IW*0.55, 5, 230,230,230);
+    fillRect(ML+IW*0.55, y, IW*0.45, 5, 230,230,230);
+    lbl('ELEMENTI DATANTI', ML+1.5, y+3.5);
+    lbl('DATAZIONE', ML+IW*0.55+1.5, y+3.5);
+    line(ML, y+5, ML+IW*0.55, y+5, 0.15);
+    line(ML+IW*0.55, y+5, ML+IW, y+5, 0.15);
+    multiTxt(t.elementi_datanti||'', ML+2, y+8.5, IW*0.55-4);
+    multiTxt(t.datazione||'', ML+IW*0.55+2, y+8.5, IW*0.45-4);
+    y += datH;
+  }
+
+  // ── Osservazioni ──────────────────────────────────────────────
+  if (y < H - 25) {
+    const obsH = Math.min(30, H - y - 20);
+    rect(ML, y, IW, obsH);
+    fillRect(ML, y, IW, 5, 230,230,230);
+    lbl('OSSERVAZIONI E INTERPRETAZIONE', ML+1.5, y+3.5);
+    line(ML, y+5, ML+IW, y+5, 0.15);
+    multiTxt(t.osservazioni||'', ML+2, y+8.5, IW-4);
+    y += obsH;
+  }
+
+  // ── Footer: Bibliografia + Compilatore + Data ─────────────────
+  const footH = 14;
+  const footY = H - MR - footH;
+  rect(ML, footY, IW*0.45, footH);
+  rect(ML+IW*0.45, footY, IW*0.3, footH);
+  rect(ML+IW*0.75, footY, IW*0.25, footH);
+  fillRect(ML, footY, IW*0.45, 5, 230,230,230);
+  fillRect(ML+IW*0.45, footY, IW*0.3, 5, 230,230,230);
+  fillRect(ML+IW*0.75, footY, IW*0.25, 5, 230,230,230);
+  lbl('BIBLIOGRAFIA', ML+1.5, footY+3.5);
+  lbl('COMPILATORE', ML+IW*0.45+1.5, footY+3.5);
+  lbl('DATA CONTROLLO', ML+IW*0.75+1.5, footY+3.5);
+  txt(t.bibliografia||'', ML+2, footY+9, 7);
+  txt(t.compilatore||'', ML+IW*0.45+2, footY+9, 7);
+  txt(t.data_controllo||'', ML+IW*0.75+2, footY+9, 7);
+}
+
+function drawTombaPage2(doc, t) {
+  const W=210, H=297, ML=8, MR=8, MT=8, IW=210-8-8;
+
+  const rect    = (x,y,w,h,lw=0.2) => { doc.setLineWidth(lw); doc.setDrawColor(0); doc.rect(x,y,w,h); };
+  const fillRect= (x,y,w,h,r,g,b)  => { doc.setFillColor(r,g,b); doc.rect(x,y,w,h,'F'); };
+  const txt     = (s,x,y,sz=7,st='normal',col=[0,0,0]) => {
+    doc.setFontSize(sz); doc.setFont('helvetica',st); doc.setTextColor(...col);
+    doc.text(String(s||''), x, y);
+  };
+  const lbl     = (s,x,y)   => txt(s,x,y,5.5,'bold',[60,60,60]);
+  const drawCB  = (checked,x,y) => {
+    const sz=3.2; doc.setLineWidth(0.3); doc.setDrawColor(0); doc.rect(x,y-sz/2,sz,sz);
+    if(checked){ doc.setLineWidth(0.6);
+      doc.line(x+0.4,y+0.2,x+sz*0.38,y+sz*0.32);
+      doc.line(x+sz*0.38,y+sz*0.32,x+sz-0.3,y-sz*0.38); }
+  };
+  const mRow = (label,val,x,y,w) => {
+    lbl(label, x, y); 
+    doc.setFontSize(7.5); doc.setFont('helvetica','normal'); doc.setTextColor(0,0,0);
+    doc.text(String(val||''), x, y+4.5);
+    doc.setLineWidth(0.15); doc.setDrawColor(180,180,180);
+    doc.line(x, y+5.2, x+w, y+5.2);
+  };
+
+  let y = MT;
+
+  // ── Intestazione ─────────────────────────────────────────────
+  fillRect(ML, y, IW, 9, 240,240,240);
+  rect(ML, y, IW, 9, 0.4);
+  txt('Ministero dei Beni e delle Attività Culturali', ML+2, y+4, 8, 'bold');
+  txt('Scheda recupero resti scheletrici — Dati Antropologici', ML+IW*0.5, y+4, 7.5);
+  y += 12;
+
+  // ── Intestazione scheda ───────────────────────────────────────
+  txt(`Scheda N. ${t.numero||''}  —  US ${t.us_collegate||''}  —  ${t.localita||''}  ${t.anno||''}`, ML, y, 7.5, 'bold');
+  y += 8;
+
+  // ── Tabella Dati Antropologici ────────────────────────────────
+  const tableY = y;
+  const leftW  = IW * 0.38;
+  const midW   = IW * 0.22;
+  const rightW = IW - leftW - midW;
+  rect(ML, tableY, IW, 7, 0.3);
+  fillRect(ML, tableY, IW, 7, 220,220,220);
+  txt('DATI ANTROPOLOGICI', ML + IW/2 - 15, tableY+5, 9, 'bold');
+  y += 7;
+
+  // Sottointestazioni
+  rect(ML, y, leftW, 6, 0.3);
+  rect(ML+leftW, y, midW, 6, 0.3);
+  rect(ML+leftW+midW, y, rightW, 6, 0.3);
+  fillRect(ML, y, leftW, 6, 235,235,235);
+  fillRect(ML+leftW, y, midW, 6, 235,235,235);
+  fillRect(ML+leftW+midW, y, rightW, 6, 235,235,235);
+  txt('CARATTERI METRICI', ML+2, y+4.5, 7, 'bold');
+  txt('ARTI', ML+leftW+2, y+4.5, 7, 'bold');
+  txt('CARATTERI MORFOLOGICI', ML+leftW+midW+2, y+4.5, 7, 'bold');
+  y += 6;
+
+  // ── Caratteri metrici — Cranio ────────────────────────────────
+  const metricStartY = y;
+  const rowH = 8;
+  const metrici = [
+    { lbl:'CRANIO', val:'', header:true },
+    { lbl:'lungh. max cranio', val:t.cranio_lungh_max },
+    { lbl:'largh. max cranio', val:t.cranio_largh_max },
+    { lbl:'altezza max faccia', val:t.cranio_alt_faccia },
+    { lbl:'largh. max faccia', val:t.cranio_largh_faccia },
+    { lbl:'BACINO', val:'', header:true },
+    { lbl:'lungh. max', val:t.bacino_lungh_max },
+    { lbl:'largh. max', val:t.bacino_largh_max },
+  ];
+  const arti = [
+    { lbl:'lungh. omero', val:t.omero_lungh },
+    { lbl:'lungh. femore', val:t.femore_lungh },
+    { lbl:'distanza omero-omero', val:t.omero_omero_dist },
+  ];
+
+  // Disegna colonna sinistra (metrici)
+  let my = metricStartY;
+  metrici.forEach(m => {
+    if(m.header) {
+      fillRect(ML, my, leftW, rowH-1, 245,245,245);
+      txt(m.lbl, ML+2, my+5, 6.5, 'bold');
+    } else {
+      lbl(m.lbl, ML+2, my+3.5);
+      txt(m.val||'——', ML+2, my+7, 7.5);
+      doc.setDrawColor(200,200,200); doc.setLineWidth(0.1);
+      doc.line(ML+2, my+7.5, ML+leftW-2, my+7.5);
+    }
+    doc.setDrawColor(180,180,180); doc.setLineWidth(0.1);
+    doc.line(ML, my+rowH-1, ML+leftW, my+rowH-1);
+    my += rowH - 1;
+  });
+  rect(ML, metricStartY, leftW, my-metricStartY, 0.3);
+
+  // Disegna colonna centrale (arti)
+  let ay = metricStartY;
+  arti.forEach(a => {
+    lbl(a.lbl, ML+leftW+2, ay+3.5);
+    txt(a.val||'——', ML+leftW+2, ay+7, 7.5);
+    doc.setDrawColor(200,200,200); doc.setLineWidth(0.1);
+    doc.line(ML+leftW+2, ay+7.5, ML+leftW+midW-2, ay+7.5);
+    doc.setDrawColor(180,180,180); doc.setLineWidth(0.1);
+    doc.line(ML+leftW, ay+rowH-1, ML+leftW+midW, ay+rowH-1);
+    ay += rowH - 1;
+  });
+  rect(ML+leftW, metricStartY, midW, ay-metricStartY, 0.3);
+
+  // ── Caratteri morfologici ─────────────────────────────────────
+  let ry = metricStartY;
+  const morfRow = (label, field, opts) => {
+    lbl(label, ML+leftW+midW+2, ry+3.5);
+    opts.forEach((opt,i) => {
+      const xo = ML+leftW+midW+2 + i*(rightW/2-2);
+      drawCB(t[field]===opt, xo+30, ry+4.5);
+      txt(opt, xo+34.5, ry+4.8, 6);
+    });
+    doc.setDrawColor(210,210,210); doc.setLineWidth(0.1);
+    doc.line(ML+leftW+midW, ry+rowH-1, W-MR, ry+rowH-1);
+    ry += rowH - 1;
+  };
+
+  morfRow('arcate sopracciliari',  'morf_arcate',       ['lievi','pronunciate']);
+  morfRow('margini sopraorbitari', 'morf_margini',      ['taglienti','arrotondati']);
+  morfRow('frontale',              'morf_frontale',     ['verticale','sfuggente']);
+  morfRow('mandibola',             'morf_mandibola',    ['gracile','robusta']);
+  morfRow('mento',                 'morf_mento',        ['arrotondato','squadrato']);
+  morfRow('protub. occipitale',    'morf_protub_occ',   ['lieve','evidente']);
+  morfRow('orbite',                'morf_orbite',       ['circolare','quadrangolare']);
+
+  // Bacino morfologico
+  lbl('BACINO', ML+leftW+midW+2, ry+3.5);
+  ry += rowH-1;
+  morfRow('angolo pubico',         'morf_angolo_pubico',['ottuso','acuto']);
+  morfRow('ali iliache',           'morf_ali_iliache',  ['basse, larghe','alte, strette']);
+  morfRow('incisura ischiatica',   'morf_incisura',     ['bassa, larga','alta, stretta']);
+  rect(ML+leftW+midW, metricStartY, rightW, ry-metricStartY, 0.3);
+
+  // Sesso
+  ry += 4;
+  lbl('SESSO', ML+leftW+midW+2, ry+3.5);
+  drawCB(t.sesso==='F', ML+leftW+midW+25, ry+4);
+  txt('F', ML+leftW+midW+30, ry+4.3, 8, 'bold');
+  drawCB(t.sesso==='M', ML+leftW+midW+45, ry+4);
+  txt('M', ML+leftW+midW+50, ry+4.3, 8, 'bold');
+  ry += 10;
+
+  // ── Note antropologiche ───────────────────────────────────────
+  if (t.note_antropologiche) {
+    rect(ML, ry, IW, 20, 0.2);
+    fillRect(ML, ry, IW, 5, 235,235,235);
+    lbl('NOTE', ML+2, ry+3.5);
+    doc.setFontSize(7); doc.setFont('helvetica','normal'); doc.setTextColor(0,0,0);
+    const noteLines = doc.splitTextToSize(t.note_antropologiche, IW-4);
+    doc.text(noteLines, ML+2, ry+8);
+    ry += 20;
+  }
+
+  // ── Footer ────────────────────────────────────────────────────
+  txt('MiC – Scheda recupero resti scheletrici', ML, H-8, 5, 'normal', [120,120,120]);
+}
+
+// Esporta PDF singola tomba (chiamata dal form)
+function exportTombaPDF(tombaId) {
+  const t = tombaId ? tombe.find(x => x.id === tombaId) : tombe.find(x => x.id === editingTombaId);
+  if (!t) { showToast('⚠ Nessuna tomba selezionata'); return; }
+  loadJsPDF().then(() => {
+    const doc = buildTombaPDF([t]);
+    doc.save(`Tomba_${t.numero}_US_${t.us_collegate||''}.pdf`);
+  });
+}
+
+// Esporta PDF tutte le tombe
+function exportTombePDFTutte() {
+  if (!tombe.length) { showToast('⚠ Nessuna tomba da esportare'); return; }
+  const sorted = [...tombe].sort((a,b) => a.numero - b.numero);
+  loadJsPDF().then(() => {
+    const doc = buildTombaPDF(sorted);
+    doc.save('Tombe_tutte.pdf');
+  });
 }
 
 // ─── SYNC STATUS ─────────────────────────────────────────────────
