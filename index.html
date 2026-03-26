@@ -3327,26 +3327,32 @@ function drawTombaPage1(doc, t) {
   cols.forEach(c => { rect(cx,hRow,c.w,hH); cx+=c.w; });
 
   cx = ML;
-  const qPre  = (t.quota_pre_min||'')  + (t.quota_pre_max  ? ' / '+t.quota_pre_max  : '');
-  const qPost = (t.quota_post_min||'') + (t.quota_post_max ? ' / '+t.quota_post_max : '');
-  const vals0 = [
-    t.localita, t.anno, t.area, t.us_collegate, t.numero, t.pianta_n,
-    'pre: ' + qPre + '  post: ' + qPost
-  ];
+  const vals0 = [t.localita, t.anno, t.area, t.us_collegate, t.numero, t.pianta_n, ''];
   cols.forEach((c,i) => {
     lbl(c.lbl, cx+1.5, hRow+3.5);
-    doc.setFontSize(7.5); doc.setFont('helvetica','normal'); doc.setTextColor(0,0,0);
-    const lines = doc.splitTextToSize(String(vals0[i]||''), c.w-3);
-    doc.text(lines, cx+1.5, hRow+7.5);
+    if (i < 6) {
+      doc.setFontSize(7.5); doc.setFont('helvetica','normal'); doc.setTextColor(0,0,0);
+      const lines = doc.splitTextToSize(String(vals0[i]||''), c.w-3);
+      doc.text(lines, cx+1.5, hRow+7.5);
+    }
     cx += c.w;
   });
-  // Mini label quote
-  txt('QUOTE pre-scavo',  W-MR-cols[6].w+1.5, hRow+5.5, 5);
-  txt('QUOTE post-scavo', W-MR-cols[6].w+1.5, hRow+11,  5);
+  // Quote: due righe con label e valori separati
+  const qx = W-MR-cols[6].w+1.5;
+  const qw = cols[6].w - 3;
+  txt('QUOTE pre-scavo',  qx, hRow+4,   5, 'bold', [60,60,60]);
+  doc.setLineWidth(0.1); doc.setDrawColor(180,180,180);
+  doc.line(ML+IW-cols[6].w, hRow+hH/2, W-MR, hRow+hH/2);
+  txt('QUOTE post-scavo', qx, hRow+4+hH/2, 5, 'bold', [60,60,60]);
+  const qPre  = (t.quota_pre_min||'—') + (t.quota_pre_max  ? ' / '+t.quota_pre_max  : '');
+  const qPost = (t.quota_post_min||'—') + (t.quota_post_max ? ' / '+t.quota_post_max : '');
+  doc.setFontSize(7); doc.setFont('helvetica','normal'); doc.setTextColor(0,0,0);
+  doc.text(doc.splitTextToSize(qPre,  qw), qx, hRow+8);
+  doc.text(doc.splitTextToSize(qPost, qw), qx, hRow+8+hH/2);
   y += hH;
 
   // ── Giacitura + Tipologia + Orientamento + Condizioni ─────────
-  const r2H = 18; const r2y = y;
+  const r2H = 24; const r2y = y;
   rect(ML, r2y, IW, r2H);
   line(ML+38, r2y, ML+38, r2y+r2H);
   line(ML+38+90, r2y, ML+38+90, r2y+r2H);
@@ -3429,49 +3435,43 @@ function drawTombaPage1(doc, t) {
   y += r3H;
 
   // ── Blocchi testo ─────────────────────────────────────────────
-  const textBlocks = [
-    { lbl:'DESCRIZIONE',                                        field:'descrizione',         maxH:50 },
-    { lbl:'REPERTI IN CONNESSIONE CON LO SCHELETRO',            field:'reperti_connessione', maxH:25 },
-    { lbl:'ELEMENTI COSTITUENTI LA COPERTURA E REPERTI CONNESSI',field:'elementi_copertura', maxH:20 },
-  ];
+  // Spazio disponibile per i blocchi testo
+  const _footH = 14;
+  const _footY = H - MR - _footH;
+  const availH = _footY - y;
 
-  textBlocks.forEach(b => {
-    if (y > H - 40) return;
-    const blockH = Math.min(b.maxH, H - y - 30);
+  // Blocchi a dimensione fissa tranne Descrizione che prende tutto il resto
+  const repH = 22, copH = 18, datH = 18, obsH = 22;
+  const descH = availH - repH - copH - datH - obsH;
+
+  const drawBlock = (label, text, blockH) => {
     rect(ML, y, IW, blockH);
     fillRect(ML, y, IW, 5, 230,230,230);
-    lbl(b.lbl, ML+1.5, y+3.5);
+    lbl(label, ML+1.5, y+3.5);
     line(ML, y+5, ML+IW, y+5, 0.15);
-    multiTxt(t[b.field]||'', ML+2, y+8.5, IW-4);
+    multiTxt(text||'', ML+2, y+8.5, IW-4);
     y += blockH;
-  });
+  };
+
+  drawBlock('DESCRIZIONE', t.descrizione, Math.max(descH, 30));
+  drawBlock('REPERTI IN CONNESSIONE CON LO SCHELETRO', t.reperti_connessione, repH);
+  drawBlock('ELEMENTI COSTITUENTI LA COPERTURA E REPERTI CONNESSI', t.elementi_copertura, copH);
 
   // ── Elementi datanti + Datazione ──────────────────────────────
-  if (y < H - 30) {
-    const datH = 20;
-    rect(ML, y, IW*0.55, datH);
-    rect(ML+IW*0.55, y, IW*0.45, datH);
-    fillRect(ML, y, IW*0.55, 5, 230,230,230);
-    fillRect(ML+IW*0.55, y, IW*0.45, 5, 230,230,230);
-    lbl('ELEMENTI DATANTI', ML+1.5, y+3.5);
-    lbl('DATAZIONE', ML+IW*0.55+1.5, y+3.5);
-    line(ML, y+5, ML+IW*0.55, y+5, 0.15);
-    line(ML+IW*0.55, y+5, ML+IW, y+5, 0.15);
-    multiTxt(t.elementi_datanti||'', ML+2, y+8.5, IW*0.55-4);
-    multiTxt(t.datazione||'', ML+IW*0.55+2, y+8.5, IW*0.45-4);
-    y += datH;
-  }
+  rect(ML, y, IW*0.55, datH);
+  rect(ML+IW*0.55, y, IW*0.45, datH);
+  fillRect(ML, y, IW*0.55, 5, 230,230,230);
+  fillRect(ML+IW*0.55, y, IW*0.45, 5, 230,230,230);
+  lbl('ELEMENTI DATANTI', ML+1.5, y+3.5);
+  lbl('DATAZIONE', ML+IW*0.55+1.5, y+3.5);
+  line(ML, y+5, ML+IW*0.55, y+5, 0.15);
+  line(ML+IW*0.55, y+5, ML+IW, y+5, 0.15);
+  multiTxt(t.elementi_datanti||'', ML+2, y+8.5, IW*0.55-4);
+  multiTxt(t.datazione||'', ML+IW*0.55+2, y+8.5, IW*0.45-4);
+  y += datH;
 
   // ── Osservazioni ──────────────────────────────────────────────
-  if (y < H - 25) {
-    const obsH = Math.min(30, H - y - 20);
-    rect(ML, y, IW, obsH);
-    fillRect(ML, y, IW, 5, 230,230,230);
-    lbl('OSSERVAZIONI E INTERPRETAZIONE', ML+1.5, y+3.5);
-    line(ML, y+5, ML+IW, y+5, 0.15);
-    multiTxt(t.osservazioni||'', ML+2, y+8.5, IW-4);
-    y += obsH;
-  }
+  drawBlock('OSSERVAZIONI E INTERPRETAZIONE', t.osservazioni, obsH);
 
   // ── Footer: Bibliografia + Compilatore + Data ─────────────────
   const footH = 14;
@@ -3601,12 +3601,14 @@ function drawTombaPage2(doc, t) {
 
   // ── Caratteri morfologici ─────────────────────────────────────
   let ry = metricStartY;
+  const labelW = 38; // larghezza colonna etichetta
+  const cbColW = (rightW - labelW) / 2;
   const morfRow = (label, field, opts) => {
     lbl(label, ML+leftW+midW+2, ry+3.5);
     opts.forEach((opt,i) => {
-      const xo = ML+leftW+midW+2 + i*(rightW/2-2);
-      drawCB(t[field]===opt, xo+30, ry+4.5);
-      txt(opt, xo+34.5, ry+4.8, 6);
+      const xo = ML+leftW+midW+labelW + i*cbColW;
+      drawCB(t[field]===opt, xo, ry+3.8);
+      txt(opt, xo+4.5, ry+4.1, 6);
     });
     doc.setDrawColor(210,210,210); doc.setLineWidth(0.1);
     doc.line(ML+leftW+midW, ry+rowH-1, W-MR, ry+rowH-1);
