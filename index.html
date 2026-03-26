@@ -3325,6 +3325,10 @@ function drawTombaPage1(doc, t) {
   ];
   let cx = ML;
   cols.forEach(c => { rect(cx,hRow,c.w,hH); cx+=c.w; });
+  // Dividi cella quote in due metà orizzontali
+  const qColX = ML + cols.slice(0,6).reduce((s,c)=>s+c.w,0);
+  const qColW = cols[6].w;
+  line(qColX, hRow+hH/2, qColX+qColW, hRow+hH/2, 0.2);
 
   cx = ML;
   const vals0 = [t.localita, t.anno, t.area, t.us_collegate, t.numero, t.pianta_n, ''];
@@ -3337,18 +3341,15 @@ function drawTombaPage1(doc, t) {
     }
     cx += c.w;
   });
-  // Quote: due righe con label e valori separati
-  const qx = W-MR-cols[6].w+1.5;
-  const qw = cols[6].w - 3;
-  txt('QUOTE pre-scavo',  qx, hRow+4,   5, 'bold', [60,60,60]);
-  doc.setLineWidth(0.1); doc.setDrawColor(180,180,180);
-  doc.line(ML+IW-cols[6].w, hRow+hH/2, W-MR, hRow+hH/2);
-  txt('QUOTE post-scavo', qx, hRow+4+hH/2, 5, 'bold', [60,60,60]);
-  const qPre  = (t.quota_pre_min||'—') + (t.quota_pre_max  ? ' / '+t.quota_pre_max  : '');
-  const qPost = (t.quota_post_min||'—') + (t.quota_post_max ? ' / '+t.quota_post_max : '');
-  doc.setFontSize(7); doc.setFont('helvetica','normal'); doc.setTextColor(0,0,0);
-  doc.text(doc.splitTextToSize(qPre,  qw), qx, hRow+8);
-  doc.text(doc.splitTextToSize(qPost, qw), qx, hRow+8+hH/2);
+  // Quote: label nella metà superiore, valori sotto
+  const qx = qColX+1.5, qw = qColW-3;
+  txt('QUOTE pre-scavo',  qx, hRow+3.5, 5, 'bold', [60,60,60]);
+  txt('QUOTE post-scavo', qx, hRow+3.5+hH/2, 5, 'bold', [60,60,60]);
+  const qPre  = (t.quota_pre_min||'') + (t.quota_pre_max  ? ' / '+t.quota_pre_max  : '');
+  const qPost = (t.quota_post_min||'') + (t.quota_post_max ? ' / '+t.quota_post_max : '');
+  doc.setFontSize(7.5); doc.setFont('helvetica','normal'); doc.setTextColor(0,0,0);
+  doc.text(String(qPre),  qx, hRow+7.5);
+  doc.text(String(qPost), qx, hRow+7.5+hH/2);
   y += hH;
 
   // ── Giacitura + Tipologia + Orientamento + Condizioni ─────────
@@ -3551,7 +3552,7 @@ function drawTombaPage2(doc, t) {
 
   // ── Caratteri metrici — Cranio ────────────────────────────────
   const metricStartY = y;
-  const rowH = 8;
+  const rowH = 11;
   const metrici = [
     { lbl:'CRANIO', val:'', header:true },
     { lbl:'lungh. max cranio', val:t.cranio_lungh_max },
@@ -3572,13 +3573,16 @@ function drawTombaPage2(doc, t) {
   let my = metricStartY;
   metrici.forEach(m => {
     if(m.header) {
-      fillRect(ML, my, leftW, rowH-1, 245,245,245);
-      txt(m.lbl, ML+2, my+5, 6.5, 'bold');
+      fillRect(ML, my, leftW, rowH-1, 235,235,235);
+      txt(m.lbl, ML+2, my+6, 6.5, 'bold');
     } else {
       lbl(m.lbl, ML+2, my+3.5);
-      txt(m.val||'——', ML+2, my+7, 7.5);
-      doc.setDrawColor(200,200,200); doc.setLineWidth(0.1);
-      doc.line(ML+2, my+7.5, ML+leftW-2, my+7.5);
+      if (m.val) {
+        doc.setFontSize(8); doc.setFont('helvetica','normal'); doc.setTextColor(0,0,0);
+        doc.text(String(m.val), ML+2, my+8.5);
+      }
+      doc.setDrawColor(200,200,200); doc.setLineWidth(0.15);
+      doc.line(ML+2, my+9.2, ML+leftW-2, my+9.2);
     }
     doc.setDrawColor(180,180,180); doc.setLineWidth(0.1);
     doc.line(ML, my+rowH-1, ML+leftW, my+rowH-1);
@@ -3590,9 +3594,12 @@ function drawTombaPage2(doc, t) {
   let ay = metricStartY;
   arti.forEach(a => {
     lbl(a.lbl, ML+leftW+2, ay+3.5);
-    txt(a.val||'——', ML+leftW+2, ay+7, 7.5);
-    doc.setDrawColor(200,200,200); doc.setLineWidth(0.1);
-    doc.line(ML+leftW+2, ay+7.5, ML+leftW+midW-2, ay+7.5);
+    if (a.val) {
+      doc.setFontSize(8); doc.setFont('helvetica','normal'); doc.setTextColor(0,0,0);
+      doc.text(String(a.val), ML+leftW+2, ay+8.5);
+    }
+    doc.setDrawColor(200,200,200); doc.setLineWidth(0.15);
+    doc.line(ML+leftW+2, ay+9.2, ML+leftW+midW-2, ay+9.2);
     doc.setDrawColor(180,180,180); doc.setLineWidth(0.1);
     doc.line(ML+leftW, ay+rowH-1, ML+leftW+midW, ay+rowH-1);
     ay += rowH - 1;
@@ -3631,14 +3638,18 @@ function drawTombaPage2(doc, t) {
   morfRow('incisura ischiatica',   'morf_incisura',     ['bassa, larga','alta, stretta']);
   rect(ML+leftW+midW, metricStartY, rightW, ry-metricStartY, 0.3);
 
-  // Sesso
-  ry += 4;
-  lbl('SESSO', ML+leftW+midW+2, ry+3.5);
-  drawCB(t.sesso==='F', ML+leftW+midW+25, ry+4);
-  txt('F', ML+leftW+midW+30, ry+4.3, 8, 'bold');
-  drawCB(t.sesso==='M', ML+leftW+midW+45, ry+4);
-  txt('M', ML+leftW+midW+50, ry+4.3, 8, 'bold');
-  ry += 10;
+  // Sesso: allineato con checkbox morfologici
+  ry += 2;
+  const sessoY = ry + 4;
+  lbl('SESSO', ML+leftW+midW+2, sessoY);
+  // Posiziona F e M allineati come i checkbox morfologici
+  const fX = ML+leftW+midW+labelW;
+  const mX = ML+leftW+midW+labelW+cbColW;
+  drawCB(t.sesso==='F', fX, sessoY+0.5);
+  txt('F', fX+5, sessoY+0.8, 9, 'bold');
+  drawCB(t.sesso==='M', mX, sessoY+0.5);
+  txt('M', mX+5, sessoY+0.8, 9, 'bold');
+  ry += 12;
 
   // ── Note antropologiche ───────────────────────────────────────
   if (t.note_antropologiche) {
