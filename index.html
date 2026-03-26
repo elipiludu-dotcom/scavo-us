@@ -3314,6 +3314,7 @@ function drawTombaPage1(doc, t) {
   // ── Griglia header ─────────────────────────────────────────────
   // LOCALITÀ | ANNO | AREA | US | SCHEDA N. | PIANTA N. | MIN/MAX
   const hRow = y; const hH = 16;
+  // Colonne principali (senza quote)
   const cols = [
     { lbl:'LOCALITÀ',  w:32 },
     { lbl:'ANNO',      w:14 },
@@ -3321,35 +3322,54 @@ function drawTombaPage1(doc, t) {
     { lbl:'US',        w:22 },
     { lbl:'SCHEDA N.', w:22 },
     { lbl:'PIANTA N.', w:20 },
-    { lbl:'MIN/MAX',   w:IW-32-14-28-22-22-20 },
   ];
+  const qColW = IW - cols.reduce((s,c)=>s+c.w,0);
+  const qColX = ML + IW - qColW;
+
+  // Disegna celle principali
   let cx = ML;
   cols.forEach(c => { rect(cx,hRow,c.w,hH); cx+=c.w; });
-  // Dividi cella quote in due metà orizzontali
-  const qColX = ML + cols.slice(0,6).reduce((s,c)=>s+c.w,0);
-  const qColW = cols[6].w;
-  line(qColX, hRow+hH/2, qColX+qColW, hRow+hH/2, 0.2);
 
+  // Cella quote: divisa in 2 righe
+  const qH = hH / 2;
+  rect(qColX, hRow,      qColW, qH);   // riga pre-scavo
+  rect(qColX, hRow+qH,   qColW, qH);   // riga post-scavo
+
+  // Dentro ogni riga: | label | MIN_val | MAX_val |
+  // Dividi in 3 sotto-colonne: label(40%) | min(30%) | max(30%)
+  const qLblW = qColW * 0.42;
+  const qValW = (qColW - qLblW) / 2;
+  // Linee verticali dentro la cella quote
+  line(qColX+qLblW, hRow,    qColX+qLblW, hRow+hH, 0.15);
+  line(qColX+qLblW+qValW, hRow, qColX+qLblW+qValW, hRow+hH, 0.15);
+
+  // Label MIN / MAX in cima
+  txt('MIN', qColX+qLblW+1.5,         hRow+3.5, 5, 'bold', [80,80,80]);
+  txt('MAX', qColX+qLblW+qValW+1.5,   hRow+3.5, 5, 'bold', [80,80,80]);
+  txt('MIN', qColX+qLblW+1.5,         hRow+qH+3.5, 5, 'bold', [80,80,80]);
+  txt('MAX', qColX+qLblW+qValW+1.5,   hRow+qH+3.5, 5, 'bold', [80,80,80]);
+
+  // Label pre/post scavo
+  txt('pre-scavo',  qColX+1.5, hRow+3.5,    5.5, 'bold', [60,60,60]);
+  txt('post-scavo', qColX+1.5, hRow+qH+3.5, 5.5, 'bold', [60,60,60]);
+
+  // Valori quote
+  doc.setFontSize(7.5); doc.setFont('helvetica','normal'); doc.setTextColor(0,0,0);
+  doc.text(String(t.quota_pre_min||''),  qColX+qLblW+1.5,       hRow+7.5);
+  doc.text(String(t.quota_pre_max||''),  qColX+qLblW+qValW+1.5, hRow+7.5);
+  doc.text(String(t.quota_post_min||''), qColX+qLblW+1.5,       hRow+qH+7.5);
+  doc.text(String(t.quota_post_max||''), qColX+qLblW+qValW+1.5, hRow+qH+7.5);
+
+  // Riempie le celle principali
   cx = ML;
-  const vals0 = [t.localita, t.anno, t.area, t.us_collegate, t.numero, t.pianta_n, ''];
+  const vals0 = [t.localita, t.anno, t.area, t.us_collegate, t.numero, t.pianta_n];
   cols.forEach((c,i) => {
     lbl(c.lbl, cx+1.5, hRow+3.5);
-    if (i < 6) {
-      doc.setFontSize(7.5); doc.setFont('helvetica','normal'); doc.setTextColor(0,0,0);
-      const lines = doc.splitTextToSize(String(vals0[i]||''), c.w-3);
-      doc.text(lines, cx+1.5, hRow+7.5);
-    }
+    doc.setFontSize(7.5); doc.setFont('helvetica','normal'); doc.setTextColor(0,0,0);
+    const lines = doc.splitTextToSize(String(vals0[i]||''), c.w-3);
+    doc.text(lines, cx+1.5, hRow+7.5);
     cx += c.w;
   });
-  // Quote: label nella metà superiore, valori sotto
-  const qx = qColX+1.5, qw = qColW-3;
-  txt('QUOTE pre-scavo',  qx, hRow+3.5, 5, 'bold', [60,60,60]);
-  txt('QUOTE post-scavo', qx, hRow+3.5+hH/2, 5, 'bold', [60,60,60]);
-  const qPre  = (t.quota_pre_min||'') + (t.quota_pre_max  ? ' / '+t.quota_pre_max  : '');
-  const qPost = (t.quota_post_min||'') + (t.quota_post_max ? ' / '+t.quota_post_max : '');
-  doc.setFontSize(7.5); doc.setFont('helvetica','normal'); doc.setTextColor(0,0,0);
-  doc.text(String(qPre),  qx, hRow+7.5);
-  doc.text(String(qPost), qx, hRow+7.5+hH/2);
   y += hH;
 
   // ── Giacitura + Tipologia + Orientamento + Condizioni ─────────
