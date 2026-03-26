@@ -2189,7 +2189,7 @@ async function importTombeFromExcel(input) {
     const nuove = rows.map(r => ({
       id: Date.now().toString(36) + Math.random().toString(36).slice(2),
       numero:              parseInt(r['numero']) || 0,
-      localita:            String(r['localita']          || '').replace(//g,''),
+      localita:            String(r['localita']          || '').replace(/\r/g,''),
       anno:                String(r['anno']               || ''),
       area:                String(r['area']               || ''),
       us_collegate:        String(r['us_collegate']       || ''),
@@ -2214,16 +2214,12 @@ async function importTombeFromExcel(input) {
       osso_gambe:          boolOssa(r['osso_gambe']),
       osso_mani:           boolOssa(r['osso_mani']),
       osso_piedi:          boolOssa(r['osso_piedi']),
-      descrizione:         String(r['descrizione']        || '').replace(//g,'
-'),
-      reperti_connessione: String(r['reperti_connessione']|| '').replace(//g,'
-'),
-      elementi_copertura:  String(r['elementi_copertura'] || '').replace(//g,'
-'),
+      descrizione:         String(r['descrizione']        || '').replace(/\r/g,'\n'),
+      reperti_connessione: String(r['reperti_connessione']|| '').replace(/\r/g,'\n'),
+      elementi_copertura:  String(r['elementi_copertura'] || '').replace(/\r/g,'\n'),
       elementi_datanti:    String(r['elementi_datanti']   || ''),
       datazione:           String(r['datazione']          || ''),
-      osservazioni:        String(r['osservazioni']       || '').replace(//g,'
-'),
+      osservazioni:        String(r['osservazioni']       || '').replace(/\r/g,'\n'),
       bibliografia:        String(r['bibliografia']       || ''),
       compilatore:         String(r['compilatore']        || ''),
       data_controllo:      String(r['data_controllo']     || ''),
@@ -2258,8 +2254,7 @@ async function importTombeFromExcel(input) {
       icon: '⚰',
       title: `Importare ${nuove.length} schede tombe?`,
       message: 'Le tombe esistenti con lo stesso numero verranno aggiornate.',
-      detail: nuove.slice(0,5).map(t => `T.${t.numero} — ${t.localita||'?'} ${t.anno||''}`).join('
-') +
+      detail: nuove.slice(0,5).map(t => `T.${t.numero} — ${t.localita||'?'} ${t.anno||''}`).join('\n') +
               (nuove.length > 5 ? `
 … e altre ${nuove.length-5}` : ''),
       okLabel: '📥 Importa',
