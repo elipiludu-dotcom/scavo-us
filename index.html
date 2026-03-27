@@ -1714,16 +1714,22 @@ function renderStats() {
   const tipi = [...new Set(schede.map(s=>s.tipo).filter(Boolean))].length;
   const totalTombe = tombe.length;
   document.getElementById('statsGrid').innerHTML = `
-    <div class="stat-box"><span class="stat-num">${total}</span><span class="stat-label">Schede US</span></div>
-    <div class="stat-box"><span class="stat-num">${totalTombe}</span><span class="stat-label">Tombe</span></div>
+    <div class="stat-box stat-box-link stat-box-action" onclick="showView('new')" title="Nuova scheda US">
+      <span class="stat-action-icon">+</span>
+      <span class="stat-label">Nuova Scheda US</span>
+    </div>
+    <div class="stat-box stat-box-link stat-box-action" onclick="openNewTomba()" title="Nuova tomba">
+      <span class="stat-action-icon">+</span>
+      <span class="stat-label">Nuova Tomba</span>
+    </div>
     <div class="stat-box stat-box-link" onclick="showView('schede')" title="Vedi tutte le schede US">
       <span class="stat-num">${total}</span>
-      <span class="stat-label">Schede US Catalogate</span>
+      <span class="stat-label">Schede US</span>
       <span class="stat-arrow">→</span>
     </div>
     <div class="stat-box stat-box-link" onclick="showView('tombe')" title="Vedi tutte le tombe">
       <span class="stat-num">${totalTombe}</span>
-      <span class="stat-label">Tombe Catalogate</span>
+      <span class="stat-label">Tombe</span>
       <span class="stat-arrow">→</span>
     </div>
   `;
