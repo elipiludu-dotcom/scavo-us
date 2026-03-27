@@ -478,6 +478,22 @@
     position: relative;
     overflow: hidden;
   }
+  .stat-box-action {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background: rgba(201,150,58,0.06) !important;
+    border-color: rgba(201,150,58,0.3) !important;
+    gap: 8px;
+  }
+  .stat-action-icon {
+    font-family: 'Ink Free', cursive;
+    font-size: 2.8rem;
+    font-weight: 700;
+    color: var(--earth);
+    line-height: 1;
+  }
   .stat-box::before {
     content: '';
     position: absolute;
@@ -791,7 +807,7 @@
       <div class="form-header">
         <h2 id="formTitle">Nuova Scheda US</h2>
         <div class="form-actions">
-          <button class="btn btn-secondary" onclick="showView('list')">Annulla</button>
+          <button class="btn btn-secondary" onclick="showView('list')" style="white-space:nowrap">← Home</button>
           <button class="btn btn-success" onclick="saveScheda()">Salva</button>
         </div>
       </div>
@@ -988,7 +1004,7 @@
       <div class="form-header">
         <h2 id="tombaFormTitle">Nuova Scheda Tomba</h2>
         <div style="display:flex;gap:8px;flex-wrap:wrap">
-          <button class="btn btn-secondary" onclick="showView('tombe')">Annulla</button>
+          <button class="btn btn-secondary" onclick="showView('list')" style="white-space:nowrap">← Home</button>
           <button class="btn btn-danger" id="btnDeleteTomba" style="display:none" onclick="deleteTomba()">🗑 Elimina</button>
           <button class="btn btn-secondary" id="btnExportTombaPDF" style="display:none" onclick="exportTombaPDF()">⬇ PDF</button>
           <button class="btn btn-success" onclick="saveTomba()">Salva</button>
