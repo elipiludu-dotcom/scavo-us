@@ -2198,15 +2198,23 @@ function renderUSBadges() {
   const container = document.getElementById('us-badges');
   if (!container) return;
   const nums = val.split(',').map(s => s.trim()).filter(s => s);
-  container.innerHTML = nums.map(n => {
+  container.innerHTML = '';
+  nums.forEach(n => {
     const found = schede.find(s => String(s.numero) === n);
-    const cls   = found ? 'us-badge-link' : 'us-badge-link';
-    const title = found ? `Apri US ${n}` : `US ${n} (non in archivio)`;
-    const style = found ? '' : 'opacity:0.5;cursor:default';
-    return `<span class="${cls}" style="${style}" title="${title}"
-              onclick="${found ? `openUSModal(${found.id ? '"'+found.id+'"' : n})` : ''}"
-            >US ${n}</span>`;
-  }).join('');
+    const span = document.createElement('span');
+    span.className = 'us-badge-link';
+    span.textContent = 'US ' + n;
+    if (found) {
+      span.title = 'Apri US ' + n;
+      span.dataset.usId = found.id;
+      span.addEventListener('click', () => openUSModal(found.id));
+    } else {
+      span.title = 'US ' + n + ' (non in archivio)';
+      span.style.opacity = '0.5';
+      span.style.cursor = 'default';
+    }
+    container.appendChild(span);
+  });
 }
 
 function openUSModal(id) {
