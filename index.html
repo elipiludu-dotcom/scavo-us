@@ -474,6 +474,50 @@
     color:var(--ink); cursor:pointer; user-select:none; }
   .radio-label input { accent-color:var(--earth); cursor:pointer; }
 
+  /* Modal scheda US in sola lettura */
+  .us-modal-overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.55);
+    z-index: 3000; display: flex; align-items: center; justify-content: center;
+    padding: 16px;
+  }
+  .us-modal {
+    background: var(--parchment-light); border: 1px solid var(--border);
+    border-radius: 4px; width: 100%; max-width: 680px; max-height: 88vh;
+    display: flex; flex-direction: column; overflow: hidden;
+    box-shadow: 0 8px 40px rgba(0,0,0,0.35);
+  }
+  .us-modal-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 18px; border-bottom: 1px solid var(--border);
+    background: var(--parchment);
+  }
+  .us-modal-header h3 { margin:0; font-size:0.95rem; color:var(--earth); }
+  .us-modal-body { overflow-y: auto; padding: 18px; flex:1; }
+  .us-modal-field { margin-bottom: 12px; }
+  .us-modal-field label {
+    display: block; font-size: 0.6rem; font-weight: 700; letter-spacing: 0.1em;
+    text-transform: uppercase; color: var(--muted); margin-bottom: 3px;
+  }
+  .us-modal-field .us-modal-value {
+    font-size: 0.85rem; color: var(--ink); line-height: 1.5;
+    padding: 6px 10px; background: rgba(255,255,255,0.04);
+    border: 1px solid var(--border); border-radius: 3px; min-height: 28px;
+    white-space: pre-wrap;
+  }
+  .us-modal-field .us-modal-value.empty { color: var(--muted); font-style: italic; }
+  .us-modal-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .us-modal-grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
+  .us-modal-sep { font-size:0.6rem; font-weight:700; letter-spacing:0.12em;
+    text-transform:uppercase; color:var(--earth); padding: 8px 0 4px;
+    border-bottom: 1px solid var(--border); margin-bottom: 8px; }
+  .us-badge-link {
+    display: inline-block; margin: 2px 3px; padding: 2px 8px;
+    border-radius: 10px; font-size: 0.72rem; cursor: pointer;
+    background: rgba(201,150,58,0.15); border: 1px solid var(--earth);
+    color: var(--earth); transition: background 0.15s;
+  }
+  .us-badge-link:hover { background: rgba(201,150,58,0.3); }
+
   .confirm-overlay {
     display:none; position:fixed; inset:0; background:rgba(0,0,0,0.6);
     z-index:1000; align-items:center; justify-content:center;
@@ -891,7 +935,8 @@
         <div class="field-row single">
           <div class="field-group">
             <label>US collegate <span style="font-size:0.75rem;color:var(--muted)">(numeri separati da virgola)</span></label>
-            <input type="text" id="t_us_collegate" placeholder="es. 101, -174, 2627">
+            <input type="text" id="t_us_collegate" placeholder="es. 101, -174, 2627" oninput="renderUSBadges()">
+            <div id="us-badges" style="margin-top:6px;display:flex;flex-wrap:wrap;gap:4px"></div>
           </div>
         </div>
       </div>
@@ -1161,6 +1206,17 @@
 </div>
 
 <!-- Modal di conferma custom -->
+<div id="us-modal-overlay" class="us-modal-overlay" style="display:none" onclick="closeUSModal(event)">
+  <div class="us-modal">
+    <div class="us-modal-header">
+      <h3 id="us-modal-title">Scheda US</h3>
+      <button onclick="document.getElementById('us-modal-overlay').style.display='none'"
+              style="background:none;border:none;color:var(--muted);font-size:1.2rem;cursor:pointer;padding:0 4px">✕</button>
+    </div>
+    <div class="us-modal-body" id="us-modal-body"></div>
+  </div>
+</div>
+
 <div id="confirmOverlay" class="confirm-overlay">
   <div class="confirm-box">
     <div class="confirm-icon" id="confirmIcon">⚠️</div>
@@ -1988,6 +2044,7 @@ function loadTombaForm(t) {
    'morf_ali_iliache','morf_incisura','stato']
     .forEach(k => { const el = document.getElementById('t_'+k); if(el) el.value = t[k] || ''; });
   const dc = document.getElementById('t_data_controllo'); if(dc) dc.value = t.data_controllo || '';
+  renderUSBadges();
 }
 
 function getTombaFromForm(id) {
@@ -2134,6 +2191,108 @@ async function deleteTomba() {
 }
 
 function updateTombaStatoStyle() {}
+
+// ─── MODAL SCHEDA US IN SOLA LETTURA ─────────────────────────────
+function renderUSBadges() {
+  const val = (document.getElementById('t_us_collegate')?.value || '');
+  const container = document.getElementById('us-badges');
+  if (!container) return;
+  const nums = val.split(',').map(s => s.trim()).filter(s => s);
+  container.innerHTML = nums.map(n => {
+    const found = schede.find(s => String(s.numero) === n);
+    const cls   = found ? 'us-badge-link' : 'us-badge-link';
+    const title = found ? `Apri US ${n}` : `US ${n} (non in archivio)`;
+    const style = found ? '' : 'opacity:0.5;cursor:default';
+    return `<span class="${cls}" style="${style}" title="${title}"
+              onclick="${found ? `openUSModal(${found.id ? '"'+found.id+'"' : n})` : ''}"
+            >US ${n}</span>`;
+  }).join('');
+}
+
+function openUSModal(id) {
+  const s = schede.find(x => x.id === id) || schede.find(x => String(x.numero) === String(id));
+  if (!s) { showToast('⚠ Scheda US non trovata'); return; }
+
+  document.getElementById('us-modal-title').textContent = `Scheda US ${s.numero}`;
+
+  const v = (val, fallback='—') => {
+    const str = String(val||'').trim();
+    const cls = str ? '' : ' empty';
+    return `<div class="us-modal-value${cls}">${str || fallback}</div>`;
+  };
+  const field = (label, val) =>
+    `<div class="us-modal-field"><label>${label}</label>${v(val)}</div>`;
+  const sep = (t) => `<div class="us-modal-sep">${t}</div>`;
+  const bool = (val) => val === true || val === 'true' || val === '1' || val === 1;
+
+  let html = '';
+
+  // Identificazione
+  html += `<div class="us-modal-grid-3">
+    ${field('Numero US', s.numero)}
+    ${field('Anno', s.anno)}
+    ${field('Area', s.area)}
+  </div>
+  <div class="us-modal-grid">
+    ${field('Tipo', s.tipo)}
+    ${field('Saggio', s.saggio)}
+  </div>`;
+
+  // Caratteri
+  html += sep('Caratteri');
+  html += `<div class="us-modal-grid">
+    ${field('Formazione', bool(s.formazione) ? 'Artificiale' : 'Naturale')}
+    ${field('Stato conservazione', s.stato_conservazione)}
+  </div>`;
+  html += field('Definizione e posizione', s.definizione);
+  html += field('Criteri di distinzione', s.criteri);
+  html += field('Modo di formazione', s.modo_formazione);
+
+  // Componenti
+  html += sep('Componenti');
+  html += `<div class="us-modal-grid">
+    ${field('Inclusi geologici', s.inclusi_geo)}
+    ${field('Inclusi organici', s.inclusi_org)}
+  </div>
+  <div class="us-modal-grid">
+    ${field('Inclusi artificiali', s.inclusi_art)}
+    ${field('Colore', s.colore)}
+  </div>
+  <div class="us-modal-grid">
+    ${field('Consistenza', s.consistenza)}
+    ${field('Composizione', s.composizione)}
+  </div>`;
+
+  // Quote
+  html += sep('Quote e misure');
+  html += `<div class="us-modal-grid-3">
+    ${field('Quota max', s.quota_max)}
+    ${field('Quota min', s.quota_min)}
+    ${field('Spessore', s.spessore)}
+  </div>`;
+
+  // Testi
+  html += sep('Descrizione');
+  html += field('Descrizione', s.descrizione);
+  html += field('Osservazioni', s.osservazioni);
+  html += field('Rapporti stratigrafici', s.rapporti);
+  html += field('Reperti', s.reperti);
+
+  // Admin
+  html += sep('Amministrativo');
+  html += `<div class="us-modal-grid">
+    ${field('Responsabile compilazione', s.responsabile)}
+    ${field('Data', s.data)}
+  </div>`;
+
+  document.getElementById('us-modal-body').innerHTML = html;
+  document.getElementById('us-modal-overlay').style.display = 'flex';
+}
+
+function closeUSModal(e) {
+  if (e.target.id === 'us-modal-overlay')
+    document.getElementById('us-modal-overlay').style.display = 'none';
+}
 
 // ─── MODAL CONFERMA ──────────────────────────────────────────────
 let _confirmResolve = null;
