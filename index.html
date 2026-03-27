@@ -27,7 +27,7 @@
     });
   }
 </script>
-<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;600;700&family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Ink+Free&family=Cormorant+Garamond:wght@400;600;700&family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
 <style>
   :root {
     --sand: #2e2b26;
@@ -402,50 +402,108 @@
   .reperto-item .btn-rm { position: absolute; top: 8px; right: 8px; background: none; border: none; color: var(--muted); font-size: 1rem; cursor: pointer; transition: color 0.15s; }
   .reperto-item .btn-rm:hover { color: var(--accent); }
 
-  .stats-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; padding: 16px; }
+  /* ── Homepage hero ─────────────────────────────────────────── */
+  .home-hero {
+    text-align: center;
+    padding: 48px 20px 28px;
+    position: relative;
+  }
+  .home-site-label {
+    font-family: 'Space Mono', monospace;
+    font-size: 0.62rem;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 6px;
+  }
+  .home-title {
+    font-family: 'Cormorant Garamond', serif;
+    font-size: clamp(2.2rem, 6vw, 3.6rem);
+    font-weight: 700;
+    color: var(--earth);
+    margin: 0 0 4px;
+    line-height: 1.05;
+    letter-spacing: 0.02em;
+  }
+  .home-subtitle {
+    font-family: 'Space Mono', monospace;
+    font-size: 0.7rem;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 28px;
+  }
+  .home-divider {
+    width: 60px;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--earth), transparent);
+    margin: 0 auto 36px;
+    opacity: 0.6;
+  }
+
+  /* ── Stats grid ─────────────────────────────────────────────── */
+  .stats-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 14px;
+    padding: 0 32px 40px;
+    max-width: 700px;
+    margin: 0 auto;
+  }
   .stat-box-link {
     cursor: pointer;
-    transition: border-color 0.15s, background 0.15s;
+    transition: border-color 0.2s, transform 0.15s, background 0.2s;
     position: relative;
   }
   .stat-box-link:hover {
-    border-color: var(--earth);
-    background: rgba(201,150,58,0.08);
+    border-color: var(--earth) !important;
+    background: rgba(201,150,58,0.07) !important;
+    transform: translateY(-2px);
   }
   .stat-arrow {
     position: absolute;
-    bottom: 8px; right: 10px;
+    bottom: 12px; right: 14px;
     font-size: 1rem;
     color: var(--earth);
-    opacity: 0.7;
+    opacity: 0.5;
+    transition: opacity 0.15s, right 0.15s;
   }
+  .stat-box-link:hover .stat-arrow { opacity: 1; right: 10px; }
   .stat-box {
     background: var(--parchment);
     border: 1px solid var(--border);
-    border-radius: 4px;
-    padding: 16px 12px;
+    border-radius: 6px;
+    padding: 28px 20px 24px;
     text-align: center;
     position: relative;
     overflow: hidden;
   }
-  .stat-box::after {
+  .stat-box::before {
     content: '';
     position: absolute;
-    bottom: 0; left: 0; right: 0;
+    top: 0; left: 0; right: 0;
     height: 2px;
     background: linear-gradient(90deg, transparent, var(--earth), transparent);
-    opacity: 0.3;
+    opacity: 0.25;
   }
   .stat-num {
-    font-family: 'Cormorant Garamond', serif;
-    font-size: 2.2rem;
+    font-family: 'Ink Free', cursive;
+    font-size: 3.2rem;
     font-weight: 700;
     color: var(--earth);
     display: block;
     line-height: 1;
-    margin-bottom: 6px;
+    margin-bottom: 10px;
+    letter-spacing: 0.02em;
   }
-  .stat-label { font-family: 'Space Mono', monospace; font-size: 0.55rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--muted); }
+  .stat-label {
+    font-family: 'Space Mono', monospace;
+    font-size: 0.55rem;
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    color: var(--muted);
+    display: block;
+  }
 
   .export-section { padding: 20px 16px; }
   .export-card {
@@ -600,7 +658,11 @@
     .field-row { grid-template-columns: 1fr; }
     .field-row.triple { grid-template-columns: 1fr; }
     .stats-grid { grid-template-columns: 1fr 1fr 1fr; gap: 6px; padding: 10px; }
-    .stat-num { font-size: 1.6rem; }
+    .stats-grid { grid-template-columns: 1fr 1fr; padding: 0 16px 28px; gap: 10px; }
+    .stat-num { font-size: 2.2rem; }
+    .stat-box { padding: 20px 12px 18px; }
+    .home-hero { padding: 28px 16px 16px; }
+    .home-title { font-size: 2rem; }
 
     /* Form section: rimuovi i margini laterali su mobile */
     .form-section { margin: 0 10px 12px; }
@@ -705,6 +767,12 @@
 
     <!-- LIST (homepage con stats) -->
     <div id="view-list" class="view active">
+      <div class="home-hero">
+        <div class="home-site-label">Area Archeologica di</div>
+        <h1 class="home-title">Santa Mustiola</h1>
+        <div class="home-subtitle">Peccioli (PI)</div>
+        <div class="home-divider"></div>
+      </div>
       <div class="stats-grid" id="statsGrid"></div>
     </div>
 
@@ -3971,7 +4039,7 @@ function showToast(msg) {
   <script>
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('/scavo-us/service-worker.js')
+        navigator.serviceWorker.register('./service-worker.js')
           .then(reg => console.log('SW registrato:', reg.scope))
           .catch(err => console.log('SW errore:', err));
       });
