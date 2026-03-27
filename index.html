@@ -3330,44 +3330,60 @@ function drawTombaPage1(doc, t) {
   let cx = ML;
   cols.forEach(c => { rect(cx,hRow,c.w,hH); cx+=c.w; });
 
-  // Cella quote: divisa in 2 righe
-  const qH = hH / 2;
-  rect(qColX, hRow,      qColW, qH);   // riga pre-scavo
-  rect(qColX, hRow+qH,   qColW, qH);   // riga post-scavo
+  // Cella quote: colonna sinistra con "QUOTE" verticale + 2 righe pre/post
+  const qTitleW = 6;  // colonnina col titolo QUOTE verticale
+  const qRestX  = qColX + qTitleW;
+  const qRestW  = qColW - qTitleW;
+  const qH      = hH / 2;
 
-  // Dentro ogni riga: | label | MIN_val | MAX_val |
-  // Dividi in 3 sotto-colonne: label(40%) | min(30%) | max(30%)
-  const qLblW = qColW * 0.42;
-  const qValW = (qColW - qLblW) / 2;
-  // Linee verticali dentro la cella quote
-  line(qColX+qLblW, hRow,    qColX+qLblW, hRow+hH, 0.15);
-  line(qColX+qLblW+qValW, hRow, qColX+qLblW+qValW, hRow+hH, 0.15);
+  // Rettangolo intero quote
+  rect(qColX, hRow, qColW, hH);
+  // Linea verticale dopo titolo QUOTE
+  line(qRestX, hRow, qRestX, hRow+hH, 0.2);
+  // Linea orizzontale divisoria pre/post
+  line(qRestX, hRow+qH, qColX+qColW, hRow+qH, 0.2);
 
-  // Label MIN / MAX in cima
-  txt('MIN', qColX+qLblW+1.5,         hRow+3.5, 5, 'bold', [80,80,80]);
-  txt('MAX', qColX+qLblW+qValW+1.5,   hRow+3.5, 5, 'bold', [80,80,80]);
-  txt('MIN', qColX+qLblW+1.5,         hRow+qH+3.5, 5, 'bold', [80,80,80]);
-  txt('MAX', qColX+qLblW+qValW+1.5,   hRow+qH+3.5, 5, 'bold', [80,80,80]);
+  // Titolo "QUOTE" verticale ruotato
+  doc.setFontSize(5.5); doc.setFont('helvetica','bold'); doc.setTextColor(60,60,60);
+  doc.text('QUOTE', qColX+4.5, hRow+hH-1.5, { angle: 90 });
+
+  // Sotto-colonne: label | MIN | MAX
+  const qLblW = qRestW * 0.38;
+  const qValW = (qRestW - qLblW) / 2;
+  line(qRestX+qLblW, hRow, qRestX+qLblW, hRow+hH, 0.15);
+  line(qRestX+qLblW+qValW, hRow, qRestX+qLblW+qValW, hRow+hH, 0.15);
+
+  // Label riga header MIN/MAX
+  txt('MIN', qRestX+qLblW+1.5,       hRow+3.5, 5, 'bold', [80,80,80]);
+  txt('MAX', qRestX+qLblW+qValW+1.5, hRow+3.5, 5, 'bold', [80,80,80]);
+  txt('MIN', qRestX+qLblW+1.5,       hRow+qH+3.5, 5, 'bold', [80,80,80]);
+  txt('MAX', qRestX+qLblW+qValW+1.5, hRow+qH+3.5, 5, 'bold', [80,80,80]);
 
   // Label pre/post scavo
-  txt('pre-scavo',  qColX+1.5, hRow+3.5,    5.5, 'bold', [60,60,60]);
-  txt('post-scavo', qColX+1.5, hRow+qH+3.5, 5.5, 'bold', [60,60,60]);
+  txt('pre-scavo',  qRestX+1.5, hRow+3.5,    5.5, 'bold', [60,60,60]);
+  txt('post-scavo', qRestX+1.5, hRow+qH+3.5, 5.5, 'bold', [60,60,60]);
 
   // Valori quote
   doc.setFontSize(7.5); doc.setFont('helvetica','normal'); doc.setTextColor(0,0,0);
-  doc.text(String(t.quota_pre_min||''),  qColX+qLblW+1.5,       hRow+7.5);
-  doc.text(String(t.quota_pre_max||''),  qColX+qLblW+qValW+1.5, hRow+7.5);
-  doc.text(String(t.quota_post_min||''), qColX+qLblW+1.5,       hRow+qH+7.5);
-  doc.text(String(t.quota_post_max||''), qColX+qLblW+qValW+1.5, hRow+qH+7.5);
+  doc.text(String(t.quota_pre_min||''),  qRestX+qLblW+1.5,       hRow+8);
+  doc.text(String(t.quota_pre_max||''),  qRestX+qLblW+qValW+1.5, hRow+8);
+  doc.text(String(t.quota_post_min||''), qRestX+qLblW+1.5,       hRow+qH+8);
+  doc.text(String(t.quota_post_max||''), qRestX+qLblW+qValW+1.5, hRow+qH+8);
 
   // Riempie le celle principali
   cx = ML;
   const vals0 = [t.localita, t.anno, t.area, t.us_collegate, t.numero, t.pianta_n];
   cols.forEach((c,i) => {
     lbl(c.lbl, cx+1.5, hRow+3.5);
-    doc.setFontSize(7.5); doc.setFont('helvetica','normal'); doc.setTextColor(0,0,0);
-    const lines = doc.splitTextToSize(String(vals0[i]||''), c.w-3);
-    doc.text(lines, cx+1.5, hRow+7.5);
+    // SCHEDA N. più grande e in grassetto
+    if (i === 4) {
+      doc.setFontSize(11); doc.setFont('helvetica','bold'); doc.setTextColor(0,0,0);
+      doc.text(String(vals0[i]||''), cx+1.5, hRow+12);
+    } else {
+      doc.setFontSize(7.5); doc.setFont('helvetica','normal'); doc.setTextColor(0,0,0);
+      const lines = doc.splitTextToSize(String(vals0[i]||''), c.w-3);
+      doc.text(lines, cx+1.5, hRow+7.5);
+    }
     cx += c.w;
   });
   y += hH;
@@ -3390,28 +3406,49 @@ function drawTombaPage1(doc, t) {
   drawCB(t.giacitura==='secondaria', ML+1.5, r2y+14);
   txt('secondaria', ML+6,   r2y+14.3, 6.5);
 
-  // Singola/bisoma/multipla
-  drawCB(t.tipologia_num==='singola',  ML+40, r2y+7);
-  txt('singola',   ML+44.5, r2y+7.3, 6.5);
-  drawCB(t.tipologia_num==='bisoma',   ML+40, r2y+12);
-  txt('bisoma',    ML+44.5, r2y+12.3, 6.5);
-  drawCB(t.tipologia_num==='multipla', ML+40, r2y+17);
-  txt('multipla',  ML+44.5, r2y+17.3, 6.5);
+  // Colonna sinistra: singola/bisoma/multipla
+  const tipSepX = ML+38+26; // separatore verticale
+  line(tipSepX, r2y, tipSepX, r2y+r2H, 0.2);
 
-  // Tipologia sepoltura
-  const tips = [
-    ['cappuccina', ML+60], ['pietra', ML+80], ['anfora', ML+100], ['altro', ML+120],
-    ['cassa', ML+60],      ['terra', ML+80],  ['urna', ML+100],
+  drawCB(t.tipologia_num==='singola',  ML+40, r2y+8);
+  txt('singola',   ML+44.5, r2y+8.3, 6.5);
+  drawCB(t.tipologia_num==='bisoma',   ML+40, r2y+14);
+  txt('bisoma',    ML+44.5, r2y+14.3, 6.5);
+  drawCB(t.tipologia_num==='multipla', ML+40, r2y+20);
+  txt('multipla',  ML+44.5, r2y+20.3, 6.5);
+
+  // Colonna destra: cappuccina, cassa, pietra, terra, anfora, urna (2 colonne x 3 righe)
+  // poi ALTRO in basso con campo testo
+  const tipRX  = tipSepX + 2;  // x inizio colonna destra
+  const tipRW  = ML+38+90 - tipSepX - 2; // larghezza disponibile
+  const tipCol1 = tipRX;
+  const tipCol2 = tipRX + tipRW/2;
+  const tipItems = [
+    ['cappuccina','cappuccina'], ['pietra','pietra'],
+    ['cassa','cassa'],           ['terra','terra'],
+    ['anfora','anfora'],         ['urna','urna'],
   ];
-  const tipRows = [[0,3],[4,3]];
-  [[0,1,2,3],[4,5,6]].forEach((row,ri) => {
-    row.forEach((ti) => {
-      const [label, xpos] = tips[ti];
-      const ypos = r2y + 8.5 + ri*6;
-      drawCB(t.tipologia===label, xpos-4, ypos);
-      txt(label, xpos, ypos+0.3, 6.5);
-    });
+  tipItems.forEach(([val,lbl2],i) => {
+    const xp = i%2===0 ? tipCol1 : tipCol2;
+    const yp = r2y + 7 + Math.floor(i/2)*6;
+    drawCB(t.tipologia===val, xp, yp);
+    txt(lbl2, xp+4.5, yp+0.3, 6.5);
   });
+
+  // ALTRO in fondo con campo testo libero
+  const altroY = r2y + 19;
+  line(tipSepX, altroY, ML+38+90, altroY, 0.15); // separatore orizzontale
+  drawCB(t.tipologia==='altro', tipCol1, altroY+4);
+  txt('altro', tipCol1+4.5, altroY+4.3, 6.5);
+  // Campo testo accanto ad altro
+  const altroTxtX = tipCol1+18;
+  const altroTxtW = ML+38+90 - altroTxtX - 2;
+  doc.setDrawColor(180,180,180); doc.setLineWidth(0.15);
+  doc.line(altroTxtX, altroY+6, altroTxtX+altroTxtW, altroY+6);
+  if (t.tipologia==='altro' && t.tipologia_altro) {
+    doc.setFontSize(7); doc.setFont('helvetica','normal'); doc.setTextColor(0,0,0);
+    doc.text(String(t.tipologia_altro), altroTxtX, altroY+5.5);
+  }
 
   txt(t.orientamento||'', ML+38+90+1.5, r2y+10, 8, 'bold');
   txt(t.condizioni||'',   ML+38+90+20+1.5, r2y+10, 8, 'bold');
@@ -3671,15 +3708,18 @@ function drawTombaPage2(doc, t) {
   txt('M', mX+5, sessoY+0.8, 9, 'bold');
   ry += 12;
 
-  // ── Note antropologiche ───────────────────────────────────────
+  // ── Note antropologiche — campo grande fino al footer ──────────
+  const noteY  = ry;
+  const noteH  = H - MR - 10 - noteY;
+  rect(ML, noteY, IW, noteH, 0.2);
+  fillRect(ML, noteY, IW, 6, 235,235,235);
+  lbl('NOTE', ML+2, noteY+4);
+  doc.setLineWidth(0.1); doc.setDrawColor(200,200,200);
+  doc.line(ML, noteY+6, ML+IW, noteY+6);
   if (t.note_antropologiche) {
-    rect(ML, ry, IW, 20, 0.2);
-    fillRect(ML, ry, IW, 5, 235,235,235);
-    lbl('NOTE', ML+2, ry+3.5);
-    doc.setFontSize(7); doc.setFont('helvetica','normal'); doc.setTextColor(0,0,0);
+    doc.setFontSize(7.5); doc.setFont('helvetica','normal'); doc.setTextColor(0,0,0);
     const noteLines = doc.splitTextToSize(t.note_antropologiche, IW-4);
-    doc.text(noteLines, ML+2, ry+8);
-    ry += 20;
+    doc.text(noteLines, ML+2, noteY+10);
   }
 
   // ── Footer ────────────────────────────────────────────────────
