@@ -112,7 +112,7 @@
   }
   .login-screen .icon { font-size: 3rem; margin-bottom: 20px; filter: sepia(1) saturate(2) brightness(0.9); }
   .login-screen h2 {
-    font-family: 'Cormorant Garamond', serif;
+    font-family: 'Ink Free', cursive;
     font-size: 1.8rem;
     font-weight: 600;
     color: var(--earth);
@@ -221,7 +221,7 @@
   .us-card:hover::before { background: var(--earth); }
   .us-card-left { display: flex; align-items: center; gap: 16px; }
   .us-number {
-    font-family: 'Cormorant Garamond', serif;
+    font-family: 'Ink Free', cursive;
     font-size: 1.6rem;
     font-weight: 700;
     color: var(--earth);
@@ -278,7 +278,7 @@
     z-index: 50;
   }
   .form-header h2 {
-    font-family: 'Cormorant Garamond', serif;
+    font-family: 'Ink Free', cursive;
     font-size: 1.2rem;
     font-weight: 600;
     color: var(--earth);
@@ -417,7 +417,7 @@
     margin-bottom: 6px;
   }
   .home-title {
-    font-family: 'Cormorant Garamond', serif;
+    font-family: 'Ink Free', cursive;
     font-size: clamp(2.2rem, 6vw, 3.6rem);
     font-weight: 700;
     color: var(--earth);
@@ -524,7 +524,7 @@
     border-radius: 4px 0 0 4px;
   }
   .export-card h3 {
-    font-family: 'Cormorant Garamond', serif;
+    font-family: 'Ink Free', cursive;
     font-size: 1.05rem;
     font-weight: 600;
     margin-bottom: 6px;
@@ -594,7 +594,7 @@
   }
   .confirm-box .confirm-icon { font-size:2rem; margin-bottom:12px; }
   .confirm-box h3 {
-    font-family:'Cormorant Garamond',serif; font-size:1.3rem; color:var(--earth);
+    font-family:'Ink Free', cursive; font-size:1.3rem; color:var(--earth);
     margin-bottom:8px;
   }
   .confirm-box p { font-size:0.85rem; color:var(--muted); line-height:1.6; margin-bottom:6px; }
@@ -4037,7 +4037,7 @@ function showToast(msg) {
 }
 </script>
   <script>
-    if ('serviceWorker' in navigator) {
+    if ('serviceWorker' in navigator && !location.hostname.includes('claudeusercontent.com')) {
       window.addEventListener('load', () => {
         navigator.serviceWorker.register('./service-worker.js')
           .then(reg => console.log('SW registrato:', reg.scope))
