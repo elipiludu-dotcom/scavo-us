@@ -3342,44 +3342,47 @@ function drawTombaPage1(doc, t) {
   cols.forEach(c => { rect(cx,hRow,c.w,hH); cx+=c.w; });
 
   // Cella quote: colonna sinistra con "QUOTE" verticale + 2 righe pre/post
-  const qTitleW = 6;  // colonnina col titolo QUOTE verticale
+  const qTitleW = 6;
   const qRestX  = qColX + qTitleW;
   const qRestW  = qColW - qTitleW;
   const qH      = hH / 2;
 
-  // Rettangolo intero quote
+  // Rettangolo intero + divisori
   rect(qColX, hRow, qColW, hH);
-  // Linea verticale dopo titolo QUOTE
   line(qRestX, hRow, qRestX, hRow+hH, 0.2);
-  // Linea orizzontale divisoria pre/post
   line(qRestX, hRow+qH, qColX+qColW, hRow+qH, 0.2);
 
-  // Titolo "QUOTE" verticale centrato
+  // "QUOTE" verticale centrato: con angle=90, il testo ruota attorno al punto (x,y)
+  // Il testo sale verso l'alto — quindi per centrare verticalmente:
+  // centro cella = hRow + hH/2, la scritta "QUOTE" è ~6mm alta → partiamo da centro+3
   doc.setFontSize(5.5); doc.setFont('helvetica','bold'); doc.setTextColor(60,60,60);
-  doc.text('QUOTE', qColX+4.2, hRow+hH/2+5, { angle: 90 });
+  doc.text('QUOTE', qColX+4.5, hRow+hH/2+3, { angle: 90 });
 
-  // Sotto-colonne: label | MIN | MAX
-  const qLblW = qRestW * 0.38;
+  // Sotto-colonne: pre/post label | MIN | MAX
+  const qLblW = qRestW * 0.40;
   const qValW = (qRestW - qLblW) / 2;
-  line(qRestX+qLblW, hRow, qRestX+qLblW, hRow+hH, 0.15);
+  line(qRestX+qLblW,       hRow, qRestX+qLblW,       hRow+hH, 0.15);
   line(qRestX+qLblW+qValW, hRow, qRestX+qLblW+qValW, hRow+hH, 0.15);
 
-  // Label riga header MIN/MAX
-  txt('MIN', qRestX+qLblW+1.5,       hRow+3.5, 5, 'bold', [80,80,80]);
-  txt('MAX', qRestX+qLblW+qValW+1.5, hRow+3.5, 5, 'bold', [80,80,80]);
-  txt('MIN', qRestX+qLblW+1.5,       hRow+qH+3.5, 5, 'bold', [80,80,80]);
-  txt('MAX', qRestX+qLblW+qValW+1.5, hRow+qH+3.5, 5, 'bold', [80,80,80]);
+  // Ogni riga: label (riga 1 di 2) + valore (riga 2 di 2) — qH=8mm per 2 righe
+  const qLblY1 = hRow + qH*0.28;   // label pre-scavo: ~28% dall'alto della riga
+  const qValY1 = hRow + qH*0.72;   // valore pre-scavo: ~72% dall'alto della riga
+  const qLblY2 = hRow + qH + qH*0.28;
+  const qValY2 = hRow + qH + qH*0.72;
 
-  // Label pre/post scavo
-  txt('pre-scavo',  qRestX+1.5, hRow+3.5,    5.5, 'bold', [60,60,60]);
-  txt('post-scavo', qRestX+1.5, hRow+qH+3.5, 5.5, 'bold', [60,60,60]);
-
-  // Valori quote
+  txt('pre-scavo',  qRestX+1.5,             qLblY1, 5.5, 'bold', [60,60,60]);
+  txt('MIN',        qRestX+qLblW+1.5,       qLblY1, 5,   'bold', [80,80,80]);
+  txt('MAX',        qRestX+qLblW+qValW+1.5, qLblY1, 5,   'bold', [80,80,80]);
   doc.setFontSize(7.5); doc.setFont('helvetica','normal'); doc.setTextColor(0,0,0);
-  doc.text(String(t.quota_pre_min||''),  qRestX+qLblW+1.5,       hRow+8);
-  doc.text(String(t.quota_pre_max||''),  qRestX+qLblW+qValW+1.5, hRow+8);
-  doc.text(String(t.quota_post_min||''), qRestX+qLblW+1.5,       hRow+qH+8);
-  doc.text(String(t.quota_post_max||''), qRestX+qLblW+qValW+1.5, hRow+qH+8);
+  doc.text(String(t.quota_pre_min||''),  qRestX+qLblW+1.5,       qValY1);
+  doc.text(String(t.quota_pre_max||''),  qRestX+qLblW+qValW+1.5, qValY1);
+
+  txt('post-scavo', qRestX+1.5,             qLblY2, 5.5, 'bold', [60,60,60]);
+  txt('MIN',        qRestX+qLblW+1.5,       qLblY2, 5,   'bold', [80,80,80]);
+  txt('MAX',        qRestX+qLblW+qValW+1.5, qLblY2, 5,   'bold', [80,80,80]);
+  doc.setFontSize(7.5); doc.setFont('helvetica','normal'); doc.setTextColor(0,0,0);
+  doc.text(String(t.quota_post_min||''),  qRestX+qLblW+1.5,       qValY2);
+  doc.text(String(t.quota_post_max||''),  qRestX+qLblW+qValW+1.5, qValY2);
 
   // Riempie le celle principali
   cx = ML;
@@ -3429,31 +3432,37 @@ function drawTombaPage1(doc, t) {
   drawCB(t.tipologia_num==='multipla', ML+40, r2y+21);
   txt('multipla',  ML+44.5, r2y+21.3, 6.5);
 
-  // Colonna destra: 3 righe x 2 colonne (cappuccina/pietra, cassa/terra, anfora/urna)
-  // poi ALTRO su riga separata con campo testo — tutto dentro il rettangolo
-  const tipRX   = tipSepX + 3;
-  const tipRW   = (ML+38+90) - tipSepX - 3;
+  // Colonna destra: 3 colonne x 2 righe + "altro" su riga intera in fondo
+  const tipRX   = tipSepX + 2;
+  const tipREnd = ML+38+90;
+  const tipRW   = tipREnd - tipRX - 2;
+  const tipColW = tipRW / 3;
   const tipCol1 = tipRX;
-  const tipCol2 = tipRX + tipRW/2;
-  const tipItems = [
-    ['cappuccina','cappuccina'], ['pietra','pietra'],
-    ['cassa','cassa'],           ['terra','terra'],
-    ['anfora','anfora'],         ['urna','urna'],
+  const tipCol2 = tipRX + tipColW;
+  const tipCol3 = tipRX + tipColW*2;
+
+  // Riga 1: cappuccina | anfora | terra
+  // Riga 2: cassa      | pietra | urna
+  const tipGrid = [
+    [['cappuccina','cappuccina'], ['anfora','anfora'],   ['terra','terra']],
+    [['cassa','cassa'],           ['pietra','pietra'],   ['urna','urna']],
   ];
-  tipItems.forEach(([val,lbl2],i) => {
-    const xp = i%2===0 ? tipCol1 : tipCol2;
-    const yp = r2y + 8 + Math.floor(i/2)*5.5;
-    drawCB(t.tipologia===val, xp, yp);
-    txt(lbl2, xp+4.5, yp+0.3, 6.5);
+  const tipCols = [tipCol1, tipCol2, tipCol3];
+  tipGrid.forEach((row, ri) => {
+    row.forEach(([val, lbl2], ci) => {
+      const xp = tipCols[ci];
+      const yp = r2y + 8 + ri * 5.5;
+      drawCB(t.tipologia===val, xp, yp);
+      txt(lbl2, xp+4.5, yp+0.3, 6.5);
+    });
   });
 
-  // ALTRO su ultima riga, dentro il rettangolo, con campo testo accanto
-  const altroY = r2y + 8 + 3*5.5;
+  // ALTRO su riga intera in fondo con campo testo
+  const altroY = r2y + 8 + 2*5.5;
   drawCB(t.tipologia==='altro', tipCol1, altroY);
   txt('altro', tipCol1+4.5, altroY+0.3, 6.5);
-  // Riga tratteggiata per testo libero accanto ad "altro"
   const altroTxtX = tipCol1+19;
-  const altroTxtW = (ML+38+90) - altroTxtX - 2;
+  const altroTxtW = tipREnd - altroTxtX - 2;
   doc.setDrawColor(180,180,180); doc.setLineWidth(0.15);
   doc.line(altroTxtX, altroY+1.5, altroTxtX+altroTxtW, altroY+1.5);
   if (t.tipologia==='altro' && t.tipologia_altro) {
