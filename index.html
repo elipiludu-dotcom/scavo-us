@@ -921,16 +921,19 @@
           <div class="field-group">
             <label>Tipologia</label>
             <div class="radio-group" style="flex-wrap:wrap">
-              <label class="radio-label"><input type="radio" name="t_tipologia" value="singola"> Singola</label>
-              <label class="radio-label"><input type="radio" name="t_tipologia" value="bisoma"> Bisoma</label>
-              <label class="radio-label"><input type="radio" name="t_tipologia" value="multipla"> Multipla</label>
-              <label class="radio-label"><input type="radio" name="t_tipologia" value="cappuccina"> Cappuccina</label>
-              <label class="radio-label"><input type="radio" name="t_tipologia" value="pietra"> Pietra</label>
-              <label class="radio-label"><input type="radio" name="t_tipologia" value="anfora"> Anfora</label>
-              <label class="radio-label"><input type="radio" name="t_tipologia" value="cassa"> Cassa</label>
-              <label class="radio-label"><input type="radio" name="t_tipologia" value="terra"> Terra</label>
-              <label class="radio-label"><input type="radio" name="t_tipologia" value="urna"> Urna</label>
-              <label class="radio-label"><input type="radio" name="t_tipologia" value="altro"> Altro</label>
+              <label class="radio-label"><input type="radio" name="t_tipologia" onchange="document.getElementById('tipologia_altro_wrap').style.display='none'" value="singola"> Singola</label>
+              <label class="radio-label"><input type="radio" name="t_tipologia" onchange="document.getElementById('tipologia_altro_wrap').style.display='none'" value="bisoma"> Bisoma</label>
+              <label class="radio-label"><input type="radio" name="t_tipologia" onchange="document.getElementById('tipologia_altro_wrap').style.display='none'" value="multipla"> Multipla</label>
+              <label class="radio-label"><input type="radio" name="t_tipologia" onchange="document.getElementById('tipologia_altro_wrap').style.display='none'" value="cappuccina"> Cappuccina</label>
+              <label class="radio-label"><input type="radio" name="t_tipologia" onchange="document.getElementById('tipologia_altro_wrap').style.display='none'" value="pietra"> Pietra</label>
+              <label class="radio-label"><input type="radio" name="t_tipologia" onchange="document.getElementById('tipologia_altro_wrap').style.display='none'" value="anfora"> Anfora</label>
+              <label class="radio-label"><input type="radio" name="t_tipologia" onchange="document.getElementById('tipologia_altro_wrap').style.display='none'" value="cassa"> Cassa</label>
+              <label class="radio-label"><input type="radio" name="t_tipologia" onchange="document.getElementById('tipologia_altro_wrap').style.display='none'" value="terra"> Terra</label>
+              <label class="radio-label"><input type="radio" name="t_tipologia" onchange="document.getElementById('tipologia_altro_wrap').style.display='none'" value="urna"> Urna</label>
+              <label class="radio-label"><input type="radio" name="t_tipologia" onchange="document.getElementById('tipologia_altro_wrap').style.display='block'" value="altro"> Altro</label>
+            </div>
+            <div id="tipologia_altro_wrap" style="margin-top:6px;display:none">
+              <input type="text" id="t_tipologia_altro" placeholder="Specificare…" style="width:100%;max-width:280px">
             </div>
           </div>
         </div>
@@ -1215,7 +1218,7 @@ const HEADERS_TOMBE = [
   'posizione_scheletro','descrizione','reperti_connessione',
   'elementi_copertura','elementi_datanti','datazione',
   'osservazioni','bibliografia','compilatore','data_controllo',
-  'stato',
+  'stato','tipologia_altro',
   // Dati antropologici - caratteri metrici
   'cranio_lungh_max','cranio_largh_max','cranio_alt_faccia','cranio_largh_faccia',
   'omero_lungh','femore_lungh','omero_omero_dist',
@@ -1947,6 +1950,9 @@ function resetTombaForm() {
     .forEach(id => { const el = document.getElementById(id); if(el) el.value = ''; });
   ['t_giacitura','t_tipologia','t_posizione','t_sesso']
     .forEach(n => document.querySelectorAll(`input[name="${n}"]`).forEach(r => r.checked = false));
+  const _wrap = document.getElementById('tipologia_altro_wrap');
+  if(_wrap) _wrap.style.display = 'none';
+  const _ta = document.getElementById('t_tipologia_altro'); if(_ta) _ta.value = '';
   ['t_cranio','t_vertebre','t_torace','t_bacino','t_braccia','t_gambe','t_mani','t_piedi']
     .forEach(id => { const el = document.getElementById(id); if(el) el.checked = false; });
   ['t_affidabilita','t_morf_arcate','t_morf_margini','t_morf_frontale',
@@ -1971,6 +1977,10 @@ function loadTombaForm(t) {
       const nm = k === 'posizione_scheletro' ? 't_posizione' : 't_'+k;
       document.querySelectorAll(`input[name="${nm}"]`).forEach(r => { r.checked = r.value === t[k]; });
     });
+  const wrap = document.getElementById('tipologia_altro_wrap');
+  if(wrap) wrap.style.display = t.tipologia === 'altro' ? 'block' : 'none';
+  const ta = document.getElementById('t_tipologia_altro');
+  if(ta) ta.value = t.tipologia_altro || '';
   ['cranio','vertebre','torace','bacino','braccia','gambe','mani','piedi']
     .forEach(k => { const el = document.getElementById('t_'+k); if(el) el.checked = t['osso_'+k] === 'true' || t['osso_'+k] === true || t['osso_'+k] === 'SI'; });
   ['affidabilita','morf_arcate','morf_margini','morf_frontale','morf_mandibola',
@@ -1995,6 +2005,7 @@ function getTombaFromForm(id) {
     quota_post_max: document.getElementById('t_quota_post_max').value,
     giacitura: (document.querySelector('input[name="t_giacitura"]:checked')||{}).value||'',
     tipologia: (document.querySelector('input[name="t_tipologia"]:checked')||{}).value||'',
+    tipologia_altro: document.getElementById('t_tipologia_altro')?.value||'',
     orientamento: document.getElementById('t_orientamento').value,
     condizioni: document.getElementById('t_condizioni').value,
     altre_sepolture: document.getElementById('t_altre_sepolture').value,
@@ -3343,9 +3354,9 @@ function drawTombaPage1(doc, t) {
   // Linea orizzontale divisoria pre/post
   line(qRestX, hRow+qH, qColX+qColW, hRow+qH, 0.2);
 
-  // Titolo "QUOTE" verticale ruotato
+  // Titolo "QUOTE" verticale centrato
   doc.setFontSize(5.5); doc.setFont('helvetica','bold'); doc.setTextColor(60,60,60);
-  doc.text('QUOTE', qColX+4.5, hRow+hH-1.5, { angle: 90 });
+  doc.text('QUOTE', qColX+4.2, hRow+hH/2+5, { angle: 90 });
 
   // Sotto-colonne: label | MIN | MAX
   const qLblW = qRestW * 0.38;
@@ -3407,20 +3418,21 @@ function drawTombaPage1(doc, t) {
   txt('secondaria', ML+6,   r2y+14.3, 6.5);
 
   // Colonna sinistra: singola/bisoma/multipla
-  const tipSepX = ML+38+26; // separatore verticale
-  line(tipSepX, r2y, tipSepX, r2y+r2H, 0.2);
+  const tipSepX = ML+38+26; // x separatore verticale
+  // Separatore parte SOTTO il titolo (da y+6 in poi, non dal bordo superiore)
+  line(tipSepX, r2y+6, tipSepX, r2y+r2H, 0.2);
 
-  drawCB(t.tipologia_num==='singola',  ML+40, r2y+8);
-  txt('singola',   ML+44.5, r2y+8.3, 6.5);
-  drawCB(t.tipologia_num==='bisoma',   ML+40, r2y+14);
-  txt('bisoma',    ML+44.5, r2y+14.3, 6.5);
-  drawCB(t.tipologia_num==='multipla', ML+40, r2y+20);
-  txt('multipla',  ML+44.5, r2y+20.3, 6.5);
+  drawCB(t.tipologia_num==='singola',  ML+40, r2y+9);
+  txt('singola',   ML+44.5, r2y+9.3, 6.5);
+  drawCB(t.tipologia_num==='bisoma',   ML+40, r2y+15);
+  txt('bisoma',    ML+44.5, r2y+15.3, 6.5);
+  drawCB(t.tipologia_num==='multipla', ML+40, r2y+21);
+  txt('multipla',  ML+44.5, r2y+21.3, 6.5);
 
-  // Colonna destra: cappuccina, cassa, pietra, terra, anfora, urna (2 colonne x 3 righe)
-  // poi ALTRO in basso con campo testo
-  const tipRX  = tipSepX + 2;  // x inizio colonna destra
-  const tipRW  = ML+38+90 - tipSepX - 2; // larghezza disponibile
+  // Colonna destra: 3 righe x 2 colonne (cappuccina/pietra, cassa/terra, anfora/urna)
+  // poi ALTRO su riga separata con campo testo — tutto dentro il rettangolo
+  const tipRX   = tipSepX + 3;
+  const tipRW   = (ML+38+90) - tipSepX - 3;
   const tipCol1 = tipRX;
   const tipCol2 = tipRX + tipRW/2;
   const tipItems = [
@@ -3430,24 +3442,23 @@ function drawTombaPage1(doc, t) {
   ];
   tipItems.forEach(([val,lbl2],i) => {
     const xp = i%2===0 ? tipCol1 : tipCol2;
-    const yp = r2y + 7 + Math.floor(i/2)*6;
+    const yp = r2y + 8 + Math.floor(i/2)*5.5;
     drawCB(t.tipologia===val, xp, yp);
     txt(lbl2, xp+4.5, yp+0.3, 6.5);
   });
 
-  // ALTRO in fondo con campo testo libero
-  const altroY = r2y + 19;
-  line(tipSepX, altroY, ML+38+90, altroY, 0.15); // separatore orizzontale
-  drawCB(t.tipologia==='altro', tipCol1, altroY+4);
-  txt('altro', tipCol1+4.5, altroY+4.3, 6.5);
-  // Campo testo accanto ad altro
-  const altroTxtX = tipCol1+18;
-  const altroTxtW = ML+38+90 - altroTxtX - 2;
+  // ALTRO su ultima riga, dentro il rettangolo, con campo testo accanto
+  const altroY = r2y + 8 + 3*5.5;
+  drawCB(t.tipologia==='altro', tipCol1, altroY);
+  txt('altro', tipCol1+4.5, altroY+0.3, 6.5);
+  // Riga tratteggiata per testo libero accanto ad "altro"
+  const altroTxtX = tipCol1+19;
+  const altroTxtW = (ML+38+90) - altroTxtX - 2;
   doc.setDrawColor(180,180,180); doc.setLineWidth(0.15);
-  doc.line(altroTxtX, altroY+6, altroTxtX+altroTxtW, altroY+6);
+  doc.line(altroTxtX, altroY+1.5, altroTxtX+altroTxtW, altroY+1.5);
   if (t.tipologia==='altro' && t.tipologia_altro) {
     doc.setFontSize(7); doc.setFont('helvetica','normal'); doc.setTextColor(0,0,0);
-    doc.text(String(t.tipologia_altro), altroTxtX, altroY+5.5);
+    doc.text(String(t.tipologia_altro), altroTxtX, altroY+1);
   }
 
   txt(t.orientamento||'', ML+38+90+1.5, r2y+10, 8, 'bold');
