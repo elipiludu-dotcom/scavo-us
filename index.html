@@ -2223,6 +2223,18 @@ function openUSModal(id) {
 
   document.getElementById('us-modal-title').textContent = `Scheda US ${s.numero}`;
 
+  const fmtNum = n => { const f = parseFloat(n); return isNaN(f) ? (n||'') : f.toFixed(2); };
+  const fmtRap = r => {
+    if (!r || r === '—') return '';
+    try {
+      const arr = typeof r === 'string' ? JSON.parse(r) : r;
+      if (!Array.isArray(arr)) return String(r);
+      return arr.map(x => {
+        if (typeof x === 'object') return `${x.tipo||''} US ${x.us||''}`.trim();
+        return String(x);
+      }).filter(Boolean).join(' · ') || '';
+    } catch { return String(r||''); }
+  };
   const v = (val, fallback='—') => {
     const str = String(val||'').trim();
     const cls = str ? '' : ' empty';
@@ -2274,8 +2286,8 @@ function openUSModal(id) {
   // Quote
   html += sep('Quote e misure');
   html += `<div class="us-modal-grid-3">
-    ${field('Quota max', s.quota_max)}
-    ${field('Quota min', s.quota_min)}
+    ${field('Quota max', fmtNum(s.quota_max))}
+    ${field('Quota min', fmtNum(s.quota_min))}
     ${field('Spessore', s.spessore)}
   </div>`;
 
@@ -2283,13 +2295,16 @@ function openUSModal(id) {
   html += sep('Descrizione');
   html += field('Descrizione', s.descrizione);
   html += field('Osservazioni', s.osservazioni);
-  html += field('Rapporti stratigrafici', s.rapporti);
-  html += field('Reperti', s.reperti);
+  html += field('Note interpretative', s.note_interp || s.interpretazione);
+
+  // Rapporti — array di oggetti {tipo, us}
+  const rapStr = fmtRap(s.rapporti);
+  if (rapStr) html += field('Rapporti stratigrafici', rapStr);
 
   // Admin
   html += sep('Amministrativo');
   html += `<div class="us-modal-grid">
-    ${field('Responsabile compilazione', s.responsabile)}
+    ${field('Responsabile', s.responsabile_scientifico || s.responsabile)}
     ${field('Data', s.data)}
   </div>`;
 
@@ -3494,12 +3509,12 @@ function drawTombaPage1(doc, t) {
   const hRow = y; const hH = 16;
   // Colonne principali (senza quote)
   const cols = [
-    { lbl:'LOCALITÀ',  w:32 },
-    { lbl:'ANNO',      w:14 },
-    { lbl:'AREA',      w:28 },
-    { lbl:'US',        w:22 },
+    { lbl:'LOCALITÀ',  w:25 },
+    { lbl:'ANNO',      w:13 },
+    { lbl:'AREA',      w:26 },
+    { lbl:'US',        w:20 },
     { lbl:'SCHEDA N.', w:22 },
-    { lbl:'PIANTA N.', w:20 },
+    { lbl:'PIANTA N.', w:18 },
   ];
   const qColW = IW - cols.reduce((s,c)=>s+c.w,0);
   const qColX = ML + IW - qColW;
@@ -3540,16 +3555,16 @@ function drawTombaPage1(doc, t) {
   txt('pre-scavo',  qRestX+1.5,             qLblY1, 5.5, 'bold', [60,60,60]);
   txt('MIN',        qRestX+qLblW+1.5,       qLblY1, 5,   'bold', [80,80,80]);
   txt('MAX',        qRestX+qLblW+qValW+1.5, qLblY1, 5,   'bold', [80,80,80]);
-  doc.setFontSize(7.5); doc.setFont('helvetica','normal'); doc.setTextColor(0,0,0);
-  doc.text(String(t.quota_pre_min||''),  qRestX+qLblW+1.5,       qValY1);
-  doc.text(String(t.quota_pre_max||''),  qRestX+qLblW+qValW+1.5, qValY1);
+  doc.setFontSize(6); doc.setFont('helvetica','normal'); doc.setTextColor(0,0,0);
+  doc.text(doc.splitTextToSize(String(t.quota_pre_min||''),  qValW-1), qRestX+qLblW+1.5,       qValY1);
+  doc.text(doc.splitTextToSize(String(t.quota_pre_max||''),  qValW-1), qRestX+qLblW+qValW+1.5, qValY1);
 
   txt('post-scavo', qRestX+1.5,             qLblY2, 5.5, 'bold', [60,60,60]);
   txt('MIN',        qRestX+qLblW+1.5,       qLblY2, 5,   'bold', [80,80,80]);
   txt('MAX',        qRestX+qLblW+qValW+1.5, qLblY2, 5,   'bold', [80,80,80]);
-  doc.setFontSize(7.5); doc.setFont('helvetica','normal'); doc.setTextColor(0,0,0);
-  doc.text(String(t.quota_post_min||''),  qRestX+qLblW+1.5,       qValY2);
-  doc.text(String(t.quota_post_max||''),  qRestX+qLblW+qValW+1.5, qValY2);
+  doc.setFontSize(6); doc.setFont('helvetica','normal'); doc.setTextColor(0,0,0);
+  doc.text(doc.splitTextToSize(String(t.quota_post_min||''), qValW-1), qRestX+qLblW+1.5,       qValY2);
+  doc.text(doc.splitTextToSize(String(t.quota_post_max||''), qValW-1), qRestX+qLblW+qValW+1.5, qValY2);
 
   // Riempie le celle principali
   cx = ML;
