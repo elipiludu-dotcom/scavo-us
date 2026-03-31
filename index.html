@@ -27,7 +27,7 @@
     });
   }
 </script>
-<link href="https://fonts.googleapis.com/css2?family=Ink+Free&family=Cormorant+Garamond:wght@400;600;700&family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Patrick+Hand&family=Cormorant+Garamond:wght@400;600;700&family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
 <style>
   :root {
     --sand: #2e2b26;
@@ -112,7 +112,7 @@
   }
   .login-screen .icon { font-size: 3rem; margin-bottom: 20px; filter: sepia(1) saturate(2) brightness(0.9); }
   .login-screen h2 {
-    font-family: 'Ink Free', cursive;
+    font-family: 'Patrick Hand', cursive;
     font-size: 1.8rem;
     font-weight: 600;
     color: var(--earth);
@@ -221,7 +221,7 @@
   .us-card:hover::before { background: var(--earth); }
   .us-card-left { display: flex; align-items: center; gap: 16px; }
   .us-number {
-    font-family: 'Ink Free', cursive;
+    font-family: 'Patrick Hand', cursive;
     font-size: 1.6rem;
     font-weight: 700;
     color: var(--earth);
@@ -278,7 +278,7 @@
     z-index: 50;
   }
   .form-header h2 {
-    font-family: 'Ink Free', cursive;
+    font-family: 'Patrick Hand', cursive;
     font-size: 1.2rem;
     font-weight: 600;
     color: var(--earth);
@@ -417,7 +417,7 @@
     margin-bottom: 6px;
   }
   .home-title {
-    font-family: 'Ink Free', cursive;
+    font-family: 'Patrick Hand', cursive;
     font-size: clamp(2.2rem, 6vw, 3.6rem);
     font-weight: 700;
     color: var(--earth);
@@ -488,7 +488,7 @@
     gap: 8px;
   }
   .stat-action-icon {
-    font-family: 'Ink Free', cursive;
+    font-family: 'Patrick Hand', cursive;
     font-size: 2.8rem;
     font-weight: 700;
     color: var(--earth);
@@ -503,7 +503,7 @@
     opacity: 0.25;
   }
   .stat-num {
-    font-family: 'Ink Free', cursive;
+    font-family: 'Patrick Hand', cursive;
     font-size: 3.2rem;
     font-weight: 700;
     color: var(--earth);
@@ -540,7 +540,7 @@
     border-radius: 4px 0 0 4px;
   }
   .export-card h3 {
-    font-family: 'Ink Free', cursive;
+    font-family: 'Patrick Hand', cursive;
     font-size: 1.05rem;
     font-weight: 600;
     margin-bottom: 6px;
@@ -610,7 +610,7 @@
   }
   .confirm-box .confirm-icon { font-size:2rem; margin-bottom:12px; }
   .confirm-box h3 {
-    font-family:'Ink Free', cursive; font-size:1.3rem; color:var(--earth);
+    font-family:'Patrick Hand', cursive; font-size:1.3rem; color:var(--earth);
     margin-bottom:8px;
   }
   .confirm-box p { font-size:0.85rem; color:var(--muted); line-height:1.6; margin-bottom:6px; }
@@ -1284,11 +1284,6 @@
           <input type="file" id="xlsxTombeInput" accept=".xlsx" style="display:none" onchange="importTombeFromExcel(this)">
           <button class="btn btn-primary" onclick="document.getElementById('xlsxTombeInput').click()">📂 Scegli tombe_estratte.xlsx</button>
           <div id="xlsxTombeStatus" style="margin-top:10px;font-family:'Space Mono',monospace;font-size:0.7rem;color:var(--muted);min-height:18px"></div>
-        </div>
-        <div class="export-card">
-          <h3>🧪 PDF di test</h3>
-          <p>Genera un PDF con una scheda di esempio precompilata, per verificare la visualizzazione.</p>
-          <button class="btn btn-secondary" onclick="exportPDFTest()">⬇ PDF Test</button>
         </div>
       </div>
     </div>
@@ -3056,69 +3051,6 @@ function populatePDFSelect() {
     ).join('');
 }
 
-async function exportPDFTest() {
-  showToast('Generazione PDF di test…');
-  await loadJsPDF();
-  const test = {
-    id: 'test',
-    numero: 42,
-    anno: '2024',
-    area: 'A',
-    saggio: 'S3',
-    tipo: 'Strato',
-    pos_neg: 'Positiva',
-    data: '2024-07-15',
-    definizione: 'Strato di abbandono nella porzione nord-est del saggio, a contatto con la struttura muraria US 38.',
-    formazione: 'Naturale',
-    criteri: 'Cambio di colore e consistenza rispetto alle US sovrastanti e sottostanti.',
-    responsabile: 'Mario Rossi',
-    stato: 'completa',
-    stato_conservazione: 'Non conserva i limiti originari',
-    stato_conservazione_note: 'Parzialmente asportato da intervento moderno nel settore ovest.',
-    colore: 'Bruno giallastro (Munsell 10YR 5/4)',
-    consistenza: 'Compatta',
-    composizione: 'Limosa',
-    umidita: 'Umida',
-    inclusi_geo: 'Ciottoli di piccole dimensioni, ghiaia fine, frammenti di tufo.',
-    inclusi_org: 'Carboni dispersi, frammenti ossei non identificabili.',
-    inclusi_art: 'Frammenti ceramici (ceramica comune, sigillata africana), laterizi.',
-    quota_max: '12.45',
-    quota_min: '12.10',
-    spessore: '35',
-    descrizione: 'Strato di colore bruno giallastro, a matrice limosa compatta, con inclusi di piccole dimensioni distribuiti uniformemente. Presenza diffusa di frammenti ceramici di età romana, prevalentemente ceramica comune da cucina e sigillata africana. Nella porzione nord si rileva una maggiore concentrazione di carboni, probabilmente riferibile a un evento di combustione localizzato. Lo strato si appoggia alla struttura muraria US 38 a nord e si interrompe in corrispondenza del taglio US 45 a sud.',
-    osservazioni: 'La scarsa potenza dello strato e la natura degli inclusi suggeriscono una deposizione rapida. Si consiglia il campionamento per analisi paleobotaniche nel settore nord.',
-    rapporti: [
-      { tipo: 'coperto_da', us: '41', note: '' },
-      { tipo: 'coperto_da', us: '40', note: '' },
-      { tipo: 'copre', us: '43', note: '' },
-      { tipo: 'si_lega_a', us: '38', note: 'struttura muraria' },
-      { tipo: 'tagliato_da', us: '45', note: 'taglio moderno' },
-      { tipo: 'uguale_a', us: '55', note: 'probabile correlazione' },
-    ],
-    reperti: [
-      { categoria: 'ceramica', inv: 'CR24-042-01', qty: '23', desc: 'Ceramica comune da cucina, frammenti di olle e tegami' },
-      { categoria: 'ceramica', inv: 'CR24-042-02', qty: '8', desc: 'Sigillata africana, forma Hayes 50' },
-      { categoria: 'osso', inv: 'CR24-042-03', qty: '5', desc: 'Frammenti ossei animali non identificabili' },
-      { categoria: 'carbone', inv: 'CR24-042-04', qty: '1', desc: 'Campione carbone per C14, settore nord' },
-    ],
-    foto_digitali: true,
-    foto_3d: false,
-    foto_drone: true,
-    disegni: 'Pianta 1:20 (tav. 12), sezione A-A\' (tav. 15)',
-    note_doc: 'Fotografie scattate in condizioni di luce naturale. Rilievo fotogrammetrico in corso.',
-    interpretazione: 'Livello di abbandono',
-    datazione: 'IV-V sec. d.C.',
-    fase: 'Fase 3b',
-    affidabilita: 'Media',
-    note_interp: 'La datazione si basa sulla presenza di sigillata africana tarda. La fase è coerente con l\'abbandono generale dell\'area documentato nelle US adiacenti.',
-    responsabile_scientifico: 'Prof.ssa Giulia Bianchi',
-    responsabile_rielaborazione: 'Dott. Luca Ferretti',
-    data_rielaborazione: '2024-09-20',
-  };
-  const doc = buildICCDpdf([test]);
-  doc.save('SchedaUS_TEST_' + new Date().toISOString().split('T')[0] + '.pdf');
-  showToast('✓ PDF di test generato');
-}
 
 async function exportPDFSingola() {
   const id = document.getElementById('pdfSelectUS').value;
