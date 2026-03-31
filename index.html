@@ -5,7 +5,7 @@
   <!-- PWA -->
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#C9963A">
-  <meta name="app-version" content="7">
+  <meta name="app-version" content="8">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="SMP Scavo">
@@ -1388,6 +1388,9 @@ let repertiCount = 0;
 
 // ─── GOOGLE IDENTITY ─────────────────────────────────────────────
 window.onload = async () => {
+  // Prima controlla se stiamo tornando da un redirect OAuth (iOS PWA)
+  checkRedirectToken();
+  if (accessToken) return; // già loggato via redirect
   await loadGoogleScript();
   tryTokenClient();
 };
@@ -1430,8 +1433,39 @@ function tryTokenClient() {
 
 // Chiamato dal bottone manuale nella login screen
 function doGoogleLogin() {
-  if (window._tokenClient) {
-    window._tokenClient.requestAccessToken({ prompt: 'select_account' });
+  // Su iOS PWA standalone i popup sono bloccati — usa redirect
+  const isIosPWA = navigator.standalone === true ||
+                   (window.matchMedia('(display-mode: standalone)').matches &&
+                    /iPad|iPhone|iPod/.test(navigator.userAgent));
+  
+  if (isIosPWA) {
+    // Redirect flow per iOS PWA
+    const params = new URLSearchParams({
+      client_id: CLIENT_ID,
+      redirect_uri: window.location.origin + window.location.pathname,
+      response_type: 'token',
+      scope: SCOPES,
+      include_granted_scopes: 'true',
+    });
+    window.location.href = 'https://accounts.google.com/o/oauth2/v2/auth?' + params.toString();
+  } else {
+    if (window._tokenClient) {
+      window._tokenClient.requestAccessToken({ prompt: 'select_account' });
+    }
+  }
+}
+
+// Gestisci il token di ritorno dal redirect (iOS)
+function checkRedirectToken() {
+  const hash = window.location.hash;
+  if (!hash) return;
+  const params = new URLSearchParams(hash.replace('#', '?'));
+  const token = params.get('access_token');
+  if (token) {
+    accessToken = token;
+    // Pulisci l'URL
+    history.replaceState(null, '', window.location.pathname);
+    onAuthenticated();
   }
 }
 
@@ -3986,9 +4020,9 @@ function showToast(msg) {
   <script>
     if ('serviceWorker' in navigator && !location.hostname.includes('claudeusercontent.com')) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./service-worker.js?v=7')
+        navigator.serviceWorker.register('./service-worker.js?v=8')
           .then(reg => {
-            console.log('SW registrato v7:', reg.scope);
+            console.log('SW registrato v8:', reg.scope);
             // Forza aggiornamento immediato se c'è una nuova versione
             reg.update();
           })
