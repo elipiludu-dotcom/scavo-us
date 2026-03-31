@@ -5,6 +5,7 @@
   <!-- PWA -->
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#C9963A">
+  <meta name="app-version" content="7">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="SMP Scavo">
@@ -3985,8 +3986,12 @@ function showToast(msg) {
   <script>
     if ('serviceWorker' in navigator && !location.hostname.includes('claudeusercontent.com')) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./service-worker.js')
-          .then(reg => console.log('SW registrato:', reg.scope))
+        navigator.serviceWorker.register('./service-worker.js?v=7')
+          .then(reg => {
+            console.log('SW registrato v7:', reg.scope);
+            // Forza aggiornamento immediato se c'è una nuova versione
+            reg.update();
+          })
           .catch(err => console.log('SW errore:', err));
       });
     }
