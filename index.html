@@ -772,8 +772,7 @@
 <div id="appShell" style="display:none">
   <div class="nav-tabs">
     <div class="nav-tab active" onclick="showView('list')">Home</div>
-    <div class="nav-tab" onclick="showView('new')">+ Nuova US</div>
-    <div class="nav-tab" id="tombaTab" onclick="openNewTomba()">+ Nuova Tomba</div>
+
     <div class="nav-tab" onclick="showView('export')">Esporta</div>
     <div class="nav-tab" onclick="showView('import')">Importa</div>
     <div class="nav-tab" onclick="signOut()" style="margin-left:auto">Esci</div>
@@ -1635,11 +1634,9 @@ function showView(v) {
   const idx = {list:0,new:1,tombe:2,export:3,import:4}[v];
   if (idx !== undefined) document.querySelectorAll('.nav-tab')[idx].classList.add('active');
   if (v === 'new' && editingId === null) resetForm();
-  if (v === 'list') { editingId = null; renderList(); renderStats(); updateNewTabLabel(); updateTombaTabLabel(); }
+  if (v === 'list') { editingId = null; renderList(); renderStats(); }
   if (v === 'schede') { renderList(); }
-  if (v === 'tombe') { renderTombe(); updateTombaTabLabel(); }
-  if (v === 'tomba-form') { updateTombaTabLabel(); }
-  if (v === 'new') updateNewTabLabel();
+  if (v === 'tombe') { renderTombe(); }
 }
 
 function updateNewTabLabel() {
@@ -1790,7 +1787,6 @@ function openEdit(id) {
   document.querySelectorAll('.nav-tab')[1].classList.add('active');
   document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
   document.getElementById('view-new').classList.add('active');
-  updateNewTabLabel();
   updateStatoStyle();
 }
 
@@ -2210,7 +2206,6 @@ function openNewTomba() {
   document.getElementById('btnExportTombaPDF').style.display = 'none';
   window._editTombaOrigin = 'view-tombe';
   showView('tomba-form');
-  updateTombaTabLabel();
 }
 
 function openEditTomba(id) {
@@ -2224,7 +2219,6 @@ function openEditTomba(id) {
   document.getElementById('btnExportTombaPDF').style.display = 'inline-block';
   window._editTombaOrigin = document.querySelector('.view.active')?.id || 'view-tombe';
   showView('tomba-form');
-  updateTombaTabLabel();
 }
 
 async function saveTomba() {
@@ -2243,8 +2237,7 @@ async function saveTomba() {
     setSyncStatus('ok', 'Sincronizzato');
     showToast('☁ Tomba ' + numero + ' salvata');
     editingTombaId = null;
-    updateTombaTabLabel();
-    showView('tombe');
+      showView('tombe');
   } catch(e) {
     setSyncStatus('error', 'Errore salvataggio');
     showToast('⚠ Errore durante il salvataggio');
@@ -2274,8 +2267,7 @@ async function deleteTomba() {
     setSyncStatus('ok', 'Sincronizzato');
     showToast('🗑 Tomba ' + t.numero + ' eliminata');
     editingTombaId = null;
-    updateTombaTabLabel();
-    showView('tombe');
+      showView('tombe');
   } catch(e) {
     setSyncStatus('error', 'Errore');
     showToast('⚠ Errore eliminazione');
