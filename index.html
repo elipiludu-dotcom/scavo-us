@@ -5,7 +5,7 @@
   <!-- PWA -->
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#C9963A">
-  <meta name="app-version" content="11">
+  <meta name="app-version" content="12">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="SMP Scavo">
@@ -1225,32 +1225,34 @@
         <div id="mappa-layers" style="
           position:absolute;top:10px;right:10px;z-index:1000;
           background:var(--parchment);border:1px solid var(--border);
-          border-radius:4px;padding:10px 14px;font-size:0.75rem;
-          font-family:'Space Mono',monospace;min-width:160px;
-          box-shadow:0 2px 12px rgba(0,0,0,0.3)">
-          <div style="font-weight:700;color:var(--earth);margin-bottom:10px;letter-spacing:0.1em;text-transform:uppercase;font-size:0.6rem">Tipi layer</div>
-          <label style="display:flex;align-items:center;gap:6px;margin-bottom:6px;cursor:pointer;color:var(--ink)">
-            <input type="checkbox" id="layer-polygon" checked onchange="toggleMappaLayer('polygon', this.checked)">
-            <span style="display:inline-block;width:12px;height:12px;background:rgba(201,150,58,0.6);border:1px solid var(--earth);border-radius:2px"></span>
-            Poligoni US
-          </label>
-          <label style="display:flex;align-items:center;gap:6px;margin-bottom:6px;cursor:pointer;color:var(--ink)">
-            <input type="checkbox" id="layer-line" checked onchange="toggleMappaLayer('line', this.checked)">
-            <span style="display:inline-block;width:12px;height:3px;background:#888;margin:4px 0"></span>
-            Linee
-          </label>
-          <label style="display:flex;align-items:center;gap:6px;margin-bottom:6px;cursor:pointer;color:var(--ink)">
-            <input type="checkbox" id="layer-point" checked onchange="toggleMappaLayer('point', this.checked)">
-            <span style="display:inline-block;width:10px;height:10px;background:#4a90d9;border-radius:50%"></span>
-            Punti
-          </label>
-          <label style="display:flex;align-items:center;gap:6px;margin-bottom:12px;cursor:pointer;color:var(--ink)">
-            <input type="checkbox" id="layer-other" checked onchange="toggleMappaLayer('other', this.checked)">
-            <span style="display:inline-block;width:12px;height:12px;background:rgba(120,180,80,0.6);border:1px solid #6a9a3a;border-radius:2px"></span>
-            Altro
-          </label>
-          <div style="font-weight:700;color:var(--earth);margin-bottom:8px;letter-spacing:0.1em;text-transform:uppercase;font-size:0.6rem;border-top:1px solid var(--border);padding-top:10px">Filtra per anno</div>
-          <div id="pannello-anni"></div>
+          border-radius:4px;padding:12px 14px;font-size:0.75rem;
+          font-family:'Space Mono',monospace;width:240px;max-height:80vh;
+          overflow-y:auto;box-shadow:0 2px 12px rgba(0,0,0,0.3)">
+
+          <!-- Titolo + toggle pannello -->
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+            <div style="font-weight:700;color:var(--earth);letter-spacing:0.1em;text-transform:uppercase;font-size:0.6rem">Layer</div>
+            <button onclick="document.getElementById('mappa-layers-body').style.display = document.getElementById('mappa-layers-body').style.display==='none'?'block':'none'"
+              style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:0.8rem">▲</button>
+          </div>
+
+          <div id="mappa-layers-body">
+            <!-- Layer fissi -->
+            <div style="font-size:0.6rem;text-transform:uppercase;letter-spacing:0.1em;color:var(--earth);margin-bottom:6px">📌 Sempre visibili</div>
+            <div id="pannello-fissi"></div>
+
+            <!-- Separatore -->
+            <div style="border-top:1px solid var(--border);margin:10px 0"></div>
+
+            <!-- Ricerca layer -->
+            <div style="font-size:0.6rem;text-transform:uppercase;letter-spacing:0.1em;color:var(--muted);margin-bottom:6px">Altri layer</div>
+            <input type="search" id="layer-search" placeholder="Cerca layer..."
+              oninput="filtraLayerPannello(this.value)"
+              style="width:100%;box-sizing:border-box;padding:5px 8px;margin-bottom:8px;
+                     background:var(--parchment-light);border:1px solid var(--border);
+                     border-radius:3px;color:var(--ink);font-size:0.7rem;font-family:'Space Mono',monospace">
+            <div id="pannello-layer-lista" style="max-height:300px;overflow-y:auto"></div>
+          </div>
         </div>
         <!-- Loading -->
         <div id="mappa-loading" style="
@@ -4111,6 +4113,7 @@ function initMappa() {
     if (_mappaLayers.polygon) {
       _mappaMap.fitBounds(_mappaLayers.polygon.getBounds(), { padding: [20,20] });
     }
+    costruisciLayerIndex();
   }).catch(e => {
     loading.innerHTML = '⚠ Errore: ' + e.message;
   });
@@ -4237,6 +4240,12 @@ function estraiNumeroUS(layerName) {
   return m ? m[1] : null;
 }
 
+// Layer sempre visibili
+const LAYER_FISSI = ["PKnuovi_2022", "us 2039 NEW", "us_2329.2023", "us_108_SE", "us_108.2022-cocciopesto", "us_108.2022-cresta", "us_101.2022", "us_1.2022.def", "us_2774", "us_3107.2", "us_2869.2022", "us_3154.2022", "us_2577.2022.2", "us_2268.2022"];
+
+// Mappa nome layer → leaflet layer
+let _layerIndex = {};  // { 'us_2039': leafletLayer, ... }
+
 function toggleMappaLayer(tipo, visible) {
   const layer = _mappaLayers[tipo];
   if (!layer || !_mappaMap) return;
@@ -4244,31 +4253,79 @@ function toggleMappaLayer(tipo, visible) {
   else _mappaMap.removeLayer(layer);
 }
 
-function renderPannelloAnni(indice) {
-  const container = document.getElementById('pannello-anni');
+function toggleSingoloLayer(layerName, visible) {
+  const l = _layerIndex[layerName];
+  if (!l || !_mappaMap) return;
+  if (visible) { if (!_mappaMap.hasLayer(l)) l.addTo(_mappaMap); }
+  else _mappaMap.removeLayer(l);
+}
+
+function costruisciLayerIndex() {
+  // Dopo il caricamento: indicizza ogni sub-layer per nome
+  _layerIndex = {};
+  ['polygon','line','point','other'].forEach(tipo => {
+    const gruppo = _mappaLayers[tipo];
+    if (!gruppo) return;
+    gruppo.eachLayer(l => {
+      const nome = l.feature?.properties?.layer;
+      if (nome) {
+        if (!_layerIndex[nome]) _layerIndex[nome] = [];
+        _layerIndex[nome].push(l);
+      }
+    });
+  });
+
+  // Spegni tutti tranne i fissi
+  Object.keys(_layerIndex).forEach(nome => {
+    const isFisso = LAYER_FISSI.includes(nome);
+    _layerIndex[nome].forEach(l => {
+      if (!isFisso && _mappaMap.hasLayer(l)) _mappaMap.removeLayer(l);
+    });
+  });
+
+  renderPannelloFissi();
+  renderPannelloLista('');
+}
+
+function renderPannelloFissi() {
+  const container = document.getElementById('pannello-fissi');
   if (!container) return;
-  const anni = Object.keys(indice).sort();
-  container.innerHTML = anni.map(anno => `
-    <label style="display:flex;align-items:center;gap:6px;margin-bottom:5px;cursor:pointer;color:var(--ink);font-size:0.75rem">
-      <input type="checkbox" checked onchange="filtroAnno('${anno}', this.checked)">
-      ${anno} <span style="color:var(--muted);font-size:0.65rem">(${indice[anno]})</span>
+  container.innerHTML = LAYER_FISSI.map(nome => `
+    <label style="display:flex;align-items:center;gap:6px;margin-bottom:5px;cursor:pointer;color:var(--ink);font-size:0.72rem">
+      <input type="checkbox" checked onchange="toggleSingoloLayer('${nome}', this.checked)">
+      <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:180px" title="${nome}">${nome}</span>
     </label>
   `).join('');
 }
 
-function filtroAnno(anno, visible) {
-  if (!_mappaMap) return;
-  ['polygon','line','point','other'].forEach(tipo => {
-    const layer = _mappaLayers[tipo];
-    if (!layer) return;
-    layer.eachLayer(l => {
-      const featAnno = l.feature?.properties?.anno;
-      if (featAnno === anno) {
-        if (visible) { if (!_mappaMap.hasLayer(l)) l.addTo(_mappaMap); }
-        else _mappaMap.removeLayer(l);
-      }
-    });
-  });
+function renderPannelloLista(filtro) {
+  const container = document.getElementById('pannello-layer-lista');
+  if (!container) return;
+  const tutti = Object.keys(_layerIndex).sort();
+  const filtrati = filtro
+    ? tutti.filter(n => n.toLowerCase().includes(filtro.toLowerCase()) && !LAYER_FISSI.includes(n))
+    : tutti.filter(n => !LAYER_FISSI.includes(n));
+
+  if (!filtro && filtrati.length > 200) {
+    container.innerHTML = `<div style="color:var(--muted);font-size:0.65rem">Cerca per visualizzare i layer (${filtrati.length} totali)</div>`;
+    return;
+  }
+
+  container.innerHTML = filtrati.slice(0, 100).map(nome => {
+    const visibile = _layerIndex[nome]?.some(l => _mappaMap.hasLayer(l));
+    return `<label style="display:flex;align-items:center;gap:6px;margin-bottom:4px;cursor:pointer;color:var(--ink);font-size:0.72rem">
+      <input type="checkbox" ${visibile ? 'checked' : ''} onchange="toggleSingoloLayer('${nome}', this.checked)">
+      <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:180px" title="${nome}">${nome}</span>
+    </label>`;
+  }).join('');
+
+  if (filtrati.length > 100) {
+    container.innerHTML += `<div style="color:var(--muted);font-size:0.65rem;margin-top:4px">...e altri ${filtrati.length-100}. Usa la ricerca.</div>`;
+  }
+}
+
+function filtraLayerPannello(q) {
+  renderPannelloLista(q);
 }
 
 // ─── SYNC STATUS ─────────────────────────────────────────────────
@@ -4287,9 +4344,9 @@ function showToast(msg) {
   <script>
     if ('serviceWorker' in navigator && !location.hostname.includes('claudeusercontent.com')) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./service-worker.js?v=11')
+        navigator.serviceWorker.register('./service-worker.js?v=12')
           .then(reg => {
-            console.log('SW registrato v11:', reg.scope);
+            console.log('SW registrato v12:', reg.scope);
             // Forza aggiornamento immediato se c'è una nuova versione
             reg.update();
           })
