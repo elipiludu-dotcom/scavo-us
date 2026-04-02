@@ -5,7 +5,7 @@
   <!-- PWA -->
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#C9963A">
-  <meta name="app-version" content="12">
+  <meta name="app-version" content="13">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="SMP Scavo">
@@ -4065,6 +4065,7 @@ function exportTombePDFTutte() {
 // ─── MAPPA LEAFLET ───────────────────────────────────────────────
 let _mappaMap = null;
 let _mappaLayers = { polygon: null, point: null, line: null, other: null };
+let _allLeafletLayers = []; // tutti i layer individuali per il pannello
 let _mappaInited = false;
 
 // Definizione EPSG:3003 Monte Mario Italy 1
@@ -4183,14 +4184,15 @@ async function caricaLayer(url, tipo) {
     }
 
     if (layer) {
-      layer.addTo(_mappaMap);
-      // Per i poligoni accumula in un LayerGroup unico
-      if (tipo === 'polygon' && _mappaLayers.polygon) {
-        // Aggiungi features al layer esistente
-        layer.eachLayer(l => _mappaLayers.polygon.addLayer(l));
-      } else {
-        _mappaLayers[tipo] = layer;
+      // Inizializza LayerGroup per il tipo se non esiste
+      if (!_mappaLayers[tipo]) {
+        _mappaLayers[tipo] = L.layerGroup().addTo(_mappaMap);
       }
+      // Aggiungi ogni sub-layer al gruppo
+      layer.eachLayer(l => {
+        _mappaLayers[tipo].addLayer(l);
+        _allLeafletLayers.push(l);
+      });
     }
   } catch(e) {
     console.warn('Layer', tipo, 'non caricato:', e.message);
@@ -4254,33 +4256,40 @@ function toggleMappaLayer(tipo, visible) {
 }
 
 function toggleSingoloLayer(layerName, visible) {
-  const l = _layerIndex[layerName];
-  if (!l || !_mappaMap) return;
-  if (visible) { if (!_mappaMap.hasLayer(l)) l.addTo(_mappaMap); }
-  else _mappaMap.removeLayer(l);
+  const layers = _layerIndex[layerName];
+  if (!layers || !_mappaMap) return;
+  layers.forEach(l => {
+    if (visible) { if (!_mappaMap.hasLayer(l)) l.addTo(_mappaMap); }
+    else { if (_mappaMap.hasLayer(l)) _mappaMap.removeLayer(l); }
+  });
 }
 
 function costruisciLayerIndex() {
-  // Dopo il caricamento: indicizza ogni sub-layer per nome
   _layerIndex = {};
-  ['polygon','line','point','other'].forEach(tipo => {
-    const gruppo = _mappaLayers[tipo];
-    if (!gruppo) return;
-    gruppo.eachLayer(l => {
-      const nome = l.feature?.properties?.layer;
-      if (nome) {
-        if (!_layerIndex[nome]) _layerIndex[nome] = [];
-        _layerIndex[nome].push(l);
-      }
-    });
+
+  // Indicizza tutti i layer per nome
+  _allLeafletLayers.forEach(l => {
+    const nome = l.feature?.properties?.layer;
+    if (!nome) return;
+    if (!_layerIndex[nome]) _layerIndex[nome] = [];
+    _layerIndex[nome].push(l);
   });
 
-  // Spegni tutti tranne i fissi
+  console.log('Layer indicizzati:', Object.keys(_layerIndex).length);
+
+  // Spegni tutti i layer group prima
+  ['polygon','line','point','other'].forEach(tipo => {
+    if (_mappaLayers[tipo]) _mappaMap.removeLayer(_mappaLayers[tipo]);
+  });
+
+  // Riaccendi solo i layer fissi
   Object.keys(_layerIndex).forEach(nome => {
     const isFisso = LAYER_FISSI.includes(nome);
-    _layerIndex[nome].forEach(l => {
-      if (!isFisso && _mappaMap.hasLayer(l)) _mappaMap.removeLayer(l);
-    });
+    if (isFisso) {
+      _layerIndex[nome].forEach(l => {
+        if (!_mappaMap.hasLayer(l)) l.addTo(_mappaMap);
+      });
+    }
   });
 
   renderPannelloFissi();
@@ -4312,7 +4321,7 @@ function renderPannelloLista(filtro) {
   }
 
   container.innerHTML = filtrati.slice(0, 100).map(nome => {
-    const visibile = _layerIndex[nome]?.some(l => _mappaMap.hasLayer(l));
+    const visibile = (_layerIndex[nome] || []).some(l => _mappaMap.hasLayer(l));
     return `<label style="display:flex;align-items:center;gap:6px;margin-bottom:4px;cursor:pointer;color:var(--ink);font-size:0.72rem">
       <input type="checkbox" ${visibile ? 'checked' : ''} onchange="toggleSingoloLayer('${nome}', this.checked)">
       <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:180px" title="${nome}">${nome}</span>
@@ -4344,9 +4353,9 @@ function showToast(msg) {
   <script>
     if ('serviceWorker' in navigator && !location.hostname.includes('claudeusercontent.com')) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./service-worker.js?v=12')
+        navigator.serviceWorker.register('./service-worker.js?v=13')
           .then(reg => {
-            console.log('SW registrato v12:', reg.scope);
+            console.log('SW registrato v13:', reg.scope);
             // Forza aggiornamento immediato se c'è una nuova versione
             reg.update();
           })
