@@ -5,7 +5,7 @@
   <!-- PWA -->
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#C9963A">
-  <meta name="app-version" content="14">
+  <meta name="app-version" content="15">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="SMP Scavo">
@@ -4114,7 +4114,8 @@ function initMappa() {
     if (_mappaLayers.polygon) {
       _mappaMap.fitBounds(_mappaLayers.polygon.getBounds(), { padding: [20,20] });
     }
-    costruisciLayerIndex();
+    // Piccolo delay per assicurarsi che tutti i layer siano pronti
+    setTimeout(() => costruisciLayerIndex(), 500);
   }).catch(e => {
     loading.innerHTML = '⚠ Errore: ' + e.message;
   });
@@ -4359,9 +4360,9 @@ function showToast(msg) {
   <script>
     if ('serviceWorker' in navigator && !location.hostname.includes('claudeusercontent.com')) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./service-worker.js?v=14')
+        navigator.serviceWorker.register('./service-worker.js?v=15')
           .then(reg => {
-            console.log('SW registrato v14:', reg.scope);
+            console.log('SW registrato v15:', reg.scope);
             // Forza aggiornamento immediato se c'è una nuova versione
             reg.update();
           })
