@@ -1,4 +1,4 @@
-const CACHE_NAME = 'smp-scavo-v15';
+const CACHE_NAME = 'smp-scavo-v16';
 
 const STATIC_ASSETS = [
   './',
@@ -25,10 +25,15 @@ self.addEventListener('activate', event => {
 });
 
 self.addEventListener('fetch', event => {
-  // Per le API Google: sempre rete
+  // Lascia passare senza cache: API Google, tile OSM, CDN esterni
   if (event.request.url.includes('googleapis.com') ||
       event.request.url.includes('accounts.google.com') ||
-      event.request.url.includes('gstatic.com')) {
+      event.request.url.includes('gstatic.com') ||
+      event.request.url.includes('tile.openstreetmap.org') ||
+      event.request.url.includes('unpkg.com') ||
+      event.request.url.includes('cdnjs.cloudflare.com') ||
+      event.request.url.includes('fonts.googleapis.com') ||
+      event.request.url.includes('fonts.gstatic.com')) {
     return;
   }
 

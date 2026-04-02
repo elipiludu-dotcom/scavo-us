@@ -5,7 +5,7 @@
   <!-- PWA -->
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#C9963A">
-  <meta name="app-version" content="15">
+  <meta name="app-version" content="16">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="SMP Scavo">
@@ -4084,7 +4084,8 @@ function initMappa() {
   // Sfondo OpenStreetMap
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     maxZoom: 22,
-    attribution: '© OpenStreetMap'
+    attribution: '© OpenStreetMap',
+    crossOrigin: true,
   }).addTo(_mappaMap);
 
   const loading = document.getElementById('mappa-loading');
@@ -4114,8 +4115,13 @@ function initMappa() {
     if (_mappaLayers.polygon) {
       _mappaMap.fitBounds(_mappaLayers.polygon.getBounds(), { padding: [20,20] });
     }
-    // Piccolo delay per assicurarsi che tutti i layer siano pronti
-    setTimeout(() => costruisciLayerIndex(), 500);
+    // Attendi che Leaflet processi tutti i layer prima di indicizzare
+    loading.style.display = 'flex';
+    loading.innerHTML = '⏳ Indicizzazione layer...';
+    setTimeout(() => {
+      costruisciLayerIndex();
+      loading.style.display = 'none';
+    }, 3000);
   }).catch(e => {
     loading.innerHTML = '⚠ Errore: ' + e.message;
   });
@@ -4360,9 +4366,9 @@ function showToast(msg) {
   <script>
     if ('serviceWorker' in navigator && !location.hostname.includes('claudeusercontent.com')) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./service-worker.js?v=15')
+        navigator.serviceWorker.register('./service-worker.js?v=16')
           .then(reg => {
-            console.log('SW registrato v15:', reg.scope);
+            console.log('SW registrato v16:', reg.scope);
             // Forza aggiornamento immediato se c'è una nuova versione
             reg.update();
           })
