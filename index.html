@@ -5,7 +5,7 @@
   <!-- PWA -->
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#C9963A">
-  <meta name="app-version" content="13">
+  <meta name="app-version" content="14">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="SMP Scavo">
@@ -4122,9 +4122,15 @@ function initMappa() {
 
 async function caricaLayer(url, tipo) {
   try {
+    console.log('Carico:', url);
     const res = await fetch(url);
-    if (!res.ok) return; // file non trovato, salta
+    if (!res.ok) {
+      console.warn('File non trovato:', url, res.status);
+      return;
+    }
+    console.log('Ricevuto:', url, '- parsing...');
     const gj = await res.json();
+    console.log('Features:', url, gj.features?.length);
 
     // Converti coordinate da EPSG:3003 a WGS84
     const converted = convertGeoJSON3003toWGS84(gj);
@@ -4353,9 +4359,9 @@ function showToast(msg) {
   <script>
     if ('serviceWorker' in navigator && !location.hostname.includes('claudeusercontent.com')) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./service-worker.js?v=13')
+        navigator.serviceWorker.register('./service-worker.js?v=14')
           .then(reg => {
-            console.log('SW registrato v13:', reg.scope);
+            console.log('SW registrato v14:', reg.scope);
             // Forza aggiornamento immediato se c'è una nuova versione
             reg.update();
           })
