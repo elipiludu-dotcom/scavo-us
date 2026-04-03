@@ -5,7 +5,7 @@
   <!-- PWA -->
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#C9963A">
-  <meta name="app-version" content="22">
+  <meta name="app-version" content="23">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="SMP Scavo">
@@ -802,7 +802,7 @@
 <body>
 
 <div class="app-header">
-  <h1>Archivio US</h1>
+  <h1>Archivio Documentazione di Scavo</h1>
   <div class="header-right">
     <div class="sync-status" id="syncStatus">
       <span class="sync-dot" id="syncDot"></span>
@@ -856,6 +856,9 @@
       <div class="nav-dropdown-menu">
         <div class="nav-dropdown-item" onclick="showView('mappa')">
           <span class="nav-icon">🗺</span> Apri GIS
+        </div>
+        <div class="nav-dropdown-item" onclick="showView('diario')">
+          <span class="nav-icon">📓</span> Diario di Scavo
         </div>
         <div class="nav-dropdown-sep"></div>
         <div class="nav-dropdown-item" onclick="apriSelezionePDF('us')">
@@ -1356,6 +1359,95 @@
       </div>
     </div>
 
+    <!-- DIARIO DI SCAVO -->
+    <div id="view-diario" class="view">
+      <div class="content" style="max-width:860px">
+        <div style="padding:24px 16px 8px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px">
+          <h2 style="margin:0;font-family:'Patrick Hand',cursive;color:var(--earth);font-size:1.4rem">📓 Diario di Scavo Settimanale</h2>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <button class="btn btn-secondary" onclick="nuovaDiarioScheda()">+ Nuova Scheda</button>
+            <button class="btn btn-secondary" onclick="showView('list')">← Home</button>
+          </div>
+        </div>
+        <!-- Lista diari -->
+        <div id="diario-lista" style="padding:0 16px 16px"></div>
+      </div>
+    </div>
+
+    <!-- FORM DIARIO -->
+    <div id="view-diario-form" class="view">
+      <div class="content" style="max-width:860px">
+        <div class="form-header">
+          <h2 id="diarioFormTitle" style="font-family:'Patrick Hand',cursive;color:var(--earth)">Nuova Scheda Diario</h2>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <button class="btn btn-danger" id="btnDeleteDiario" style="display:none" onclick="deleteDiario()">🗑 Elimina</button>
+            <button class="btn btn-secondary" id="btnExportDiarioPDF" style="display:none" onclick="exportDiarioPDF()">⬇ PDF</button>
+            <button class="btn btn-secondary" onclick="showView('diario')">← Diario</button>
+            <button class="btn btn-success" onclick="saveDiario()">Salva</button>
+          </div>
+        </div>
+
+        <div class="form-section">
+          <div class="section-title">Intestazione</div>
+          <div class="field-row">
+            <div class="field-group">
+              <label>Data</label>
+              <input type="date" id="d_data">
+            </div>
+            <div class="field-group">
+              <label>Compilatori</label>
+              <input type="text" id="d_compilatori" placeholder="es. Rossi, Bianchi">
+            </div>
+          </div>
+        </div>
+
+        <div class="form-section">
+          <div class="section-title">Unità Stratigrafiche</div>
+          <div class="field-group">
+            <label>US in esame <span style="font-size:0.75rem;color:var(--muted)">(numeri separati da virgola)</span></label>
+            <input type="text" id="d_us_esame" placeholder="es. 2039, 2040, 3108">
+          </div>
+        </div>
+
+        <div class="form-section">
+          <div class="section-title">Documentazione fotografica</div>
+          <div class="field-group">
+            <label>Foto <span style="font-size:0.75rem;color:var(--muted)">(nome cartelle di riferimento)</span></label>
+            <input type="text" id="d_foto" placeholder="es. SMP2024_W32, SMP2024_W33">
+          </div>
+        </div>
+
+        <div class="form-section">
+          <div class="section-title">Osservazioni e interpretazione</div>
+          <div class="field-group">
+            <textarea id="d_osservazioni" rows="8" placeholder="Descrizione delle attività, osservazioni stratigrafiche, interpretazioni..."></textarea>
+          </div>
+        </div>
+
+        <div class="form-section">
+          <div class="section-title">Schizzo / Immagini dal quaderno di scavo</div>
+          <div class="field-row">
+            <div class="field-group">
+              <label>Note schizzo 1</label>
+              <textarea id="d_schizzo1" rows="4" placeholder="Descrizione o riferimento immagine..."></textarea>
+            </div>
+            <div class="field-group">
+              <label>Note schizzo 2</label>
+              <textarea id="d_schizzo2" rows="4" placeholder="Descrizione o riferimento immagine..."></textarea>
+            </div>
+          </div>
+        </div>
+
+        <div class="form-section">
+          <div class="section-title">Prossima settimana</div>
+          <div class="field-group">
+            <label>Note e obiettivi per la prossima settimana</label>
+            <textarea id="d_note_prossima" rows="4" placeholder="Obiettivi, priorità, note operative..."></textarea>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <div id="view-export" class="view">
       <div class="export-section">
 
@@ -1486,7 +1578,7 @@
 <!-- Login screen (shown if not authenticated) -->
 <div id="loginScreen" class="login-screen" style="display:none">
   <div class="icon">🏺</div>
-  <h2>Archivio US – Scavo</h2>
+  <h2>Archivio Documentazione di Scavo</h2>
   <p>Accedi con il tuo account Google per sincronizzare le schede con il team.</p>
   <button onclick="doGoogleLogin()" style="
     display:flex;align-items:center;gap:12px;
@@ -1647,6 +1739,7 @@ function onAuthenticated() {
   setSyncStatus('syncing', 'Caricamento…');
   loadFromSheets(false);
   loadTombe();
+  loadDiari();
 }
 
 function signOut() {
@@ -1829,7 +1922,7 @@ function showView(v) {
   document.querySelectorAll('.view').forEach(el => el.classList.remove('active'));
   document.querySelectorAll('.nav-tab').forEach(el => el.classList.remove('active'));
   document.getElementById('view-' + v).classList.add('active');
-  const idx = {list:0,new:1,tombe:2,mappa:3,export:4,import:5}[v];
+  const idx = {list:0,new:1,tombe:2,mappa:3,diario:3,export:4,import:5}[v];
   if (idx !== undefined) document.querySelectorAll('.nav-tab')[idx].classList.add('active');
   if (v === 'new' && editingId === null) resetForm();
   if (v === 'list') { editingId = null; renderList(); renderStats(); }
@@ -4614,6 +4707,259 @@ function filtraLayerPannello(q) {
   renderPannelloLista(q);
 }
 
+// ─── DIARIO DI SCAVO ─────────────────────────────────────────────
+const SHEET_DIARIO = 'Diario';
+let diari = [];
+let editingDiarioId = null;
+
+async function loadDiari() {
+  try {
+    const data = await sheetsGet(`${SHEET_DIARIO}!A:Z`);
+    const rows = data.values || [];
+    if (rows.length < 2) { diari = []; return; }
+    const headers = rows[0];
+    diari = rows.slice(1).map(r => {
+      const obj = {};
+      headers.forEach((h,i) => obj[h] = r[i]||'');
+      if (!obj.id) obj.id = 'diario_' + Math.random().toString(36).substr(2,9);
+      return obj;
+    });
+    renderDiari();
+  } catch(e) {
+    console.warn('Diario non caricato:', e.message);
+    diari = [];
+  }
+}
+
+function renderDiari() {
+  const container = document.getElementById('diario-lista');
+  if (!container) return;
+  if (!diari.length) {
+    container.innerHTML = '<div class="empty-state"><div class="icon">📓</div><p>Nessuna scheda diario.<br>Clicca "+ Nuova Scheda" per iniziare.</p></div>';
+    return;
+  }
+  const sorted = [...diari].sort((a,b) => (b.data||'').localeCompare(a.data||''));
+  container.innerHTML = sorted.map(d => `
+    <div class="us-card" onclick="openEditDiario('${d.id}')" style="cursor:pointer">
+      <div style="display:flex;align-items:center;justify-content:space-between;width:100%">
+        <div>
+          <div style="font-family:'Patrick Hand',cursive;font-size:1.1rem;color:var(--earth)">${d.data || 'Senza data'}</div>
+          <div style="font-size:0.8rem;color:var(--ink);margin-top:2px">${d.compilatori || ''}</div>
+          <div style="font-size:0.75rem;color:var(--muted);margin-top:4px">
+            ${d.us_esame ? 'US: ' + d.us_esame : ''}
+          </div>
+        </div>
+        <button class="btn-edit-card" onclick="event.stopPropagation();openEditDiario('${d.id}')">✏ Modifica</button>
+      </div>
+    </div>
+  `).join('');
+}
+
+function nuovaDiarioScheda() {
+  editingDiarioId = null;
+  resetDiarioForm();
+  document.getElementById('diarioFormTitle').textContent = 'Nuova Scheda Diario';
+  document.getElementById('btnDeleteDiario').style.display = 'none';
+  document.getElementById('btnExportDiarioPDF').style.display = 'none';
+  showView('diario-form');
+}
+
+function openEditDiario(id) {
+  const d = diari.find(x => x.id === id);
+  if (!d) return;
+  editingDiarioId = id;
+  resetDiarioForm();
+  document.getElementById('d_data').value = d.data || '';
+  document.getElementById('d_compilatori').value = d.compilatori || '';
+  document.getElementById('d_us_esame').value = d.us_esame || '';
+  document.getElementById('d_foto').value = d.foto || '';
+  document.getElementById('d_osservazioni').value = d.osservazioni || '';
+  document.getElementById('d_schizzo1').value = d.schizzo1 || '';
+  document.getElementById('d_schizzo2').value = d.schizzo2 || '';
+  document.getElementById('d_note_prossima').value = d.note_prossima || '';
+  document.getElementById('diarioFormTitle').textContent = 'Diario ' + (d.data || '');
+  document.getElementById('btnDeleteDiario').style.display = 'inline-block';
+  document.getElementById('btnExportDiarioPDF').style.display = 'inline-block';
+  showView('diario-form');
+}
+
+function resetDiarioForm() {
+  ['d_data','d_compilatori','d_us_esame','d_foto','d_osservazioni','d_schizzo1','d_schizzo2','d_note_prossima']
+    .forEach(id => { const el = document.getElementById(id); if(el) el.value = ''; });
+}
+
+function getDiarioFromForm() {
+  return {
+    id: editingDiarioId || ('diario_' + Math.random().toString(36).substr(2,9)),
+    data: document.getElementById('d_data').value,
+    compilatori: document.getElementById('d_compilatori').value,
+    us_esame: document.getElementById('d_us_esame').value,
+    foto: document.getElementById('d_foto').value,
+    osservazioni: document.getElementById('d_osservazioni').value,
+    schizzo1: document.getElementById('d_schizzo1').value,
+    schizzo2: document.getElementById('d_schizzo2').value,
+    note_prossima: document.getElementById('d_note_prossima').value,
+  };
+}
+
+const HEADERS_DIARIO = ['id','data','compilatori','us_esame','foto','osservazioni','schizzo1','schizzo2','note_prossima'];
+
+async function saveDiario() {
+  const d = getDiarioFromForm();
+  setSyncStatus('syncing', 'Salvataggio…');
+  try {
+    await ensureSheetExists(SHEET_DIARIO, HEADERS_DIARIO);
+    if (editingDiarioId) {
+      const all = await sheetsGet(`${SHEET_DIARIO}!A:A`);
+      const rows = (all.values || []);
+      const rowIdx = rows.findIndex(r => r[0] === editingDiarioId);
+      if (rowIdx > 0) {
+        await sheetsUpdate(`${SHEET_DIARIO}!A${rowIdx+1}`, [HEADERS_DIARIO.map(h => String(d[h]||''))]);
+      }
+      diari = diari.map(x => x.id === editingDiarioId ? d : x);
+    } else {
+      await sheetsAppend(SHEET_DIARIO, [HEADERS_DIARIO.map(h => String(d[h]||''))]);
+      diari.push(d);
+    }
+    setSyncStatus('ok', 'Sincronizzato');
+    showView('diario');
+    renderDiari();
+  } catch(e) {
+    setSyncStatus('error', 'Errore');
+    showToast('⚠ Errore salvataggio: ' + e.message);
+  }
+}
+
+async function deleteDiario() {
+  showConfirm({
+    icon:'🗑', title:'Elimina scheda diario?',
+    message: 'Questa operazione non può essere annullata.',
+    okLabel:'Elimina', okClass:'btn-danger',
+    inputLabel:'', inputMatch:'',
+  }).then(async ok => {
+    if (!ok) return;
+    try {
+      const all = await sheetsGet(`${SHEET_DIARIO}!A:A`);
+      const rows = all.values || [];
+      const rowIdx = rows.findIndex(r => r[0] === editingDiarioId);
+      if (rowIdx > 0) {
+        await sheetsClearRow(SHEET_DIARIO, rowIdx+1);
+      }
+      diari = diari.filter(x => x.id !== editingDiarioId);
+      editingDiarioId = null;
+      showView('diario');
+      renderDiari();
+    } catch(e) {
+      showToast('⚠ Errore: ' + e.message);
+    }
+  });
+}
+
+// PDF diario
+function exportDiarioPDF() {
+  const d = diari.find(x => x.id === editingDiarioId);
+  if (!d) return;
+  loadJsPDF().then(() => {
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+    const W=210, H=297, ML=12, MR=12, MT=12, IW=210-24;
+
+    const rect    = (x,y,w,h,lw=0.3) => { doc.setLineWidth(lw); doc.setDrawColor(0); doc.rect(x,y,w,h); };
+    const txt     = (s,x,y,sz=8,st='normal',col=[0,0,0]) => {
+      doc.setFontSize(sz); doc.setFont('helvetica',st); doc.setTextColor(...col);
+      doc.text(String(s||''), x, y);
+    };
+    const lbl     = (s,x,y) => txt(s,x,y,6,'bold',[80,80,80]);
+    const multiTxt = (s,x,y,maxW,sz=8) => {
+      doc.setFontSize(sz); doc.setFont('helvetica','normal'); doc.setTextColor(0,0,0);
+      const lines = doc.splitTextToSize(String(s||''), maxW);
+      doc.text(lines, x, y);
+      return lines.length * sz * 0.3528 * 1.35;
+    };
+
+    let y = MT;
+
+    // Titolo
+    txt('SMP 2024 – Diario di scavo settimanale', W/2, y+7, 13, 'bold');
+    doc.setLineWidth(0.5); doc.line(ML, y+10, W-MR, y+10);
+    y += 14;
+
+    // Data + Compilatori
+    rect(ML, y, IW*0.38, 14);
+    rect(ML+IW*0.38, y, IW*0.62, 14);
+    lbl('DATA', ML+2, y+4);
+    txt(d.data||'', ML+2, y+11, 9, 'bold');
+    lbl('COMPILATORI', ML+IW*0.38+2, y+4);
+    txt(d.compilatori||'', ML+IW*0.38+2, y+11, 8.5);
+    y += 14;
+
+    // US in esame
+    rect(ML, y, IW, 14);
+    lbl('US IN ESAME', ML+2, y+4);
+    txt(d.us_esame||'', ML+2, y+11, 8.5);
+    y += 14;
+
+    // Foto
+    rect(ML, y, IW, 14);
+    lbl('FOTO', ML+2, y+4);
+    txt('(indicare il nome della/e cartella/e con le immagini di riferimento sistemate, corrette e organizzate)', ML+20, y+4, 5.5, 'normal', [120,120,120]);
+    txt(d.foto||'', ML+2, y+11, 8.5);
+    y += 14;
+
+    // Osservazioni
+    const ossH = 80;
+    rect(ML, y, IW, ossH);
+    lbl('OSSERVAZIONI E INTERPRETAZIONE', ML+2, y+4);
+    doc.setLineWidth(0.1); doc.setDrawColor(200,200,200);
+    doc.line(ML, y+6, W-MR, y+6);
+    multiTxt(d.osservazioni||'', ML+2, y+10, IW-4);
+    y += ossH;
+
+    // Schizzo
+    rect(ML, y, IW, 60);
+    lbl('SCHIZZO O IMMAGINI DAL QUADERNO DI SCAVO', ML+2, y+4);
+    doc.setLineWidth(0.1); doc.setDrawColor(200,200,200);
+    doc.line(ML, y+6, W-MR, y+6);
+    doc.line(ML+IW/2, y+6, ML+IW/2, y+60);
+    if (d.schizzo1) multiTxt(d.schizzo1, ML+2, y+10, IW/2-4, 7.5);
+    if (d.schizzo2) multiTxt(d.schizzo2, ML+IW/2+2, y+10, IW/2-4, 7.5);
+    y += 60;
+
+    // Note prossima settimana
+    const noteH = H - MR - y - 5;
+    rect(ML, y, IW, Math.max(noteH, 20));
+    lbl('NOTE E OBIETTIVI PER LA PROSSIMA SETTIMANA', ML+2, y+4);
+    doc.setLineWidth(0.1); doc.setDrawColor(200,200,200);
+    doc.line(ML, y+6, W-MR, y+6);
+    multiTxt(d.note_prossima||'', ML+2, y+10, IW-4);
+
+    doc.save(`Diario_${d.data||'senza_data'}.pdf`);
+  });
+}
+
+async function ensureSheetExists(sheetName, headers) {
+  try {
+    const meta = await fetch(
+      `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}?fields=sheets.properties`,
+      { headers: { Authorization: 'Bearer ' + accessToken } }
+    ).then(r => r.json());
+    const exists = meta.sheets?.some(s => s.properties.title === sheetName);
+    if (!exists) {
+      await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}:batchUpdate`, {
+        method: 'POST',
+        headers: { Authorization: 'Bearer ' + accessToken, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ requests: [{ addSheet: { properties: { title: sheetName } } }] })
+      });
+      await sheetsUpdate(`${sheetName}!A1`, [headers]);
+    }
+  } catch(e) { console.warn('ensureSheetExists:', e.message); }
+}
+
+async function sheetsClearRow(sheetName, rowNum) {
+  const url = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(sheetName + '!A' + rowNum + ':Z' + rowNum)}:clear`;
+  await fetch(url, { method: 'POST', headers: { Authorization: 'Bearer ' + accessToken } });
+}
+
 // ─── SYNC STATUS ─────────────────────────────────────────────────
 function setSyncStatus(state, label) {
   document.getElementById('syncDot').className = 'sync-dot ' + state;
@@ -4630,9 +4976,9 @@ function showToast(msg) {
   <script>
     if ('serviceWorker' in navigator && !location.hostname.includes('claudeusercontent.com')) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./service-worker.js?v=22')
+        navigator.serviceWorker.register('./service-worker.js?v=23')
           .then(reg => {
-            console.log('SW registrato v22:', reg.scope);
+            console.log('SW registrato v23:', reg.scope);
             // Forza aggiornamento immediato se c'è una nuova versione
             reg.update();
           })
