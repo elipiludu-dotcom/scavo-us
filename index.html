@@ -5,7 +5,7 @@
   <!-- PWA -->
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#C9963A">
-  <meta name="app-version" content="19">
+  <meta name="app-version" content="20">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="SMP Scavo">
@@ -2498,6 +2498,67 @@ function closeUSModal(e) {
     document.getElementById('us-modal-overlay').style.display = 'none';
 }
 
+function openTombaModal(id) {
+  const t = tombe.find(x => x.id === id);
+  if (!t) { showToast('⚠ Tomba non trovata'); return; }
+
+  document.getElementById('us-modal-title').textContent = `Tomba ${t.numero}`;
+
+  const v = (val, fallback='—') => {
+    const str = String(val||'').trim();
+    return `<div class="us-modal-value${str?'':' empty'}">${str||fallback}</div>`;
+  };
+  const field = (label, val) =>
+    `<div class="us-modal-field"><label>${label}</label>${v(val)}</div>`;
+  const sep = (txt) => `<div class="us-modal-sep">${txt}</div>`;
+
+  let html = '';
+  html += `<div class="us-modal-grid-3">
+    ${field('Tomba N.', t.numero)}
+    ${field('Anno', t.anno)}
+    ${field('Area', t.area)}
+  </div>
+  <div class="us-modal-grid">
+    ${field('US collegate', t.us_collegate)}
+    ${field('Pianta N.', t.pianta_n)}
+  </div>`;
+
+  html += sep('Caratteri sepoltura');
+  html += `<div class="us-modal-grid">
+    ${field('Giacitura', t.giacitura)}
+    ${field('Tipologia', t.tipologia)}
+  </div>
+  <div class="us-modal-grid">
+    ${field('Orientamento', t.orientamento)}
+    ${field('Condizioni', t.condizioni)}
+  </div>`;
+
+  html += sep('Quote');
+  html += `<div class="us-modal-grid">
+    ${field('Pre-scavo min/max', (t.quota_pre_min||'—') + ' / ' + (t.quota_pre_max||'—'))}
+    ${field('Post-scavo min/max', (t.quota_post_min||'—') + ' / ' + (t.quota_post_max||'—'))}
+  </div>`;
+
+  html += sep('Descrizione');
+  html += field('Descrizione', t.descrizione);
+  html += field('Osservazioni', t.osservazioni);
+
+  html += sep('Dati antropologici');
+  html += `<div class="us-modal-grid">
+    ${field('Sesso', t.sesso)}
+    ${field('Posizione', t.posizione_scheletro)}
+  </div>`;
+
+  html += sep('Amministrativo');
+  html += `<div class="us-modal-grid">
+    ${field('Compilatore', t.compilatore)}
+    ${field('Data', t.data_controllo)}
+  </div>`;
+
+  document.getElementById('us-modal-body').innerHTML = html;
+  document.getElementById('us-modal-overlay').style.display = 'flex';
+}
+
 // ─── MODAL CONFERMA ──────────────────────────────────────────────
 let _confirmResolve = null;
 
@@ -4085,11 +4146,13 @@ function initMappa() {
     attributionControl: false,
     center: [43.53783549565734, 10.813027918338777],
     zoom: 18,
+    maxZoom: 25,
   });
 
   // Sfondo OpenStreetMap
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     maxZoom: 22,
+    maxNativeZoom: 19,
     attribution: '© OpenStreetMap',
     crossOrigin: true,
   }).addTo(_mappaMap);
@@ -4182,7 +4245,7 @@ async function caricaLayer(url, tipo) {
 
           if (tombeUS.length > 0) {
             popup += `<div style="margin-top:4px">${tombeUS.map(t =>
-              `<button onclick="openEditTomba('${t.id}')"
+              `<button onclick="openTombaModal('${t.id}')"
                 style="background:rgba(201,150,58,0.15);color:#C9963A;border:1px solid #C9963A;padding:3px 8px;border-radius:3px;cursor:pointer;font-size:0.65rem;margin:2px 2px 0 0">
                 ⚰ Tomba ${t.numero}
               </button>`
@@ -4398,9 +4461,9 @@ function showToast(msg) {
   <script>
     if ('serviceWorker' in navigator && !location.hostname.includes('claudeusercontent.com')) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./service-worker.js?v=19')
+        navigator.serviceWorker.register('./service-worker.js?v=20')
           .then(reg => {
-            console.log('SW registrato v19:', reg.scope);
+            console.log('SW registrato v20:', reg.scope);
             // Forza aggiornamento immediato se c'è una nuova versione
             reg.update();
           })
