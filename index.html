@@ -5,7 +5,7 @@
   <!-- PWA -->
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#C9963A">
-  <meta name="app-version" content="26">
+  <meta name="app-version" content="27">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="SMP Scavo">
@@ -921,6 +921,7 @@
       <div class="form-header">
         <h2 id="formTitle">Nuova Scheda US</h2>
         <div class="form-actions">
+          <button class="btn btn-secondary" id="btnMappaUS" style="display:none;white-space:nowrap" onclick="apriMappaPerUS()">🗺 Vedi su mappa</button>
           <button class="btn btn-secondary" onclick="showView('list')" style="white-space:nowrap">← Home</button>
           <button class="btn btn-success" onclick="saveScheda()">Salva</button>
         </div>
@@ -1121,6 +1122,7 @@
           <button class="btn btn-secondary" onclick="showView('list')" style="white-space:nowrap">← Home</button>
           <button class="btn btn-danger" id="btnDeleteTomba" style="display:none" onclick="deleteTomba()">🗑 Elimina</button>
           <button class="btn btn-secondary" id="btnExportTombaPDF" style="display:none" onclick="exportTombaPDF()">⬇ PDF</button>
+          <button class="btn btn-secondary" id="btnMappaTomba" style="display:none;white-space:nowrap" onclick="apriMappaPerTomba()">🗺 Vedi su mappa</button>
           <button class="btn btn-success" onclick="saveTomba()">Salva</button>
         </div>
       </div>
@@ -2551,6 +2553,7 @@ function openNewTomba() {
   document.getElementById('tombaFormTitle').textContent = 'Nuova Scheda Tomba';
   document.getElementById('btnDeleteTomba').style.display = 'none';
   document.getElementById('btnExportTombaPDF').style.display = 'none';
+  const _bmt = document.getElementById('btnMappaTomba'); if(_bmt) _bmt.style.display = 'none';
   window._editTombaOrigin = 'view-tombe';
   showView('tomba-form');
 }
@@ -2564,6 +2567,7 @@ function openEditTomba(id) {
   document.getElementById('tombaFormTitle').textContent = 'Tomba ' + t.numero;
   document.getElementById('btnDeleteTomba').style.display = 'inline-block';
   document.getElementById('btnExportTombaPDF').style.display = 'inline-block';
+  document.getElementById('btnMappaTomba').style.display = 'inline-block';
   window._editTombaOrigin = document.querySelector('.view.active')?.id || 'view-tombe';
   showView('tomba-form');
 }
@@ -4932,7 +4936,7 @@ function nuovaDiarioScheda() {
   showView('diario-form');
 }
 
-function openEditDiario(id) {
+async function openEditDiario(id) {
   const d = diari.find(x => x.id === id);
   if (!d) return;
   editingDiarioId = id;
@@ -4951,6 +4955,30 @@ function openEditDiario(id) {
   document.getElementById('btnDeleteDiario').style.display = 'inline-block';
   document.getElementById('btnExportDiarioPDF').style.display = 'inline-block';
   showView('diario-form');
+
+  // Recupera foto da Drive e mostra anteprima
+  if (d.foto1_drive_id) caricaAnteprimaFotoDrive(d.foto1_drive_id, 'foto1-preview', 'd_foto1_b64');
+  if (d.foto2_drive_id) caricaAnteprimaFotoDrive(d.foto2_drive_id, 'foto2-preview', 'd_foto2_b64');
+}
+
+async function caricaAnteprimaFotoDrive(fileId, previewId, b64Id) {
+  try {
+    // Usa il link di esportazione diretto come immagine
+    const url = `https://drive.google.com/thumbnail?id=${fileId}&sz=w400`;
+    // Scarica come blob e converti in base64
+    const res = await fetch(url, { headers: { Authorization: 'Bearer ' + accessToken } });
+    if (!res.ok) return;
+    const blob = await res.blob();
+    const reader = new FileReader();
+    reader.onload = e => {
+      const b64 = e.target.result;
+      document.getElementById(b64Id).value = b64;
+      const prev = document.getElementById(previewId);
+      if (prev) prev.innerHTML = `<img src="${b64}" style="max-width:100%;max-height:120px;border-radius:4px;border:1px solid var(--border)">
+        <button onclick="rimuoviFoto('${previewId}','${b64Id}')" style="display:block;margin-top:4px;background:none;border:none;color:var(--muted);cursor:pointer;font-size:0.75rem">✕ Rimuovi</button>`;
+    };
+    reader.readAsDataURL(blob);
+  } catch(e) { console.warn('Carica foto Drive:', e.message); }
 }
 
 function resetDiarioForm() {
@@ -5130,24 +5158,28 @@ function exportDiarioPDF() {
     doc.line(ML, y+6, W-MR, y+6);
     multiTxt(d.note_prossima||'', ML+2, y+10, IW-4);
 
-    // Aggiungi foto se presenti (base64 dall'anteprima)
+    // Aggiungi foto nella sezione schizzo (b64 già caricato dal form)
     const b64_1 = document.getElementById('d_foto1_b64')?.value;
     const b64_2 = document.getElementById('d_foto2_b64')?.value;
     if (b64_1 || b64_2) {
-      // Calcola y attuale dopo le sezioni precedenti e aggiungi immagini
       try {
-        const imgY = H - MT - (noteH < 22 ? 22 : noteH) - schH - 5;
+        // Posizione: dentro la sezione schizzo
+        const fotoY = y - schH + 7; // dentro il rettangolo schizzo
+        const fotoH = schH - 8;
+        const fotoW = IW/2 - 6;
         if (b64_1) {
-          const imgProps1 = doc.getImageProperties(b64_1);
-          const ratio1 = imgProps1.width / imgProps1.height;
-          const imgW1 = Math.min(IW/2 - 4, 80);
-          doc.addImage(b64_1, 'JPEG', ML+2, imgY - imgW1/ratio1 - 2, imgW1, imgW1/ratio1);
+          const p1 = doc.getImageProperties(b64_1);
+          const r1 = p1.width / p1.height;
+          const h1 = Math.min(fotoH, fotoW/r1);
+          const w1 = h1 * r1;
+          doc.addImage(b64_1, ML+2, fotoY, w1, h1);
         }
         if (b64_2) {
-          const imgProps2 = doc.getImageProperties(b64_2);
-          const ratio2 = imgProps2.width / imgProps2.height;
-          const imgW2 = Math.min(IW/2 - 4, 80);
-          doc.addImage(b64_2, 'JPEG', ML+IW/2+2, imgY - imgW2/ratio2 - 2, imgW2, imgW2/ratio2);
+          const p2 = doc.getImageProperties(b64_2);
+          const r2 = p2.width / p2.height;
+          const h2 = Math.min(fotoH, fotoW/r2);
+          const w2 = h2 * r2;
+          doc.addImage(b64_2, ML+IW/2+3, fotoY, w2, h2);
         }
       } catch(e) { console.warn('Foto PDF:', e.message); }
     }
@@ -5178,6 +5210,104 @@ async function sheetsClearRow(sheetName, rowNum) {
   await fetch(url, { method: 'POST', headers: { Authorization: 'Bearer ' + accessToken } });
 }
 
+// ─── MAPPA POPUP PER US/TOMBE ────────────────────────────────────
+function apriMappaPopup(layerNames) {
+  // Crea modal con mappa Leaflet centrata sugli shape
+  let overlay = document.getElementById('mappa-popup-overlay');
+  if (!overlay) {
+    overlay = document.createElement('div');
+    overlay.id = 'mappa-popup-overlay';
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:4000;display:flex;align-items:center;justify-content:center;padding:16px';
+    overlay.innerHTML = `
+      <div style="background:var(--parchment);border-radius:6px;width:100%;max-width:700px;height:70vh;display:flex;flex-direction:column;overflow:hidden">
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 16px;border-bottom:1px solid var(--border)">
+          <span id="mappa-popup-title" style="font-family:'Space Mono',monospace;font-size:0.75rem;color:var(--earth);text-transform:uppercase;letter-spacing:0.1em"></span>
+          <button onclick="document.getElementById('mappa-popup-overlay').remove()" style="background:none;border:none;color:var(--muted);font-size:1.2rem;cursor:pointer">✕</button>
+        </div>
+        <div id="mappa-popup-map" style="flex:1"></div>
+      </div>`;
+    document.body.appendChild(overlay);
+  } else {
+    overlay.style.display = 'flex';
+  }
+
+  // Inizializza mini-mappa
+  setTimeout(() => {
+    const mapDiv = document.getElementById('mappa-popup-map');
+    mapDiv.innerHTML = '';
+    const miniMap = L.map(mapDiv, { zoomControl: true, attributionControl: false,
+      center: [43.53783549565734, 10.813027918338777], zoom: 18, maxZoom: 25 });
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+      { maxZoom: 22, maxNativeZoom: 19, crossOrigin: true }).addTo(miniMap);
+
+    // Cerca i layer corrispondenti
+    const trovati = [];
+    layerNames.forEach(nome => {
+      const layers = _layerIndex[nome];
+      if (layers) layers.forEach(l => { trovati.push(l); l.addTo(miniMap); });
+    });
+
+    if (trovati.length > 0) {
+      try {
+        const gruppo = L.featureGroup(trovati);
+        miniMap.fitBounds(gruppo.getBounds(), { padding: [30,30] });
+      } catch(e) {}
+    }
+
+    setTimeout(() => miniMap.invalidateSize(), 100);
+  }, 100);
+}
+
+function apriMappaPerUS() {
+  if (!editingId) return;
+  const s = schede.find(x => x.id === editingId);
+  if (!s) return;
+
+  // I layer potrebbero chiamarsi "us_2039", "us_2039_NEW", ecc.
+  const num = String(s.numero);
+  const possibili = Object.keys(_layerIndex).filter(n =>
+    n.toLowerCase().includes('us') && n.includes(num)
+  );
+
+  document.getElementById('mappa-popup-title').textContent = `US ${num}`;
+  if (!_mappaInited) {
+    showToast('⚠ Carica prima la sezione GIS per indicizzare i layer');
+    return;
+  }
+  if (possibili.length === 0) {
+    showToast(`⚠ Nessuno shape trovato per US ${num}`);
+    return;
+  }
+  apriMappaPopup(possibili);
+}
+
+function apriMappaPerTomba() {
+  if (!editingTombaId) return;
+  const t = tombe.find(x => x.id === editingTombaId);
+  if (!t) return;
+
+  // Cerca per numero tomba o US collegate
+  const usNums = (t.us_collegate||'').split(',').map(s => s.trim()).filter(Boolean);
+  const tombaNum = String(t.numero);
+
+  const possibili = Object.keys(_layerIndex).filter(n => {
+    const nl = n.toLowerCase();
+    if (nl.includes('tb') && nl.includes(tombaNum)) return true;
+    return usNums.some(u => nl.includes('us') && nl.includes(u));
+  });
+
+  document.getElementById('mappa-popup-title').textContent = `Tomba ${tombaNum}`;
+  if (!_mappaInited) {
+    showToast('⚠ Carica prima la sezione GIS per indicizzare i layer');
+    return;
+  }
+  if (possibili.length === 0) {
+    showToast(`⚠ Nessuno shape trovato per Tomba ${tombaNum}`);
+    return;
+  }
+  apriMappaPopup(possibili);
+}
+
 // ─── SYNC STATUS ─────────────────────────────────────────────────
 function setSyncStatus(state, label) {
   document.getElementById('syncDot').className = 'sync-dot ' + state;
@@ -5194,9 +5324,9 @@ function showToast(msg) {
   <script>
     if ('serviceWorker' in navigator && !location.hostname.includes('claudeusercontent.com')) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./service-worker.js?v=26')
+        navigator.serviceWorker.register('./service-worker.js?v=27')
           .then(reg => {
-            console.log('SW registrato v26:', reg.scope);
+            console.log('SW registrato v27:', reg.scope);
             // Forza aggiornamento immediato se c'è una nuova versione
             reg.update();
           })
