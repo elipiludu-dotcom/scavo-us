@@ -5,7 +5,7 @@
   <!-- PWA -->
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#C9963A">
-  <meta name="app-version" content="24">
+  <meta name="app-version" content="26">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="SMP Scavo">
@@ -489,6 +489,12 @@
     padding: 0 32px 40px;
     max-width: 900px;
     margin: 0 auto;
+  }
+  .stats-divider {
+    grid-column: 1 / -1;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--border), transparent);
+    margin: 4px 0;
   }
   .stat-box-link {
     cursor: pointer;
@@ -1398,6 +1404,16 @@
           <div class="section-title">Intestazione</div>
           <div class="field-row">
             <div class="field-group">
+              <label>Settore</label>
+              <input type="text" id="d_settore" placeholder="es. 5">
+            </div>
+            <div class="field-group">
+              <label>Anno</label>
+              <input type="number" id="d_anno" placeholder="es. 2024">
+            </div>
+          </div>
+          <div class="field-row">
+            <div class="field-group">
               <label>Data</label>
               <input type="date" id="d_data">
             </div>
@@ -1436,11 +1452,29 @@
           <div class="field-row">
             <div class="field-group">
               <label>Note schizzo 1</label>
-              <textarea id="d_schizzo1" rows="4" placeholder="Descrizione o riferimento immagine..."></textarea>
+              <textarea id="d_schizzo1" rows="3" placeholder="Descrizione o riferimento immagine..."></textarea>
             </div>
             <div class="field-group">
               <label>Note schizzo 2</label>
-              <textarea id="d_schizzo2" rows="4" placeholder="Descrizione o riferimento immagine..."></textarea>
+              <textarea id="d_schizzo2" rows="3" placeholder="Descrizione o riferimento immagine..."></textarea>
+            </div>
+          </div>
+          <div class="field-row" style="margin-top:10px">
+            <div class="field-group">
+              <label>Foto 1 <span style="font-size:0.72rem;color:var(--muted)">(max 0.5 MB)</span></label>
+              <div id="foto1-preview" style="margin-bottom:6px"></div>
+              <input type="file" id="d_foto1_file" accept="image/*" style="display:none" onchange="anteprima_foto(this,'foto1-preview','d_foto1_b64')">
+              <button class="btn btn-secondary" style="font-size:0.75rem" onclick="document.getElementById('d_foto1_file').click()">📷 Scegli immagine</button>
+              <input type="hidden" id="d_foto1_b64">
+              <input type="hidden" id="d_foto1_name">
+            </div>
+            <div class="field-group">
+              <label>Foto 2 <span style="font-size:0.72rem;color:var(--muted)">(max 0.5 MB)</span></label>
+              <div id="foto2-preview" style="margin-bottom:6px"></div>
+              <input type="file" id="d_foto2_file" accept="image/*" style="display:none" onchange="anteprima_foto(this,'foto2-preview','d_foto2_b64')">
+              <button class="btn btn-secondary" style="font-size:0.75rem" onclick="document.getElementById('d_foto2_file').click()">📷 Scegli immagine</button>
+              <input type="hidden" id="d_foto2_b64">
+              <input type="hidden" id="d_foto2_name">
             </div>
           </div>
         </div>
@@ -1609,7 +1643,7 @@
 const CLIENT_ID = '992861805498-4lengq8pp51dq416hglac56u7lgsid7f.apps.googleusercontent.com';
 const SHEET_ID  = '1iVXaplyjWp3uCx76-x5MPYEM1e3udtjW2mQxuomyggA';
 const SHEET_NAME = 'SchedeUS';
-const SCOPES = 'https://www.googleapis.com/auth/spreadsheets';
+const SCOPES = 'https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/drive.file';
 
 const SHEET_TOMBE = 'Tombe';
 const HEADERS_TOMBE = [
@@ -2021,6 +2055,7 @@ function renderStats() {
       <span class="stat-action-icon">+</span>
       <span class="stat-label">Nuovo Diario</span>
     </div>
+    <div class="stats-divider"></div>
     <div class="stat-box stat-box-link" onclick="showView('schede')" title="Vedi tutte le schede US">
       <span class="stat-num">${total}</span>
       <span class="stat-label">Schede US</span>
@@ -3388,12 +3423,24 @@ function apriSelezionePDF(tipo) {
       o.textContent = `US ${s.numero} — ${s.tipo || ''}`;
       sel.appendChild(o);
     });
-  } else {
+  } else if (tipo === 'tomba') {
     title.textContent = 'Stampa Scheda Tomba';
     [...tombe].sort((a,b) => a.numero - b.numero).forEach(t => {
       const o = document.createElement('option');
       o.value = t.id;
       o.textContent = `Tomba ${t.numero} — US ${t.us_collegate || ''}`;
+      sel.appendChild(o);
+    });
+  } else if (tipo === 'diario') {
+    title.textContent = 'Stampa Diario';
+    const sorted = [...diari].sort((a,b) => {
+      const s = (a.settore||'').localeCompare(b.settore||'');
+      return s !== 0 ? s : (b.data||'').localeCompare(a.data||'');
+    });
+    sorted.forEach(d => {
+      const o = document.createElement('option');
+      o.value = d.id;
+      o.textContent = `${d.settore ? 'Sett.' + d.settore + ' — ' : ''}${d.data || 'Senza data'} — ${d.compilatori || ''}`;
       sel.appendChild(o);
     });
   }
@@ -3408,8 +3455,11 @@ function eseguiStampaSingola() {
   if (_pdfSelectTipo === 'us') {
     const s = schede.find(x => x.id === id);
     if (s) loadJsPDF().then(() => { const doc = buildICCDpdf([s]); doc.save(`US_${s.numero}.pdf`); });
-  } else {
+  } else if (_pdfSelectTipo === 'tomba') {
     exportTombaPDF(id);
+  } else if (_pdfSelectTipo === 'diario') {
+    editingDiarioId = id;
+    exportDiarioPDF();
   }
 }
 
@@ -4723,6 +4773,108 @@ function filtraLayerPannello(q) {
   renderPannelloLista(q);
 }
 
+// ─── FOTO DRIVE ──────────────────────────────────────────────────
+const DRIVE_FOLDER_NAME = 'SMP Scavo - Foto Diari';
+let _driveFolderId = null;
+
+function anteprima_foto(input, previewId, b64Id) {
+  const file = input.files[0];
+  if (!file) return;
+  if (file.size > 512 * 1024) {
+    showToast('⚠ Immagine troppo grande (max 0.5 MB)');
+    input.value = '';
+    return;
+  }
+  const reader = new FileReader();
+  reader.onload = e => {
+    const b64 = e.target.result;
+    document.getElementById(b64Id).value = b64;
+    // Salva il nome file nell'hidden corrispondente
+    const nameId = b64Id.replace('_b64', '_name');
+    const nameEl = document.getElementById(nameId);
+    if (nameEl) nameEl.value = file.name;
+    // Anteprima
+    const prev = document.getElementById(previewId);
+    prev.innerHTML = `<img src="${b64}" style="max-width:100%;max-height:120px;border-radius:4px;border:1px solid var(--border)">
+      <button onclick="rimuoviFoto('${previewId}','${b64Id}')" style="display:block;margin-top:4px;background:none;border:none;color:var(--muted);cursor:pointer;font-size:0.75rem">✕ Rimuovi</button>`;
+  };
+  reader.readAsDataURL(file);
+}
+
+function rimuoviFoto(previewId, b64Id) {
+  document.getElementById(previewId).innerHTML = '';
+  document.getElementById(b64Id).value = '';
+  const nameId = b64Id.replace('_b64', '_name');
+  const nameEl = document.getElementById(nameId);
+  if (nameEl) nameEl.value = '';
+}
+
+async function getDriveFolderId() {
+  if (_driveFolderId) return _driveFolderId;
+  // Cerca cartella esistente
+  const searchRes = await fetch(
+    `https://www.googleapis.com/drive/v3/files?q=name='${DRIVE_FOLDER_NAME}' and mimeType='application/vnd.google-apps.folder' and trashed=false&fields=files(id,name)`,
+    { headers: { Authorization: 'Bearer ' + accessToken } }
+  );
+  const searchData = await searchRes.json();
+  if (searchData.files && searchData.files.length > 0) {
+    _driveFolderId = searchData.files[0].id;
+    return _driveFolderId;
+  }
+  // Crea cartella nuova
+  const createRes = await fetch('https://www.googleapis.com/drive/v3/files', {
+    method: 'POST',
+    headers: { Authorization: 'Bearer ' + accessToken, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name: DRIVE_FOLDER_NAME, mimeType: 'application/vnd.google-apps.folder' })
+  });
+  const folder = await createRes.json();
+  _driveFolderId = folder.id;
+  return _driveFolderId;
+}
+
+async function uploadFotoToDrive(b64DataUrl, fileName, diarioId) {
+  if (!b64DataUrl || !fileName) return null;
+  try {
+    const folderId = await getDriveFolderId();
+    // Converti base64 in blob
+    const parts = b64DataUrl.split(',');
+    const mimeType = parts[0].match(/:(.*?);/)[1];
+    const byteString = atob(parts[1]);
+    const ab = new ArrayBuffer(byteString.length);
+    const ia = new Uint8Array(ab);
+    for (let i = 0; i < byteString.length; i++) ia[i] = byteString.charCodeAt(i);
+    const blob = new Blob([ab], { type: mimeType });
+
+    // Upload multipart
+    const metadata = { name: `${diarioId}_${fileName}`, parents: [folderId] };
+    const form = new FormData();
+    form.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
+    form.append('file', blob);
+
+    const uploadRes = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,webViewLink', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer ' + accessToken },
+      body: form
+    });
+    const fileData = await uploadRes.json();
+    return fileData.id || null;
+  } catch(e) {
+    console.warn('Upload foto fallito:', e.message);
+    return null;
+  }
+}
+
+async function getFotoUrlFromDrive(fileId) {
+  if (!fileId) return null;
+  try {
+    const res = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?fields=webContentLink,thumbnailLink`, {
+      headers: { Authorization: 'Bearer ' + accessToken }
+    });
+    const data = await res.json();
+    return data.thumbnailLink || data.webContentLink || null;
+  } catch(e) { return null; }
+}
+
 // ─── DIARIO DI SCAVO ─────────────────────────────────────────────
 const SHEET_DIARIO = 'Diario';
 let diari = [];
@@ -4754,13 +4906,13 @@ function renderDiari() {
     container.innerHTML = '<div class="empty-state"><div class="icon">📓</div><p>Nessuna scheda diario.<br>Clicca "+ Nuova Scheda" per iniziare.</p></div>';
     return;
   }
-  const sorted = [...diari].sort((a,b) => (b.data||'').localeCompare(a.data||''));
+  const sorted = [...diari].sort((a,b) => { const s = (a.settore||'').localeCompare(b.settore||''); return s !== 0 ? s : (b.data||'').localeCompare(a.data||''); });
   container.innerHTML = sorted.map(d => `
     <div class="us-card" onclick="openEditDiario('${d.id}')" style="cursor:pointer">
       <div style="display:flex;align-items:center;justify-content:space-between;width:100%">
         <div>
-          <div style="font-family:'Patrick Hand',cursive;font-size:1.1rem;color:var(--earth)">${d.data || 'Senza data'}</div>
-          <div style="font-size:0.8rem;color:var(--ink);margin-top:2px">${d.compilatori || ''}</div>
+          <div style="font-family:'Patrick Hand',cursive;font-size:1.1rem;color:var(--earth)">${d.settore ? 'Settore ' + d.settore + ' — ' : ''}${d.data || 'Senza data'}</div>
+          <div style="font-size:0.8rem;color:var(--ink);margin-top:2px">${d.compilatori || ''}${d.anno ? ' · ' + d.anno : ''}</div>
           <div style="font-size:0.75rem;color:var(--muted);margin-top:4px">
             ${d.us_esame ? 'US: ' + d.us_esame : ''}
           </div>
@@ -4785,6 +4937,8 @@ function openEditDiario(id) {
   if (!d) return;
   editingDiarioId = id;
   resetDiarioForm();
+  document.getElementById('d_settore').value = d.settore || '';
+  document.getElementById('d_anno').value = d.anno || '';
   document.getElementById('d_data').value = d.data || '';
   document.getElementById('d_compilatori').value = d.compilatori || '';
   document.getElementById('d_us_esame').value = d.us_esame || '';
@@ -4800,13 +4954,16 @@ function openEditDiario(id) {
 }
 
 function resetDiarioForm() {
-  ['d_data','d_compilatori','d_us_esame','d_foto','d_osservazioni','d_schizzo1','d_schizzo2','d_note_prossima']
+  ['d_settore','d_anno','d_data','d_compilatori','d_us_esame','d_foto','d_osservazioni','d_schizzo1','d_schizzo2','d_note_prossima','d_foto1_b64','d_foto1_name','d_foto2_b64','d_foto2_name']
     .forEach(id => { const el = document.getElementById(id); if(el) el.value = ''; });
+  ['foto1-preview','foto2-preview'].forEach(id => { const el = document.getElementById(id); if(el) el.innerHTML = ''; });
 }
 
 function getDiarioFromForm() {
   return {
     id: editingDiarioId || ('diario_' + Math.random().toString(36).substr(2,9)),
+    settore: document.getElementById('d_settore').value,
+    anno: document.getElementById('d_anno').value,
     data: document.getElementById('d_data').value,
     compilatori: document.getElementById('d_compilatori').value,
     us_esame: document.getElementById('d_us_esame').value,
@@ -4818,12 +4975,21 @@ function getDiarioFromForm() {
   };
 }
 
-const HEADERS_DIARIO = ['id','data','compilatori','us_esame','foto','osservazioni','schizzo1','schizzo2','note_prossima'];
+const HEADERS_DIARIO = ['id','settore','anno','data','compilatori','us_esame','foto','osservazioni','schizzo1','schizzo2','note_prossima','foto1_drive_id','foto2_drive_id'];
 
 async function saveDiario() {
   const d = getDiarioFromForm();
-  setSyncStatus('syncing', 'Salvataggio…');
+  setSyncStatus('syncing', 'Caricamento foto…');
   try {
+    // Upload foto su Drive se presenti
+    const b64_1 = document.getElementById('d_foto1_b64')?.value;
+    const name_1 = document.getElementById('d_foto1_name')?.value;
+    const b64_2 = document.getElementById('d_foto2_b64')?.value;
+    const name_2 = document.getElementById('d_foto2_name')?.value;
+    if (b64_1 && name_1) d.foto1_drive_id = await uploadFotoToDrive(b64_1, name_1, d.id);
+    if (b64_2 && name_2) d.foto2_drive_id = await uploadFotoToDrive(b64_2, name_2, d.id);
+
+    setSyncStatus('syncing', 'Salvataggio…');
     await ensureSheetExists(SHEET_DIARIO, HEADERS_DIARIO);
     if (editingDiarioId) {
       const all = await sheetsGet(`${SHEET_DIARIO}!A:A`);
@@ -4907,35 +5073,37 @@ function exportDiarioPDF() {
 
     let y = MT;
 
-    // Titolo
-    txt('SMP 2024 – Diario di scavo settimanale', W/2, y+7, 13, 'bold');
-    doc.setLineWidth(0.5); doc.line(ML, y+10, W-MR, y+10);
-    y += 14;
+    // Settore + Anno a sx, Titolo centrato
+    txt(`SETTORE ${d.settore||'___'}`, ML, y+5, 8, 'normal');
+    txt(`ANNO ${d.anno||'___'}`, ML+35, y+5, 8, 'normal');
+    txt('SMP – Diario di scavo settimanale', W/2, y+5, 11, 'bold', [0,0,0]);
+    doc.setLineWidth(0.5); doc.line(ML, y+8, W-MR, y+8);
+    y += 13;
 
     // Data + Compilatori
-    rect(ML, y, IW*0.38, 14);
-    rect(ML+IW*0.38, y, IW*0.62, 14);
+    rect(ML, y, IW*0.35, 14);
+    rect(ML+IW*0.35, y, IW*0.65, 14);
     lbl('DATA', ML+2, y+4);
     txt(d.data||'', ML+2, y+11, 9, 'bold');
-    lbl('COMPILATORI', ML+IW*0.38+2, y+4);
-    txt(d.compilatori||'', ML+IW*0.38+2, y+11, 8.5);
+    lbl('COMPILATORI', ML+IW*0.35+2, y+4);
+    txt(d.compilatori||'', ML+IW*0.35+2, y+11, 8.5);
     y += 14;
 
     // US in esame
-    rect(ML, y, IW, 14);
+    rect(ML, y, IW, 12);
     lbl('US IN ESAME', ML+2, y+4);
-    txt(d.us_esame||'', ML+2, y+11, 8.5);
-    y += 14;
+    txt(d.us_esame||'', ML+30, y+9, 8.5);
+    y += 12;
 
     // Foto
-    rect(ML, y, IW, 14);
+    rect(ML, y, IW, 12);
     lbl('FOTO', ML+2, y+4);
-    txt('(indicare il nome della/e cartella/e con le immagini di riferimento sistemate, corrette e organizzate)', ML+20, y+4, 5.5, 'normal', [120,120,120]);
-    txt(d.foto||'', ML+2, y+11, 8.5);
-    y += 14;
+    txt('(indicare il nome della/e cartella/e con le immagini di riferimento sistemate, corrette e organizzate)', ML+14, y+4, 5, 'normal', [120,120,120]);
+    txt(d.foto||'', ML+2, y+10, 8);
+    y += 12;
 
-    // Osservazioni
-    const ossH = 80;
+    // Osservazioni — grande
+    const ossH = 115;
     rect(ML, y, IW, ossH);
     lbl('OSSERVAZIONI E INTERPRETAZIONE', ML+2, y+4);
     doc.setLineWidth(0.1); doc.setDrawColor(200,200,200);
@@ -4943,25 +5111,47 @@ function exportDiarioPDF() {
     multiTxt(d.osservazioni||'', ML+2, y+10, IW-4);
     y += ossH;
 
-    // Schizzo
-    rect(ML, y, IW, 60);
+    // Schizzo — medio
+    const schH = 55;
+    rect(ML, y, IW, schH);
     lbl('SCHIZZO O IMMAGINI DAL QUADERNO DI SCAVO', ML+2, y+4);
     doc.setLineWidth(0.1); doc.setDrawColor(200,200,200);
     doc.line(ML, y+6, W-MR, y+6);
-    doc.line(ML+IW/2, y+6, ML+IW/2, y+60);
+    doc.line(ML+IW/2, y+6, ML+IW/2, y+schH);
     if (d.schizzo1) multiTxt(d.schizzo1, ML+2, y+10, IW/2-4, 7.5);
     if (d.schizzo2) multiTxt(d.schizzo2, ML+IW/2+2, y+10, IW/2-4, 7.5);
-    y += 60;
+    y += schH;
 
-    // Note prossima settimana
-    const noteH = H - MR - y - 5;
-    rect(ML, y, IW, Math.max(noteH, 20));
+    // Note prossima — piccolo (3-4 righe = ~22mm)
+    const noteH = H - MT - y - 2;
+    rect(ML, y, IW, Math.max(noteH, 22));
     lbl('NOTE E OBIETTIVI PER LA PROSSIMA SETTIMANA', ML+2, y+4);
     doc.setLineWidth(0.1); doc.setDrawColor(200,200,200);
     doc.line(ML, y+6, W-MR, y+6);
     multiTxt(d.note_prossima||'', ML+2, y+10, IW-4);
 
-    doc.save(`Diario_${d.data||'senza_data'}.pdf`);
+    // Aggiungi foto se presenti (base64 dall'anteprima)
+    const b64_1 = document.getElementById('d_foto1_b64')?.value;
+    const b64_2 = document.getElementById('d_foto2_b64')?.value;
+    if (b64_1 || b64_2) {
+      // Calcola y attuale dopo le sezioni precedenti e aggiungi immagini
+      try {
+        const imgY = H - MT - (noteH < 22 ? 22 : noteH) - schH - 5;
+        if (b64_1) {
+          const imgProps1 = doc.getImageProperties(b64_1);
+          const ratio1 = imgProps1.width / imgProps1.height;
+          const imgW1 = Math.min(IW/2 - 4, 80);
+          doc.addImage(b64_1, 'JPEG', ML+2, imgY - imgW1/ratio1 - 2, imgW1, imgW1/ratio1);
+        }
+        if (b64_2) {
+          const imgProps2 = doc.getImageProperties(b64_2);
+          const ratio2 = imgProps2.width / imgProps2.height;
+          const imgW2 = Math.min(IW/2 - 4, 80);
+          doc.addImage(b64_2, 'JPEG', ML+IW/2+2, imgY - imgW2/ratio2 - 2, imgW2, imgW2/ratio2);
+        }
+      } catch(e) { console.warn('Foto PDF:', e.message); }
+    }
+    doc.save(`Diario_Sett${d.settore||'X'}_${d.data||'senza_data'}.pdf`);
   });
 }
 
@@ -5004,9 +5194,9 @@ function showToast(msg) {
   <script>
     if ('serviceWorker' in navigator && !location.hostname.includes('claudeusercontent.com')) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./service-worker.js?v=24')
+        navigator.serviceWorker.register('./service-worker.js?v=26')
           .then(reg => {
-            console.log('SW registrato v24:', reg.scope);
+            console.log('SW registrato v26:', reg.scope);
             // Forza aggiornamento immediato se c'è una nuova versione
             reg.update();
           })
