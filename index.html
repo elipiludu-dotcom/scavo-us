@@ -5,13 +5,13 @@
   <!-- PWA -->
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#C9963A">
-  <meta name="app-version" content="21">
+  <meta name="app-version" content="22">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="SMP Scavo">
   <link rel="apple-touch-icon" href="icon-apple.png">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
-<title>Archivio US – Scavo</title>
+<title>Archivio Documentazione di Scavo</title>
 <script>
   // Carica Google Identity Services in modo controllato
   function loadGoogleScript() {
@@ -858,14 +858,14 @@
           <span class="nav-icon">🗺</span> Apri GIS
         </div>
         <div class="nav-dropdown-sep"></div>
-        <div class="nav-dropdown-item" onclick="exportPDFSingola()">
+        <div class="nav-dropdown-item" onclick="apriSelezionePDF('us')">
           <span class="nav-icon">📄</span> Stampa Scheda US singola
         </div>
         <div class="nav-dropdown-item" onclick="exportPDFTutte()">
           <span class="nav-icon">📄</span> Stampa tutte le Schede US
         </div>
         <div class="nav-dropdown-sep"></div>
-        <div class="nav-dropdown-item" onclick="exportTombaPDF(document.getElementById('pdfSelectTomba')?.value)">
+        <div class="nav-dropdown-item" onclick="apriSelezionePDF('tomba')">
           <span class="nav-icon">📄</span> Stampa Scheda Tomba singola
         </div>
         <div class="nav-dropdown-item" onclick="exportTombePDFTutte()">
@@ -1447,6 +1447,22 @@
               style="background:none;border:none;color:var(--muted);font-size:1.2rem;cursor:pointer;padding:0 4px">✕</button>
     </div>
     <div class="us-modal-body" id="us-modal-body"></div>
+  </div>
+</div>
+
+<!-- Modal selezione PDF -->
+<div id="pdf-select-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:3000;display:none;align-items:center;justify-content:center" onclick="if(event.target===this)this.style.display='none'">
+  <div style="background:var(--parchment);border:1px solid var(--border);border-radius:6px;padding:24px;min-width:320px;max-width:420px;box-shadow:0 8px 40px rgba(0,0,0,0.4)">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+      <h3 id="pdf-select-title" style="margin:0;font-family:'Patrick Hand',cursive;color:var(--earth);font-size:1.1rem"></h3>
+      <button onclick="document.getElementById('pdf-select-overlay').style.display='none'" style="background:none;border:none;color:var(--muted);font-size:1.2rem;cursor:pointer">✕</button>
+    </div>
+    <select id="pdf-select-input" style="width:100%;padding:10px;background:var(--parchment-light);border:1px solid var(--border);border-radius:4px;color:var(--ink);font-size:0.85rem;margin-bottom:16px">
+      <option value="">— seleziona —</option>
+    </select>
+    <button onclick="eseguiStampaSingola()" style="width:100%;padding:10px;background:var(--earth);color:#1a1508;border:none;border-radius:4px;cursor:pointer;font-family:'Space Mono',monospace;font-size:0.75rem;font-weight:700;letter-spacing:0.05em">
+      ⬇ Genera PDF
+    </button>
   </div>
 </div>
 
@@ -3245,6 +3261,49 @@ async function importFromExcel(input) {
   reader.readAsArrayBuffer(file);
 }
 
+let _pdfSelectTipo = null;
+
+function apriSelezionePDF(tipo) {
+  _pdfSelectTipo = tipo;
+  const overlay = document.getElementById('pdf-select-overlay');
+  const sel = document.getElementById('pdf-select-input');
+  const title = document.getElementById('pdf-select-title');
+
+  sel.innerHTML = '<option value="">— seleziona —</option>';
+
+  if (tipo === 'us') {
+    title.textContent = 'Stampa Scheda US';
+    [...schede].sort((a,b) => a.numero - b.numero).forEach(s => {
+      const o = document.createElement('option');
+      o.value = s.id;
+      o.textContent = `US ${s.numero} — ${s.tipo || ''}`;
+      sel.appendChild(o);
+    });
+  } else {
+    title.textContent = 'Stampa Scheda Tomba';
+    [...tombe].sort((a,b) => a.numero - b.numero).forEach(t => {
+      const o = document.createElement('option');
+      o.value = t.id;
+      o.textContent = `Tomba ${t.numero} — US ${t.us_collegate || ''}`;
+      sel.appendChild(o);
+    });
+  }
+
+  overlay.style.display = 'flex';
+}
+
+function eseguiStampaSingola() {
+  const id = document.getElementById('pdf-select-input').value;
+  if (!id) { showToast('⚠ Seleziona una scheda'); return; }
+  document.getElementById('pdf-select-overlay').style.display = 'none';
+  if (_pdfSelectTipo === 'us') {
+    const s = schede.find(x => x.id === id);
+    if (s) loadJsPDF().then(() => { const doc = buildICCDpdf([s]); doc.save(`US_${s.numero}.pdf`); });
+  } else {
+    exportTombaPDF(id);
+  }
+}
+
 function syncManual() {
   setSyncStatus('syncing', 'Sincronizzazione…');
   loadFromSheets(true).then(() => loadTombe());
@@ -4571,9 +4630,9 @@ function showToast(msg) {
   <script>
     if ('serviceWorker' in navigator && !location.hostname.includes('claudeusercontent.com')) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./service-worker.js?v=21')
+        navigator.serviceWorker.register('./service-worker.js?v=22')
           .then(reg => {
-            console.log('SW registrato v21:', reg.scope);
+            console.log('SW registrato v22:', reg.scope);
             // Forza aggiornamento immediato se c'è una nuova versione
             reg.update();
           })
