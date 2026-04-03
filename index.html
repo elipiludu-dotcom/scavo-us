@@ -5,7 +5,7 @@
   <!-- PWA -->
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#C9963A">
-  <meta name="app-version" content="17">
+  <meta name="app-version" content="18">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="SMP Scavo">
@@ -4083,6 +4083,8 @@ function initMappa() {
   _mappaMap = L.map('leaflet-map', {
     zoomControl: true,
     attributionControl: false,
+    center: [43.55, 10.72],
+    zoom: 17,
   });
 
   // Sfondo OpenStreetMap
@@ -4120,12 +4122,16 @@ function initMappa() {
       _mappaMap.fitBounds(_mappaLayers.polygon.getBounds(), { padding: [20,20] });
     }
     costruisciLayerIndex();
-    // Centra mappa sulla bbox dei poligoni
-    if (window._mappaBounds) {
-      _mappaMap.fitBounds(window._mappaBounds, { padding: [20,20] });
-    } else {
-      // Fallback: centro su Peccioli
-      _mappaMap.setView([43.55, 10.72], 17);
+    // Prova a centrare sui layer fissi visibili
+    try {
+      const visibili = LAYER_FISSI.flatMap(n => _layerIndex[n] || []);
+      if (visibili.length > 0) {
+        const gruppo = L.featureGroup(visibili);
+        const b = gruppo.getBounds();
+        if (b.isValid()) _mappaMap.fitBounds(b, { padding: [40,40] });
+      }
+    } catch(e) {
+      console.warn('fitBounds:', e.message);
     }
   }).catch(e => {
     loading.innerHTML = '⚠ Errore: ' + e.message;
@@ -4376,9 +4382,9 @@ function showToast(msg) {
   <script>
     if ('serviceWorker' in navigator && !location.hostname.includes('claudeusercontent.com')) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./service-worker.js?v=17')
+        navigator.serviceWorker.register('./service-worker.js?v=18')
           .then(reg => {
-            console.log('SW registrato v17:', reg.scope);
+            console.log('SW registrato v18:', reg.scope);
             // Forza aggiornamento immediato se c'è una nuova versione
             reg.update();
           })
