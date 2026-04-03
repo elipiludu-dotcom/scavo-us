@@ -5,7 +5,7 @@
   <!-- PWA -->
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#C9963A">
-  <meta name="app-version" content="28">
+  <meta name="app-version" content="30">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="SMP Scavo">
@@ -4965,17 +4965,28 @@ async function openEditDiario(id) {
 
 async function caricaAnteprimaFotoDrive(fileId, previewId, b64Id) {
   try {
-    // Usa il link di esportazione diretto come immagine
-    const url = `https://drive.google.com/thumbnail?id=${fileId}&sz=w400`;
-    // Scarica come blob e converti in base64
-    const res = await fetch(url, { headers: { Authorization: 'Bearer ' + accessToken } });
-    if (!res.ok) return;
+    // Usa API Drive per scaricare il file con il token OAuth
+    const res = await fetch(
+      `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`,
+      { headers: { Authorization: 'Bearer ' + accessToken } }
+    );
+    if (!res.ok) {
+      console.warn('Drive fetch error:', res.status);
+      // Mostra almeno un link alla foto su Drive
+      const prev = document.getElementById(previewId);
+      if (prev) prev.innerHTML = `<a href="https://drive.google.com/file/d/${fileId}/view" target="_blank"
+        style="font-size:0.75rem;color:var(--earth)">📎 Foto su Drive (clicca per vedere)</a>`;
+      // Marca comunque come drive per non sovrascrivere
+      const nameId = b64Id.replace('_b64','_name');
+      const nameEl = document.getElementById(nameId);
+      if (nameEl) nameEl.value = 'drive_' + fileId;
+      return;
+    }
     const blob = await res.blob();
     const reader = new FileReader();
     reader.onload = e => {
       const b64 = e.target.result;
       document.getElementById(b64Id).value = b64;
-      // Marca come proveniente da Drive (non nuovo upload)
       const nameId = b64Id.replace('_b64', '_name');
       const nameEl = document.getElementById(nameId);
       if (nameEl) nameEl.value = 'drive_' + fileId;
@@ -5176,27 +5187,25 @@ function exportDiarioPDF() {
     // Aggiungi foto nella sezione schizzo (b64 già caricato dal form)
     const b64_1 = document.getElementById('d_foto1_b64')?.value;
     const b64_2 = document.getElementById('d_foto2_b64')?.value;
-    if (b64_1 || b64_2) {
+    // Aggiungi foto nella sezione schizzo se disponibili come b64
+    const fotoY = y - schH + 7;
+    const fotoH = schH - 9;
+    const fotoW = IW/2 - 6;
+    if (b64_1 && b64_1.startsWith('data:')) {
       try {
-        // Posizione: dentro la sezione schizzo
-        const fotoY = y - schH + 7; // dentro il rettangolo schizzo
-        const fotoH = schH - 8;
-        const fotoW = IW/2 - 6;
-        if (b64_1) {
-          const p1 = doc.getImageProperties(b64_1);
-          const r1 = p1.width / p1.height;
-          const h1 = Math.min(fotoH, fotoW/r1);
-          const w1 = h1 * r1;
-          doc.addImage(b64_1, ML+2, fotoY, w1, h1);
-        }
-        if (b64_2) {
-          const p2 = doc.getImageProperties(b64_2);
-          const r2 = p2.width / p2.height;
-          const h2 = Math.min(fotoH, fotoW/r2);
-          const w2 = h2 * r2;
-          doc.addImage(b64_2, ML+IW/2+3, fotoY, w2, h2);
-        }
-      } catch(e) { console.warn('Foto PDF:', e.message); }
+        const p1 = doc.getImageProperties(b64_1);
+        const r1 = p1.width / p1.height;
+        const h1 = Math.min(fotoH, fotoW/r1);
+        doc.addImage(b64_1, 'JPEG', ML+2, fotoY, h1*r1, h1);
+      } catch(e) { console.warn('Foto1 PDF:', e.message); }
+    }
+    if (b64_2 && b64_2.startsWith('data:')) {
+      try {
+        const p2 = doc.getImageProperties(b64_2);
+        const r2 = p2.width / p2.height;
+        const h2 = Math.min(fotoH, fotoW/r2);
+        doc.addImage(b64_2, 'JPEG', ML+IW/2+3, fotoY, h2*r2, h2);
+      } catch(e) { console.warn('Foto2 PDF:', e.message); }
     }
     doc.save(`Diario_Sett${d.settore||'X'}_${d.data||'senza_data'}.pdf`);
   });
@@ -5226,51 +5235,66 @@ async function sheetsClearRow(sheetName, rowNum) {
 }
 
 // ─── MAPPA POPUP PER US/TOMBE ────────────────────────────────────
-function apriMappaPopup(layerNames) {
-  // Crea modal con mappa Leaflet centrata sugli shape
-  let overlay = document.getElementById('mappa-popup-overlay');
-  if (!overlay) {
-    overlay = document.createElement('div');
-    overlay.id = 'mappa-popup-overlay';
-    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:4000;display:flex;align-items:center;justify-content:center;padding:16px';
-    overlay.innerHTML = `
-      <div style="background:var(--parchment);border-radius:6px;width:100%;max-width:700px;height:70vh;display:flex;flex-direction:column;overflow:hidden">
-        <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 16px;border-bottom:1px solid var(--border)">
-          <span id="mappa-popup-title" style="font-family:'Space Mono',monospace;font-size:0.75rem;color:var(--earth);text-transform:uppercase;letter-spacing:0.1em"></span>
-          <button onclick="document.getElementById('mappa-popup-overlay').remove()" style="background:none;border:none;color:var(--muted);font-size:1.2rem;cursor:pointer">✕</button>
-        </div>
-        <div id="mappa-popup-map" style="flex:1"></div>
-      </div>`;
-    document.body.appendChild(overlay);
-  } else {
-    overlay.style.display = 'flex';
-  }
+function apriMappaPopup(layerNames, titolo) {
+  // Rimuovi overlay precedente per evitare conflitti Leaflet
+  const oldOverlay = document.getElementById('mappa-popup-overlay');
+  if (oldOverlay) oldOverlay.remove();
 
-  // Inizializza mini-mappa
-  setTimeout(() => {
-    const mapDiv = document.getElementById('mappa-popup-map');
-    mapDiv.innerHTML = '';
-    const miniMap = L.map(mapDiv, { zoomControl: true, attributionControl: false,
-      center: [43.53783549565734, 10.813027918338777], zoom: 18, maxZoom: 25 });
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
-      { maxZoom: 22, maxNativeZoom: 19, crossOrigin: true }).addTo(miniMap);
+  const overlay = document.createElement('div');
+  overlay.id = 'mappa-popup-overlay';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:4000;display:flex;align-items:center;justify-content:center;padding:16px';
+  overlay.innerHTML = `
+    <div style="background:var(--parchment);border-radius:6px;width:100%;max-width:700px;height:70vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 8px 40px rgba(0,0,0,0.5)">
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 16px;border-bottom:1px solid var(--border);flex-shrink:0">
+        <span style="font-family:'Space Mono',monospace;font-size:0.75rem;color:var(--earth);text-transform:uppercase;letter-spacing:0.1em">${titolo||''}</span>
+        <button onclick="document.getElementById('mappa-popup-overlay').remove()" style="background:none;border:none;color:var(--muted);font-size:1.2rem;cursor:pointer;line-height:1">✕</button>
+      </div>
+      <div id="mappa-popup-map" style="flex:1;min-height:0"></div>
+    </div>`;
+  document.body.appendChild(overlay);
 
-    // Cerca i layer corrispondenti
-    const trovati = [];
-    layerNames.forEach(nome => {
-      const layers = _layerIndex[nome];
-      if (layers) layers.forEach(l => { trovati.push(l); l.addTo(miniMap); });
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      const mapDiv = document.getElementById('mappa-popup-map');
+      if (!mapDiv) return;
+
+      const miniMap = L.map(mapDiv, {
+        zoomControl: true, attributionControl: false,
+        center: [43.53783549565734, 10.813027918338777],
+        zoom: 18, maxZoom: 25
+      });
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+        { maxZoom: 22, maxNativeZoom: 19, crossOrigin: true }).addTo(miniMap);
+
+      // Clona le feature per la mini-mappa (non riusare i layer della mappa principale)
+      const bounds = [];
+      layerNames.forEach(nome => {
+        const layers = _layerIndex[nome];
+        if (!layers) return;
+        layers.forEach(l => {
+          if (!l.feature) return;
+          try {
+            const clone = L.geoJSON(l.feature, {
+              style: { color: '#C9963A', weight: 2, fillColor: 'rgba(201,150,58,0.4)', fillOpacity: 0.5 },
+              pointToLayer: (f, ll) => L.circleMarker(ll, { radius:6, color:'#C9963A', fillColor:'#C9963A', fillOpacity:0.8 })
+            }).addTo(miniMap);
+            const b = clone.getBounds();
+            if (b.isValid()) bounds.push(b);
+          } catch(e) {}
+        });
+      });
+
+      miniMap.invalidateSize();
+
+      if (bounds.length > 0) {
+        try {
+          let combined = bounds[0];
+          bounds.forEach(b => { combined = combined.extend(b); });
+          miniMap.fitBounds(combined, { padding: [30,30] });
+        } catch(e) { console.warn('fitBounds:', e); }
+      }
     });
-
-    if (trovati.length > 0) {
-      try {
-        const gruppo = L.featureGroup(trovati);
-        miniMap.fitBounds(gruppo.getBounds(), { padding: [30,30] });
-      } catch(e) {}
-    }
-
-    setTimeout(() => miniMap.invalidateSize(), 100);
-  }, 100);
+  });
 }
 
 function apriMappaPerUS() {
@@ -5284,16 +5308,15 @@ function apriMappaPerUS() {
     n.toLowerCase().includes('us') && n.includes(num)
   );
 
-  document.getElementById('mappa-popup-title').textContent = `US ${num}`;
   if (!_mappaInited || Object.keys(_layerIndex).length === 0) {
     showToast('⚠ Apri prima la sezione GIS e attendi il caricamento completo');
     return;
   }
   if (possibili.length === 0) {
-    showToast(`⚠ Nessuno shape trovato per US ${num} — verifica il nome del layer`);
+    showToast(`⚠ Nessuno shape trovato per US ${num}`);
     return;
   }
-  apriMappaPopup(possibili);
+  apriMappaPopup(possibili, `US ${num}`);
 }
 
 function apriMappaPerTomba() {
@@ -5301,7 +5324,6 @@ function apriMappaPerTomba() {
   const t = tombe.find(x => x.id === editingTombaId);
   if (!t) return;
 
-  // Cerca per numero tomba o US collegate
   const usNums = (t.us_collegate||'').split(',').map(s => s.trim()).filter(Boolean);
   const tombaNum = String(t.numero);
 
@@ -5311,7 +5333,6 @@ function apriMappaPerTomba() {
     return usNums.some(u => nl.includes('us') && nl.includes(u));
   });
 
-  document.getElementById('mappa-popup-title').textContent = `Tomba ${tombaNum}`;
   if (!_mappaInited || Object.keys(_layerIndex).length === 0) {
     showToast('⚠ Apri prima la sezione GIS e attendi il caricamento completo');
     return;
@@ -5320,7 +5341,7 @@ function apriMappaPerTomba() {
     showToast(`⚠ Nessuno shape trovato per Tomba ${tombaNum}`);
     return;
   }
-  apriMappaPopup(possibili);
+  apriMappaPopup(possibili, `Tomba ${tombaNum}`);
 }
 
 // ─── SYNC STATUS ─────────────────────────────────────────────────
@@ -5339,9 +5360,9 @@ function showToast(msg) {
   <script>
     if ('serviceWorker' in navigator && !location.hostname.includes('claudeusercontent.com')) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./service-worker.js?v=28')
+        navigator.serviceWorker.register('./service-worker.js?v=30')
           .then(reg => {
-            console.log('SW registrato v28:', reg.scope);
+            console.log('SW registrato v30:', reg.scope);
             // Forza aggiornamento immediato se c'è una nuova versione
             reg.update();
           })
