@@ -5,7 +5,7 @@
   <!-- PWA -->
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#C9963A">
-  <meta name="app-version" content="16">
+  <meta name="app-version" content="17">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="SMP Scavo">
@@ -1727,7 +1727,11 @@ function showView(v) {
   if (idx !== undefined) document.querySelectorAll('.nav-tab')[idx].classList.add('active');
   if (v === 'new' && editingId === null) resetForm();
   if (v === 'list') { editingId = null; renderList(); renderStats(); }
-  if (v === 'mappa') { initMappa(); }
+  if (v === 'mappa') {
+    initMappa();
+    // Forza Leaflet a ricalcolare le dimensioni dopo che la view è visibile
+    setTimeout(() => { if (_mappaMap) _mappaMap.invalidateSize(); }, 100);
+  }
   if (v === 'schede') { renderList(); }
   if (v === 'tombe') { renderTombe(); }
 }
@@ -4115,13 +4119,14 @@ function initMappa() {
     if (_mappaLayers.polygon) {
       _mappaMap.fitBounds(_mappaLayers.polygon.getBounds(), { padding: [20,20] });
     }
-    // Attendi che Leaflet processi tutti i layer prima di indicizzare
-    loading.style.display = 'flex';
-    loading.innerHTML = '⏳ Indicizzazione layer...';
-    setTimeout(() => {
-      costruisciLayerIndex();
-      loading.style.display = 'none';
-    }, 3000);
+    costruisciLayerIndex();
+    // Centra mappa sulla bbox dei poligoni
+    if (window._mappaBounds) {
+      _mappaMap.fitBounds(window._mappaBounds, { padding: [20,20] });
+    } else {
+      // Fallback: centro su Peccioli
+      _mappaMap.setView([43.55, 10.72], 17);
+    }
   }).catch(e => {
     loading.innerHTML = '⚠ Errore: ' + e.message;
   });
@@ -4197,14 +4202,30 @@ async function caricaLayer(url, tipo) {
     }
 
     if (layer) {
+      // Salva bounds prima di modificare i layer
+      if (tipo === 'polygon') {
+        try {
+          const b = layer.getBounds();
+          if (b.isValid()) window._mappaBounds = b;
+        } catch(e) {}
+      }
       // Inizializza LayerGroup per il tipo se non esiste
       if (!_mappaLayers[tipo]) {
-        _mappaLayers[tipo] = L.layerGroup().addTo(_mappaMap);
+        _mappaLayers[tipo] = L.layerGroup();
+        // NON aggiungere alla mappa — gestiamo noi layer per layer
       }
-      // Aggiungi ogni sub-layer al gruppo
+      // Indicizza e aggiungi solo i fissi
       layer.eachLayer(l => {
-        _mappaLayers[tipo].addLayer(l);
+        const nome = l.feature?.properties?.layer;
+        const isFisso = nome && LAYER_FISSI.includes(nome);
         _allLeafletLayers.push(l);
+        // Indicizza
+        if (nome) {
+          if (!_layerIndex[nome]) _layerIndex[nome] = [];
+          _layerIndex[nome].push(l);
+        }
+        // Aggiungi alla mappa solo se fisso
+        if (isFisso) l.addTo(_mappaMap);
       });
     }
   } catch(e) {
@@ -4262,10 +4283,22 @@ const LAYER_FISSI = ["PKnuovi_2022", "us 2039 NEW", "us_2329.2023", "us_108_SE",
 let _layerIndex = {};  // { 'us_2039': leafletLayer, ... }
 
 function toggleMappaLayer(tipo, visible) {
-  const layer = _mappaLayers[tipo];
-  if (!layer || !_mappaMap) return;
-  if (visible) _mappaMap.addLayer(layer);
-  else _mappaMap.removeLayer(layer);
+  // Mostra/nasconde tutti i layer di un tipo
+  Object.keys(_layerIndex).forEach(nome => {
+    _layerIndex[nome].forEach(l => {
+      const featTipo = l.feature?.properties?._tipo || '';
+      const isPolygon = featTipo.includes('Polygon');
+      const isPoint   = featTipo.includes('Point');
+      const isLine    = featTipo.includes('Line') || featTipo.includes('String');
+      let match = false;
+      if (tipo === 'polygon' && isPolygon) match = true;
+      if (tipo === 'point'   && isPoint)   match = true;
+      if (tipo === 'line'    && isLine)     match = true;
+      if (!match) return;
+      if (visible) { if (!_mappaMap.hasLayer(l)) l.addTo(_mappaMap); }
+      else { if (_mappaMap.hasLayer(l)) _mappaMap.removeLayer(l); }
+    });
+  });
 }
 
 function toggleSingoloLayer(layerName, visible) {
@@ -4278,32 +4311,9 @@ function toggleSingoloLayer(layerName, visible) {
 }
 
 function costruisciLayerIndex() {
-  _layerIndex = {};
-
-  // Indicizza tutti i layer per nome
-  _allLeafletLayers.forEach(l => {
-    const nome = l.feature?.properties?.layer;
-    if (!nome) return;
-    if (!_layerIndex[nome]) _layerIndex[nome] = [];
-    _layerIndex[nome].push(l);
-  });
-
+  // L'indicizzazione avviene già durante il caricamento
+  // Questa funzione ora serve solo per aggiornare il pannello UI
   console.log('Layer indicizzati:', Object.keys(_layerIndex).length);
-
-  // Spegni tutti i layer group prima
-  ['polygon','line','point','other'].forEach(tipo => {
-    if (_mappaLayers[tipo]) _mappaMap.removeLayer(_mappaLayers[tipo]);
-  });
-
-  // Riaccendi solo i layer fissi
-  Object.keys(_layerIndex).forEach(nome => {
-    const isFisso = LAYER_FISSI.includes(nome);
-    if (isFisso) {
-      _layerIndex[nome].forEach(l => {
-        if (!_mappaMap.hasLayer(l)) l.addTo(_mappaMap);
-      });
-    }
-  });
 
   renderPannelloFissi();
   renderPannelloLista('');
@@ -4366,9 +4376,9 @@ function showToast(msg) {
   <script>
     if ('serviceWorker' in navigator && !location.hostname.includes('claudeusercontent.com')) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./service-worker.js?v=16')
+        navigator.serviceWorker.register('./service-worker.js?v=17')
           .then(reg => {
-            console.log('SW registrato v16:', reg.scope);
+            console.log('SW registrato v17:', reg.scope);
             // Forza aggiornamento immediato se c'è una nuova versione
             reg.update();
           })
