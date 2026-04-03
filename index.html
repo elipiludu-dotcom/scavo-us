@@ -5,7 +5,7 @@
   <!-- PWA -->
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#C9963A">
-  <meta name="app-version" content="27">
+  <meta name="app-version" content="28">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="SMP Scavo">
@@ -2104,6 +2104,7 @@ function resetForm() {
   rapportiCount = 0; repertiCount = 0;
   document.getElementById('formTitle').textContent = 'Nuova Scheda US';
   document.getElementById('btnDelete').style.display = 'none';
+  const _bmu2 = document.getElementById('btnMappaUS'); if(_bmu2) _bmu2.style.display = 'none';
   editingId = null;
   updateStatoStyle();
 }
@@ -2112,10 +2113,11 @@ function openEdit(id) {
   const s = schede.find(x => x.id === id);
   if (!s) return;
   editingId = id;
-  // Memorizza da quale view si proviene per tornare dopo salvataggio/delete
   window._editOrigin = document.querySelector('.view.active')?.id || 'view-list';
   document.getElementById('formTitle').textContent = 'Scheda US ' + s.numero;
   document.getElementById('btnDelete').style.display = 'block';
+  const _bmu = document.getElementById('btnMappaUS');
+  if (_bmu) _bmu.style.display = 'inline-block';
   const fields = ['numero','anno','area','saggio','tipo','data','definizione','criteri','responsabile','stato','colore','consistenza',
    'composizione','umidita','inclusi_geo','inclusi_org','inclusi_art','quota_max','quota_min','spessore','descrizione','osservazioni',
    'disegni','note_doc','interpretazione','datazione','fase','affidabilita','note_interp',
@@ -4973,6 +4975,10 @@ async function caricaAnteprimaFotoDrive(fileId, previewId, b64Id) {
     reader.onload = e => {
       const b64 = e.target.result;
       document.getElementById(b64Id).value = b64;
+      // Marca come proveniente da Drive (non nuovo upload)
+      const nameId = b64Id.replace('_b64', '_name');
+      const nameEl = document.getElementById(nameId);
+      if (nameEl) nameEl.value = 'drive_' + fileId;
       const prev = document.getElementById(previewId);
       if (prev) prev.innerHTML = `<img src="${b64}" style="max-width:100%;max-height:120px;border-radius:4px;border:1px solid var(--border)">
         <button onclick="rimuoviFoto('${previewId}','${b64Id}')" style="display:block;margin-top:4px;background:none;border:none;color:var(--muted);cursor:pointer;font-size:0.75rem">✕ Rimuovi</button>`;
@@ -5009,13 +5015,22 @@ async function saveDiario() {
   const d = getDiarioFromForm();
   setSyncStatus('syncing', 'Caricamento foto…');
   try {
-    // Upload foto su Drive se presenti
+    // Upload foto su Drive solo se nuove (non già salvate)
     const b64_1 = document.getElementById('d_foto1_b64')?.value;
     const name_1 = document.getElementById('d_foto1_name')?.value;
     const b64_2 = document.getElementById('d_foto2_b64')?.value;
     const name_2 = document.getElementById('d_foto2_name')?.value;
-    if (b64_1 && name_1) d.foto1_drive_id = await uploadFotoToDrive(b64_1, name_1, d.id);
-    if (b64_2 && name_2) d.foto2_drive_id = await uploadFotoToDrive(b64_2, name_2, d.id);
+    // Recupera IDs già salvati per non sovrascrivere
+    const existingD = editingDiarioId ? diari.find(x => x.id === editingDiarioId) : null;
+    d.foto1_drive_id = existingD?.foto1_drive_id || '';
+    d.foto2_drive_id = existingD?.foto2_drive_id || '';
+    // Carica solo se c'è un file NUOVO (ha nome, non viene da Drive)
+    if (b64_1 && name_1 && !name_1.startsWith('drive_')) {
+      d.foto1_drive_id = await uploadFotoToDrive(b64_1, name_1, d.id) || d.foto1_drive_id;
+    }
+    if (b64_2 && name_2 && !name_2.startsWith('drive_')) {
+      d.foto2_drive_id = await uploadFotoToDrive(b64_2, name_2, d.id) || d.foto2_drive_id;
+    }
 
     setSyncStatus('syncing', 'Salvataggio…');
     await ensureSheetExists(SHEET_DIARIO, HEADERS_DIARIO);
@@ -5270,19 +5285,19 @@ function apriMappaPerUS() {
   );
 
   document.getElementById('mappa-popup-title').textContent = `US ${num}`;
-  if (!_mappaInited) {
-    showToast('⚠ Carica prima la sezione GIS per indicizzare i layer');
+  if (!_mappaInited || Object.keys(_layerIndex).length === 0) {
+    showToast('⚠ Apri prima la sezione GIS e attendi il caricamento completo');
     return;
   }
   if (possibili.length === 0) {
-    showToast(`⚠ Nessuno shape trovato per US ${num}`);
+    showToast(`⚠ Nessuno shape trovato per US ${num} — verifica il nome del layer`);
     return;
   }
   apriMappaPopup(possibili);
 }
 
 function apriMappaPerTomba() {
-  if (!editingTombaId) return;
+  if (!editingTombaId) { showToast('⚠ Nessuna tomba selezionata'); return; }
   const t = tombe.find(x => x.id === editingTombaId);
   if (!t) return;
 
@@ -5297,8 +5312,8 @@ function apriMappaPerTomba() {
   });
 
   document.getElementById('mappa-popup-title').textContent = `Tomba ${tombaNum}`;
-  if (!_mappaInited) {
-    showToast('⚠ Carica prima la sezione GIS per indicizzare i layer');
+  if (!_mappaInited || Object.keys(_layerIndex).length === 0) {
+    showToast('⚠ Apri prima la sezione GIS e attendi il caricamento completo');
     return;
   }
   if (possibili.length === 0) {
@@ -5324,9 +5339,9 @@ function showToast(msg) {
   <script>
     if ('serviceWorker' in navigator && !location.hostname.includes('claudeusercontent.com')) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./service-worker.js?v=27')
+        navigator.serviceWorker.register('./service-worker.js?v=28')
           .then(reg => {
-            console.log('SW registrato v27:', reg.scope);
+            console.log('SW registrato v28:', reg.scope);
             // Forza aggiornamento immediato se c'è una nuova versione
             reg.update();
           })
