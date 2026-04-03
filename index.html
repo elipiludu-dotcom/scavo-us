@@ -5,7 +5,7 @@
   <!-- PWA -->
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#C9963A">
-  <meta name="app-version" content="23">
+  <meta name="app-version" content="24">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="SMP Scavo">
@@ -484,10 +484,10 @@
   /* ── Stats grid ─────────────────────────────────────────────── */
   .stats-grid {
     display: grid;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: 1fr 1fr 1fr;
     gap: 14px;
     padding: 0 32px 40px;
-    max-width: 700px;
+    max-width: 900px;
     margin: 0 auto;
   }
   .stat-box-link {
@@ -714,7 +714,7 @@
     .field-row { grid-template-columns: 1fr; }
     .field-row.triple { grid-template-columns: 1fr; }
     .stats-grid { grid-template-columns: 1fr 1fr 1fr; gap: 6px; padding: 10px; }
-    .stats-grid { grid-template-columns: 1fr 1fr; padding: 0 16px 28px; gap: 10px; }
+    .stats-grid { grid-template-columns: 1fr 1fr; padding: 0 12px 28px; gap: 10px; }
     .stat-num { font-size: 2.2rem; }
     .stat-box { padding: 20px 12px 18px; }
     .home-hero { padding: 28px 16px 16px; }
@@ -854,11 +854,18 @@
     <div class="nav-dropdown">
       <div class="nav-tab">🔧 Strumenti</div>
       <div class="nav-dropdown-menu">
+        <div class="nav-dropdown-item" onclick="showView('new')">
+          <span class="nav-icon">+</span> Nuova Scheda US
+        </div>
+        <div class="nav-dropdown-item" onclick="openNewTomba()">
+          <span class="nav-icon">+</span> Nuova Tomba
+        </div>
+        <div class="nav-dropdown-item" onclick="nuovaDiarioScheda()">
+          <span class="nav-icon">+</span> Nuovo Diario di Scavo
+        </div>
+        <div class="nav-dropdown-sep"></div>
         <div class="nav-dropdown-item" onclick="showView('mappa')">
           <span class="nav-icon">🗺</span> Apri GIS
-        </div>
-        <div class="nav-dropdown-item" onclick="showView('diario')">
-          <span class="nav-icon">📓</span> Diario di Scavo
         </div>
         <div class="nav-dropdown-sep"></div>
         <div class="nav-dropdown-item" onclick="apriSelezionePDF('us')">
@@ -2010,6 +2017,10 @@ function renderStats() {
       <span class="stat-action-icon">+</span>
       <span class="stat-label">Nuova Tomba</span>
     </div>
+    <div class="stat-box stat-box-link stat-box-action" onclick="nuovaDiarioScheda()" title="Nuovo diario">
+      <span class="stat-action-icon">+</span>
+      <span class="stat-label">Nuovo Diario</span>
+    </div>
     <div class="stat-box stat-box-link" onclick="showView('schede')" title="Vedi tutte le schede US">
       <span class="stat-num">${total}</span>
       <span class="stat-label">Schede US</span>
@@ -2018,6 +2029,11 @@ function renderStats() {
     <div class="stat-box stat-box-link" onclick="showView('tombe')" title="Vedi tutte le tombe">
       <span class="stat-num">${totalTombe}</span>
       <span class="stat-label">Tombe</span>
+      <span class="stat-arrow">→</span>
+    </div>
+    <div class="stat-box stat-box-link" onclick="showView('diario')" title="Vedi tutti i diari">
+      <span class="stat-num">${diari.length}</span>
+      <span class="stat-label">Diari</span>
       <span class="stat-arrow">→</span>
     </div>
   `;
@@ -4814,11 +4830,23 @@ async function saveDiario() {
       const rows = (all.values || []);
       const rowIdx = rows.findIndex(r => r[0] === editingDiarioId);
       if (rowIdx > 0) {
-        await sheetsUpdate(`${SHEET_DIARIO}!A${rowIdx+1}`, [HEADERS_DIARIO.map(h => String(d[h]||''))]);
+        const updateUrl = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(SHEET_DIARIO + '!A' + (rowIdx+1))}?valueInputOption=RAW`;
+        const updateRes = await fetch(updateUrl, {
+          method: 'PUT',
+          headers: { Authorization: 'Bearer ' + accessToken, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ values: [HEADERS_DIARIO.map(h => String(d[h]||''))] })
+        });
+        if (!updateRes.ok) throw new Error('Update error ' + updateRes.status);
       }
       diari = diari.map(x => x.id === editingDiarioId ? d : x);
     } else {
-      await sheetsAppend(SHEET_DIARIO, [HEADERS_DIARIO.map(h => String(d[h]||''))]);
+      const appendUrl = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(SHEET_DIARIO)}:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`;
+      const appendRes = await fetch(appendUrl, {
+        method: 'POST',
+        headers: { Authorization: 'Bearer ' + accessToken, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ values: [HEADERS_DIARIO.map(h => String(d[h]||''))] })
+      });
+      if (!appendRes.ok) throw new Error('Append error ' + appendRes.status);
       diari.push(d);
     }
     setSyncStatus('ok', 'Sincronizzato');
@@ -4976,9 +5004,9 @@ function showToast(msg) {
   <script>
     if ('serviceWorker' in navigator && !location.hostname.includes('claudeusercontent.com')) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./service-worker.js?v=23')
+        navigator.serviceWorker.register('./service-worker.js?v=24')
           .then(reg => {
-            console.log('SW registrato v23:', reg.scope);
+            console.log('SW registrato v24:', reg.scope);
             // Forza aggiornamento immediato se c'è una nuova versione
             reg.update();
           })
