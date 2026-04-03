@@ -5,7 +5,7 @@
   <!-- PWA -->
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#C9963A">
-  <meta name="app-version" content="20">
+  <meta name="app-version" content="21">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="SMP Scavo">
@@ -150,6 +150,45 @@
     background: rgba(201,150,58,0.05);
   }
   .nav-tab:hover { color: var(--ink); background: rgba(255,255,255,0.03); }
+
+  /* Dropdown menu */
+  .nav-dropdown { position: relative; }
+  .nav-dropdown-menu {
+    display: none;
+    position: absolute;
+    top: 100%;
+    left: 0;
+    background: #1e1b12;
+    border: 1px solid var(--border);
+    border-top: none;
+    min-width: 220px;
+    z-index: 2000;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+  }
+  .nav-dropdown:hover .nav-dropdown-menu,
+  .nav-dropdown-menu:hover { display: block; }
+  .nav-dropdown-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 16px;
+    font-family: 'Space Mono', monospace;
+    font-size: 0.62rem;
+    color: var(--muted);
+    cursor: pointer;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    border-bottom: 1px solid rgba(255,255,255,0.04);
+    transition: all 0.15s;
+    white-space: nowrap;
+  }
+  .nav-dropdown-item:hover { color: var(--earth); background: rgba(201,150,58,0.06); }
+  .nav-dropdown-item .nav-icon { font-size: 0.85rem; width: 18px; text-align: center; }
+  .nav-dropdown-sep {
+    height: 1px;
+    background: var(--border);
+    margin: 4px 0;
+  }
 
   .content { max-width: 800px; margin: 0 auto; padding: 0 0 80px; }
   .view { display: none; }
@@ -779,12 +818,63 @@
 
 <div id="appShell" style="display:none">
   <div class="nav-tabs">
-    <div class="nav-tab active" onclick="showView('list')">Home</div>
+    <div class="nav-tab active" onclick="showView('list')">🏛 Home</div>
 
-    <div class="nav-tab" onclick="showView('mappa')">Mappa</div>
-    <div class="nav-tab" onclick="showView('export')">Esporta</div>
-    <div class="nav-tab" onclick="showView('import')">Importa</div>
-    <div class="nav-tab" onclick="signOut()" style="margin-left:auto">Esci</div>
+    <!-- ARCHIVIO dropdown -->
+    <div class="nav-dropdown">
+      <div class="nav-tab">📁 Archivio</div>
+      <div class="nav-dropdown-menu">
+        <div class="nav-dropdown-item" onclick="syncManual()">
+          <span class="nav-icon">🔄</span> Sincronizza
+        </div>
+        <div class="nav-dropdown-item" onclick="window.open('https://docs.google.com/spreadsheets/d/1iVXaplyjWp3uCx76-x5MPYEM1e3udtjW2mQxuomyggA/edit','_blank')">
+          <span class="nav-icon">📊</span> Apri Google Sheets
+        </div>
+        <div class="nav-dropdown-sep"></div>
+        <div class="nav-dropdown-item" onclick="exportCSV()">
+          <span class="nav-icon">⬇</span> Esporta CSV Schede US
+        </div>
+        <div class="nav-dropdown-item" onclick="exportCSVTombe()">
+          <span class="nav-icon">⬇</span> Esporta CSV Tombe
+        </div>
+        <div class="nav-dropdown-sep"></div>
+        <div class="nav-dropdown-item" onclick="document.getElementById('pdfImportInput').click()">
+          <span class="nav-icon">⬆</span> Importa Schede Tombe (PDF)
+        </div>
+        <div class="nav-dropdown-item" onclick="document.getElementById('xlsxTombeInput').click()">
+          <span class="nav-icon">⬆</span> Importa Schede Tombe (Excel)
+        </div>
+        <div class="nav-dropdown-item" onclick="document.getElementById('xlsxImportInput').click()">
+          <span class="nav-icon">⬆</span> Importa Schede US (Excel)
+        </div>
+      </div>
+    </div>
+
+    <!-- STRUMENTI dropdown -->
+    <div class="nav-dropdown">
+      <div class="nav-tab">🔧 Strumenti</div>
+      <div class="nav-dropdown-menu">
+        <div class="nav-dropdown-item" onclick="showView('mappa')">
+          <span class="nav-icon">🗺</span> Apri GIS
+        </div>
+        <div class="nav-dropdown-sep"></div>
+        <div class="nav-dropdown-item" onclick="exportPDFSingola()">
+          <span class="nav-icon">📄</span> Stampa Scheda US singola
+        </div>
+        <div class="nav-dropdown-item" onclick="exportPDFTutte()">
+          <span class="nav-icon">📄</span> Stampa tutte le Schede US
+        </div>
+        <div class="nav-dropdown-sep"></div>
+        <div class="nav-dropdown-item" onclick="exportTombaPDF(document.getElementById('pdfSelectTomba')?.value)">
+          <span class="nav-icon">📄</span> Stampa Scheda Tomba singola
+        </div>
+        <div class="nav-dropdown-item" onclick="exportTombePDFTutte()">
+          <span class="nav-icon">📄</span> Stampa tutte le Schede Tombe
+        </div>
+      </div>
+    </div>
+
+    <div class="nav-tab" onclick="signOut()" style="margin-left:auto">⎋ Esci</div>
   </div>
 
   <div class="content">
@@ -3155,6 +3245,26 @@ async function importFromExcel(input) {
   reader.readAsArrayBuffer(file);
 }
 
+function syncManual() {
+  setSyncStatus('syncing', 'Sincronizzazione…');
+  loadFromSheets(true).then(() => loadTombe());
+}
+
+function exportCSVTombe() {
+  if (!tombe.length) { showToast('⚠ Nessuna tomba'); return; }
+  const headers = Object.keys(tombe[0]).filter(k => k !== 'id');
+  const rows = tombe.map(t => headers.map(h => {
+    const v = t[h];
+    if (Array.isArray(v) || typeof v === 'object') return JSON.stringify(v||'');
+    return String(v||'').replace(/,/g,' ');
+  }).join(','));
+  const csv = [headers.join(','), ...rows].join('\n');
+  const a = document.createElement('a');
+  a.href = 'data:text/csv;charset=utf-8,' + encodeURIComponent(csv);
+  a.download = 'tombe.csv';
+  a.click();
+}
+
 function exportCSV() {
   if (!schede.length) { showToast('Nessuna scheda da esportare'); return; }
   const rows = schede.map(s => HEADERS.map(h => {
@@ -4461,9 +4571,9 @@ function showToast(msg) {
   <script>
     if ('serviceWorker' in navigator && !location.hostname.includes('claudeusercontent.com')) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./service-worker.js?v=20')
+        navigator.serviceWorker.register('./service-worker.js?v=21')
           .then(reg => {
-            console.log('SW registrato v20:', reg.scope);
+            console.log('SW registrato v21:', reg.scope);
             // Forza aggiornamento immediato se c'è una nuova versione
             reg.update();
           })
