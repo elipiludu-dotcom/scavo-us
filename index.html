@@ -5,7 +5,7 @@
   <!-- PWA -->
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#C9963A">
-  <meta name="app-version" content="32">
+  <meta name="app-version" content="33">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="SMP Scavo">
@@ -5488,31 +5488,28 @@ function renderMatrix() {
   svg.setAttribute('viewBox', `0 0 ${svgW} ${svgH}`);
 
   const ns = 'http://www.w3.org/2000/svg';
-  const mk = svg.appendChild(document.createElementNS(ns, 'defs'));
-  const marker = mk.appendChild(document.createElementNS(ns, 'marker'));
-  marker.setAttribute('id','arr'); marker.setAttribute('viewBox','0 0 10 10');
-  marker.setAttribute('refX','9'); marker.setAttribute('refY','5');
-  marker.setAttribute('markerWidth','5'); marker.setAttribute('markerHeight','5');
-  marker.setAttribute('orient','auto');
-  const mpath = marker.appendChild(document.createElementNS(ns, 'path'));
-  mpath.setAttribute('d','M 0 0 L 10 5 L 0 10 z');
-  mpath.setAttribute('fill','#C9963A');
+  // nessuna freccia
 
   const gRoot = svg.appendChild(document.createElementNS(ns, 'g'));
   gRoot.setAttribute('transform', 'translate(20,20)');
 
-  // Disegna archi
+  // Disegna archi ortogonali (con angoli retti, senza frecce)
   sel.forEach(s => {
     (succ[s.numero] || []).forEach(nb => {
       const p1 = positions[s.numero], p2 = positions[nb];
       if (!p1 || !p2) return;
-      const line = gRoot.appendChild(document.createElementNS(ns, 'line'));
-      line.setAttribute('x1', p1.x); line.setAttribute('y1', p1.y + NH/2);
-      line.setAttribute('x2', p2.x); line.setAttribute('y2', p2.y - NH/2);
-      line.setAttribute('stroke', '#C9963A');
-      line.setAttribute('stroke-width', '1.2');
-      line.setAttribute('marker-end', 'url(#arr)');
-      line.setAttribute('opacity', '0.7');
+      // Punto di partenza (bordo inferiore nodo padre) e arrivo (bordo superiore nodo figlio)
+      const x1 = p1.x, y1 = p1.y + NH/2;
+      const x2 = p2.x, y2 = p2.y - NH/2;
+      const my = (y1 + y2) / 2; // punto medio verticale
+      // Percorso ortogonale: scendi a metà → vai in orizzontale → scendi al nodo figlio
+      const d = `M ${x1} ${y1} L ${x1} ${my} L ${x2} ${my} L ${x2} ${y2}`;
+      const path = gRoot.appendChild(document.createElementNS(ns, 'path'));
+      path.setAttribute('d', d);
+      path.setAttribute('fill', 'none');
+      path.setAttribute('stroke', '#C9963A');
+      path.setAttribute('stroke-width', '1.2');
+      path.setAttribute('opacity', '0.8');
     });
   });
 
@@ -5527,18 +5524,23 @@ function renderMatrix() {
     grp.style.cursor = 'pointer';
     grp.addEventListener('click', () => openEdit(s.id));
 
+    const isNeg = String(s.numero).startsWith('-');
+    const fillCol   = isNeg ? '#C9963A' : '#1e1b12';
+    const strokeCol = isNeg ? '#8B6520' : '#C9963A';
+    const textCol   = isNeg ? '#1e1b12' : '#C9963A';
+
     const rect = grp.appendChild(document.createElementNS(ns, 'rect'));
     rect.setAttribute('width', NW); rect.setAttribute('height', NH);
     rect.setAttribute('rx', '4');
-    rect.setAttribute('fill', '#1e1b12');
-    rect.setAttribute('stroke', '#C9963A');
+    rect.setAttribute('fill', fillCol);
+    rect.setAttribute('stroke', strokeCol);
     rect.setAttribute('stroke-width', '1.5');
 
     const tNum = grp.appendChild(document.createElementNS(ns, 'text'));
     tNum.setAttribute('x', NW/2); tNum.setAttribute('y', NH/2 - 2);
     tNum.setAttribute('text-anchor', 'middle');
     tNum.setAttribute('dominant-baseline', 'middle');
-    tNum.setAttribute('fill', '#C9963A');
+    tNum.setAttribute('fill', textCol);
     tNum.setAttribute('font-family', 'Patrick Hand, cursive');
     tNum.setAttribute('font-size', '14');
     tNum.setAttribute('font-weight', 'bold');
@@ -5548,7 +5550,7 @@ function renderMatrix() {
       const tTipo = grp.appendChild(document.createElementNS(ns, 'text'));
       tTipo.setAttribute('x', NW/2); tTipo.setAttribute('y', NH - 4);
       tTipo.setAttribute('text-anchor', 'middle');
-      tTipo.setAttribute('fill', '#888');
+      tTipo.setAttribute('fill', isNeg ? '#1e1b12' : '#888');
       tTipo.setAttribute('font-family', 'Space Mono, monospace');
       tTipo.setAttribute('font-size', '7');
       tTipo.textContent = scheda.tipo.substring(0, 10);
@@ -5572,9 +5574,9 @@ function showToast(msg) {
   <script>
     if ('serviceWorker' in navigator && !location.hostname.includes('claudeusercontent.com')) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./service-worker.js?v=32')
+        navigator.serviceWorker.register('./service-worker.js?v=33')
           .then(reg => {
-            console.log('SW registrato v32:', reg.scope);
+            console.log('SW registrato v33:', reg.scope);
             // Forza aggiornamento immediato se c'è una nuova versione
             reg.update();
           })
