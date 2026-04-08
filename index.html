@@ -5,7 +5,7 @@
   <!-- PWA -->
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#C9963A">
-  <meta name="app-version" content="30">
+  <meta name="app-version" content="31">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="SMP Scavo">
@@ -797,6 +797,9 @@
 </style>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
+  <!-- D3 + Dagre per Matrix di Harris -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/dagre/0.8.5/dagre.min.js"></script>
   <!-- Leaflet -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -872,6 +875,9 @@
         <div class="nav-dropdown-sep"></div>
         <div class="nav-dropdown-item" onclick="showView('mappa')">
           <span class="nav-icon">🗺</span> Apri GIS
+        </div>
+        <div class="nav-dropdown-item" onclick="showView('matrix')">
+          <span class="nav-icon">📊</span> Matrix di Harris
         </div>
         <div class="nav-dropdown-sep"></div>
         <div class="nav-dropdown-item" onclick="apriSelezionePDF('us')">
@@ -1371,6 +1377,33 @@
           font-family:'Space Mono',monospace;font-size:0.8rem">
           <div>⏳ Caricamento mappa...</div>
         </div>
+      </div>
+    </div>
+
+    <!-- MATRIX DI HARRIS -->
+    <div id="view-matrix" class="view">
+      <div style="display:flex;align-items:center;gap:12px;padding:12px 16px;border-bottom:1px solid var(--border);flex-wrap:wrap">
+        <h2 style="margin:0;font-family:'Patrick Hand',cursive;color:var(--earth);font-size:1.2rem">📊 Matrix di Harris</h2>
+        <select id="matrix-settore" onchange="renderMatrix()"
+          style="padding:7px 12px;background:var(--parchment-light);border:1px solid var(--border);border-radius:3px;color:var(--ink);font-size:0.82rem;font-family:'Space Mono',monospace">
+          <option value="">— tutti i settori —</option>
+        </select>
+        <select id="matrix-anno" onchange="renderMatrix()"
+          style="padding:7px 12px;background:var(--parchment-light);border:1px solid var(--border);border-radius:3px;color:var(--ink);font-size:0.82rem;font-family:'Space Mono',monospace">
+          <option value="">— tutti gli anni —</option>
+        </select>
+        <button class="btn btn-secondary" onclick="showView('list')" style="white-space:nowrap">← Home</button>
+        <span id="matrix-info" style="font-size:0.72rem;color:var(--muted);font-family:'Space Mono',monospace;margin-left:auto"></span>
+      </div>
+      <div id="matrix-container" style="width:100%;overflow:auto;background:var(--parchment-light)">
+        <svg id="matrix-svg" style="min-width:600px"></svg>
+      </div>
+      <!-- Legenda -->
+      <div style="padding:8px 16px;border-top:1px solid var(--border);display:flex;gap:20px;flex-wrap:wrap;font-family:'Space Mono',monospace;font-size:0.62rem;color:var(--muted)">
+        <span>→ posteriore/anteriore</span>
+        <span style="border:2px solid var(--earth);padding:1px 6px;border-radius:2px">US normale</span>
+        <span style="border:2px solid #4a90d9;padding:1px 6px;border-radius:2px;color:#4a90d9">= uguale_a</span>
+        <span style="border:2px dashed var(--muted);padding:1px 6px;border-radius:2px">si lega / appoggia</span>
       </div>
     </div>
 
@@ -1971,9 +2004,9 @@ function showView(v) {
   if (v === 'list') { editingId = null; renderList(); renderStats(); }
   if (v === 'mappa') {
     initMappa();
-    // Forza Leaflet a ricalcolare le dimensioni dopo che la view è visibile
     setTimeout(() => { if (_mappaMap) _mappaMap.invalidateSize(); }, 100);
   }
+  if (v === 'matrix') { popolaFiltriMatrix(); renderMatrix(); }
   if (v === 'schede') { renderList(); }
   if (v === 'tombe') { renderTombe(); }
 }
@@ -5344,6 +5377,178 @@ function apriMappaPerTomba() {
   apriMappaPopup(possibili, `Tomba ${tombaNum}`);
 }
 
+
+// ─── MATRIX DI HARRIS ────────────────────────────────────────────
+
+function popolaFiltriMatrix() {
+  const selS = document.getElementById('matrix-settore');
+  const selA = document.getElementById('matrix-anno');
+  if (!selS || !selA) return;
+
+  const settori = [...new Set(schede.map(s => s.saggio).filter(Boolean))].sort();
+  const anni    = [...new Set(schede.map(s => s.anno).filter(Boolean))].sort().reverse();
+
+  selS.innerHTML = '<option value="">— tutti i settori —</option>' +
+    settori.map(s => `<option value="${s}">${s}</option>`).join('');
+  selA.innerHTML = '<option value="">— tutti gli anni —</option>' +
+    anni.map(a => `<option value="${a}">${a}</option>`).join('');
+}
+
+function renderMatrix() {
+  const settore = document.getElementById('matrix-settore')?.value || '';
+  const anno    = document.getElementById('matrix-anno')?.value || '';
+
+  // Filtra schede
+  let schedeFiltered = schede.filter(s => {
+    if (settore && s.saggio !== settore) return false;
+    if (anno    && s.anno   !== anno)    return false;
+    return true;
+  });
+
+  document.getElementById('matrix-info').textContent =
+    `${schedeFiltered.length} US`;
+
+  if (!schedeFiltered.length) {
+    document.getElementById('matrix-svg').innerHTML = '';
+    return;
+  }
+
+  // Costruisci grafo Dagre
+  const g = new dagre.graphlib.Graph({ multigraph: true });
+  g.setGraph({ rankdir: 'TB', ranksep: 50, nodesep: 30, marginx: 20, marginy: 20 });
+  g.setDefaultEdgeLabel(() => ({}));
+
+  // Set di numeri US presenti nel filtro
+  const usSet = new Set(schedeFiltered.map(s => String(s.numero)));
+
+  // Aggiungi nodi
+  const NODE_W = 52, NODE_H = 28;
+  schedeFiltered.forEach(s => {
+    g.setNode(String(s.numero), {
+      label:  String(s.numero),
+      tipo:   s.tipo || '',
+      width:  NODE_W,
+      height: NODE_H,
+    });
+  });
+
+  // Aggiungi archi dai rapporti
+  const TIPI_FRECCIA  = new Set(['posteriore','anteriore','coperto_da','copre','taglia','tagliato_da','riempie','riempito_da']);
+  const TIPI_TRATTEG  = new Set(['gli_si_appoggia','si_lega_a','lega_con']);
+  const tipoArco = {};
+
+  schedeFiltered.forEach(s => {
+    const raps = Array.isArray(s.rapporti) ? s.rapporti :
+      (() => { try { return JSON.parse(s.rapporti||'[]'); } catch { return []; } })();
+
+    raps.forEach(r => {
+      const from = String(s.numero);
+      const to   = String(r.us);
+      if (!usSet.has(to)) return; // ignora US fuori dal filtro
+
+      if (r.tipo === 'posteriore' || r.tipo === 'coperto_da' || r.tipo === 'taglia' || r.tipo === 'riempie') {
+        const key = `${from}→${to}`;
+        if (!tipoArco[key]) { g.setEdge(from, to, { tipo: 'freccia' }, key); tipoArco[key] = true; }
+      } else if (r.tipo === 'anteriore' || r.tipo === 'copre' || r.tipo === 'tagliato_da' || r.tipo === 'riempito_da') {
+        const key = `${to}→${from}`;
+        if (!tipoArco[key]) { g.setEdge(to, from, { tipo: 'freccia' }, key); tipoArco[key] = true; }
+      } else if (TIPI_TRATTEG.has(r.tipo)) {
+        const key = `${from}~${to}`;
+        if (!tipoArco[key]) { g.setEdge(from, to, { tipo: 'tratteg' }, key); tipoArco[key] = true; }
+      } else if (r.tipo === 'uguale_a') {
+        const key = `${from}=${to}`;
+        if (!tipoArco[key]) { g.setEdge(from, to, { tipo: 'uguale' }, key); tipoArco[key] = true; }
+      }
+    });
+  });
+
+  // Layout
+  dagre.layout(g);
+
+  // Dimensioni SVG
+  const gw = g.graph().width  + 60;
+  const gh = g.graph().height + 60;
+  const svg = d3.select('#matrix-svg')
+    .attr('width',  gw)
+    .attr('height', gh);
+  svg.selectAll('*').remove();
+
+  const defs = svg.append('defs');
+  // Freccia nera
+  defs.append('marker').attr('id','arrowBlack').attr('viewBox','0 0 10 10')
+    .attr('refX',9).attr('refY',5).attr('markerWidth',6).attr('markerHeight',6)
+    .attr('orient','auto')
+    .append('path').attr('d','M 0 0 L 10 5 L 0 10 z').attr('fill','#555');
+  // Freccia tratteggiata
+  defs.append('marker').attr('id','arrowGray').attr('viewBox','0 0 10 10')
+    .attr('refX',9).attr('refY',5).attr('markerWidth',6).attr('markerHeight',6)
+    .attr('orient','auto')
+    .append('path').attr('d','M 0 0 L 10 5 L 0 10 z').attr('fill','#aaa');
+
+  const root = svg.append('g').attr('transform','translate(30,30)');
+
+  // Archi
+  g.edges().forEach(e => {
+    const edge = g.edge(e);
+    const pts  = edge.points.map(p => [p.x, p.y]);
+    const line = d3.line().x(d=>d[0]).y(d=>d[1]).curve(d3.curveBasis);
+    const isTratt = edge.tipo === 'tratteg';
+    const isUgual = edge.tipo === 'uguale';
+    root.append('path')
+      .attr('d', line(pts))
+      .attr('fill','none')
+      .attr('stroke',     isUgual ? '#4a90d9' : isTratt ? '#aaa' : '#555')
+      .attr('stroke-width', 1.5)
+      .attr('stroke-dasharray', isTratt ? '5,4' : isUgual ? '4,3' : null)
+      .attr('marker-end', isTratt ? 'url(#arrowGray)' : isUgual ? null : 'url(#arrowBlack)');
+  });
+
+  // Nodi
+  g.nodes().forEach(n => {
+    const node = g.node(n);
+    const scheda = schedeFiltered.find(s => String(s.numero) === n);
+    const isUguale = g.edges().some(e => (e.v===n||e.w===n) && g.edge(e).tipo==='uguale');
+
+    const grp = root.append('g')
+      .attr('transform', `translate(${node.x - NODE_W/2},${node.y - NODE_H/2})`)
+      .style('cursor','pointer')
+      .on('click', () => { if (scheda) openEdit(scheda.id); });
+
+    // Rettangolo esterno (doppio bordo per uguale_a)
+    if (isUguale) {
+      grp.append('rect')
+        .attr('width', NODE_W+4).attr('height', NODE_H+4)
+        .attr('x',-2).attr('y',-2).attr('rx',3)
+        .attr('fill','none').attr('stroke','#4a90d9').attr('stroke-width',1);
+    }
+    grp.append('rect')
+      .attr('width', NODE_W).attr('height', NODE_H).attr('rx',3)
+      .attr('fill', '#1e1b12')
+      .attr('stroke', isUguale ? '#4a90d9' : '#C9963A')
+      .attr('stroke-width', isUguale ? 1.5 : 1.2);
+
+    // Numero US
+    grp.append('text')
+      .attr('x', NODE_W/2).attr('y', NODE_H/2 - 3)
+      .attr('text-anchor','middle').attr('dominant-baseline','middle')
+      .attr('fill','#C9963A')
+      .attr('font-family','Patrick Hand, cursive')
+      .attr('font-size','13')
+      .attr('font-weight','bold')
+      .text(n);
+
+    // Tipo (piccolo sotto)
+    if (scheda?.tipo) {
+      grp.append('text')
+        .attr('x', NODE_W/2).attr('y', NODE_H - 5)
+        .attr('text-anchor','middle')
+        .attr('fill','#888')
+        .attr('font-family','Space Mono, monospace')
+        .attr('font-size','7')
+        .text(scheda.tipo.substring(0,12));
+    }
+  });
+}
 // ─── SYNC STATUS ─────────────────────────────────────────────────
 function setSyncStatus(state, label) {
   document.getElementById('syncDot').className = 'sync-dot ' + state;
@@ -5360,9 +5565,9 @@ function showToast(msg) {
   <script>
     if ('serviceWorker' in navigator && !location.hostname.includes('claudeusercontent.com')) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./service-worker.js?v=30')
+        navigator.serviceWorker.register('./service-worker.js?v=31')
           .then(reg => {
-            console.log('SW registrato v30:', reg.scope);
+            console.log('SW registrato v31:', reg.scope);
             // Forza aggiornamento immediato se c'è una nuova versione
             reg.update();
           })
