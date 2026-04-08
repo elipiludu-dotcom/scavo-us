@@ -5,7 +5,7 @@
   <!-- PWA -->
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#C9963A">
-  <meta name="app-version" content="33">
+  <meta name="app-version" content="35">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="SMP Scavo">
@@ -913,10 +913,50 @@
 
     <!-- SCHEDE CATALOGATE -->
     <div id="view-schede" class="view">
-      <div class="list-toolbar">
+      <div class="list-toolbar" style="flex-wrap:wrap;gap:8px">
         <button class="btn btn-secondary" onclick="showView('list')" style="white-space:nowrap">← Home</button>
-        <input class="search-box" type="search" placeholder="Cerca per numero US, area, descrizione…" oninput="renderList(this.value)">
+        <input class="search-box" id="us-search" type="search" placeholder="Cerca numero US, tipo, descrizione…" oninput="renderListFiltri()" style="flex:1;min-width:160px">
+        <button class="btn btn-secondary" onclick="toggleFiltriUS()" id="btn-filtri-us" style="white-space:nowrap">⚙ Filtri</button>
         <button class="btn btn-secondary" onclick="loadFromSheets(true)" title="Sincronizza">↻</button>
+      </div>
+      <!-- Pannello filtri avanzati -->
+      <div id="filtri-us-panel" style="display:none;padding:8px 16px 12px;background:var(--parchment);border-bottom:1px solid var(--border);display:none">
+        <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end">
+          <div style="display:flex;flex-direction:column;gap:3px">
+            <label style="font-size:0.6rem;font-family:'Space Mono',monospace;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted)">Anno</label>
+            <select id="f-anno" onchange="renderListFiltri()" style="padding:6px 10px;background:var(--parchment-light);border:1px solid var(--border);border-radius:3px;color:var(--ink);font-size:0.8rem;min-width:90px">
+              <option value="">Tutti</option>
+            </select>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:3px">
+            <label style="font-size:0.6rem;font-family:'Space Mono',monospace;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted)">Area</label>
+            <select id="f-area" onchange="renderListFiltri()" style="padding:6px 10px;background:var(--parchment-light);border:1px solid var(--border);border-radius:3px;color:var(--ink);font-size:0.8rem;min-width:90px">
+              <option value="">Tutte</option>
+            </select>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:3px">
+            <label style="font-size:0.6rem;font-family:'Space Mono',monospace;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted)">Saggio/Settore</label>
+            <select id="f-saggio" onchange="renderListFiltri()" style="padding:6px 10px;background:var(--parchment-light);border:1px solid var(--border);border-radius:3px;color:var(--ink);font-size:0.8rem;min-width:90px">
+              <option value="">Tutti</option>
+            </select>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:3px">
+            <label style="font-size:0.6rem;font-family:'Space Mono',monospace;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted)">Tipo</label>
+            <select id="f-tipo" onchange="renderListFiltri()" style="padding:6px 10px;background:var(--parchment-light);border:1px solid var(--border);border-radius:3px;color:var(--ink);font-size:0.8rem;min-width:120px">
+              <option value="">Tutti</option>
+            </select>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:3px">
+            <label style="font-size:0.6rem;font-family:'Space Mono',monospace;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted)">Stato</label>
+            <select id="f-stato" onchange="renderListFiltri()" style="padding:6px 10px;background:var(--parchment-light);border:1px solid var(--border);border-radius:3px;color:var(--ink);font-size:0.8rem;min-width:110px">
+              <option value="">Tutti</option>
+              <option value="completa">Completa</option>
+              <option value="parziale">Parziale</option>
+              <option value="bozza">Bozza</option>
+            </select>
+          </div>
+          <button class="btn btn-secondary" onclick="resetFiltriUS()" style="font-size:0.75rem;padding:6px 10px">✕ Reset</button>
+        </div>
       </div>
       <div class="us-list" id="usList"></div>
     </div>
@@ -2038,15 +2078,66 @@ function getTombePerUS(numeroUS) {
   );
 }
 
-function renderList(q = '') {
+function renderListFiltri() {
+  const q      = document.getElementById('us-search')?.value || '';
+  const fAnno  = document.getElementById('f-anno')?.value   || '';
+  const fArea  = document.getElementById('f-area')?.value   || '';
+  const fSagg  = document.getElementById('f-saggio')?.value || '';
+  const fTipo  = document.getElementById('f-tipo')?.value   || '';
+  const fStato = document.getElementById('f-stato')?.value  || '';
+  renderList(q, { anno: fAnno, area: fArea, saggio: fSagg, tipo: fTipo, stato: fStato });
+}
+
+function toggleFiltriUS() {
+  const panel = document.getElementById('filtri-us-panel');
+  if (!panel) return;
+  const visible = panel.style.display === 'block';
+  panel.style.display = visible ? 'none' : 'block';
+  if (!visible) popolaSelectFiltriUS();
+  document.getElementById('btn-filtri-us').style.background =
+    visible ? '' : 'rgba(201,150,58,0.15)';
+}
+
+function resetFiltriUS() {
+  ['f-anno','f-area','f-saggio','f-tipo','f-stato'].forEach(id => {
+    const el = document.getElementById(id); if (el) el.value = '';
+  });
+  const el = document.getElementById('us-search'); if (el) el.value = '';
+  renderList();
+}
+
+function popolaSelectFiltriUS() {
+  const opts = (id, vals) => {
+    const el = document.getElementById(id); if (!el) return;
+    const cur = el.value;
+    el.innerHTML = '<option value="">Tutti</option>' +
+      [...new Set(vals)].filter(Boolean).sort().map(v => `<option value="${v}">${v}</option>`).join('');
+    el.value = cur;
+  };
+  opts('f-anno',  schede.map(s => s.anno));
+  opts('f-area',  schede.map(s => s.area));
+  opts('f-saggio',schede.map(s => s.saggio));
+  opts('f-tipo',  schede.map(s => s.tipo));
+}
+
+function renderList(q = '', filtri = {}) {
   const list = document.getElementById('usList');
   const term = q.toLowerCase();
-  const filtered = schede.filter(s =>
-    String(s.numero).includes(term) ||
-    (s.area||'').toLowerCase().includes(term) ||
-    (s.descrizione||'').toLowerCase().includes(term) ||
-    (s.tipo||'').toLowerCase().includes(term)
-  ).sort((a,b) => Math.abs(b.numero) - Math.abs(a.numero));
+  const filtered = schede.filter(s => {
+    if (term && !(
+      String(s.numero).includes(term) ||
+      (s.area||'').toLowerCase().includes(term) ||
+      (s.descrizione||'').toLowerCase().includes(term) ||
+      (s.tipo||'').toLowerCase().includes(term) ||
+      (s.saggio||'').toLowerCase().includes(term)
+    )) return false;
+    if (filtri.anno   && s.anno   !== filtri.anno)   return false;
+    if (filtri.area   && s.area   !== filtri.area)   return false;
+    if (filtri.saggio && s.saggio !== filtri.saggio) return false;
+    if (filtri.tipo   && s.tipo   !== filtri.tipo)   return false;
+    if (filtri.stato  && s.stato  !== filtri.stato)  return false;
+    return true;
+  }).sort((a,b) => Math.abs(b.numero) - Math.abs(a.numero));
 
   if (!filtered.length) {
     list.innerHTML = `<div class="empty-state"><div class="icon">🏺</div><p>${schede.length ? 'Nessun risultato.' : 'Nessuna scheda US ancora.<br>Tocca "+ Nuova US" per iniziare.'}</p></div>`;
@@ -5522,7 +5613,7 @@ function renderMatrix() {
     const grp = gRoot.appendChild(document.createElementNS(ns, 'g'));
     grp.setAttribute('transform', `translate(${p.x - NW/2},${p.y - NH/2})`);
     grp.style.cursor = 'pointer';
-    grp.addEventListener('click', () => openEdit(s.id));
+    grp.addEventListener('click', () => openUSModal(s.id));
 
     const isNeg = String(s.numero).startsWith('-');
     const fillCol   = isNeg ? '#C9963A' : '#1e1b12';
@@ -5574,9 +5665,9 @@ function showToast(msg) {
   <script>
     if ('serviceWorker' in navigator && !location.hostname.includes('claudeusercontent.com')) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./service-worker.js?v=33')
+        navigator.serviceWorker.register('./service-worker.js?v=35')
           .then(reg => {
-            console.log('SW registrato v33:', reg.scope);
+            console.log('SW registrato v35:', reg.scope);
             // Forza aggiornamento immediato se c'è una nuova versione
             reg.update();
           })
