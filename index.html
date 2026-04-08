@@ -5,7 +5,7 @@
   <!-- PWA -->
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#C9963A">
-  <meta name="app-version" content="31">
+  <meta name="app-version" content="32">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="SMP Scavo">
@@ -797,9 +797,8 @@
 </style>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
-  <!-- D3 + Dagre per Matrix di Harris -->
+  <!-- D3 per Matrix di Harris -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/dagre/0.8.5/dagre.min.js"></script>
   <!-- Leaflet -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -5384,10 +5383,8 @@ function popolaFiltriMatrix() {
   const selS = document.getElementById('matrix-settore');
   const selA = document.getElementById('matrix-anno');
   if (!selS || !selA) return;
-
   const settori = [...new Set(schede.map(s => s.saggio).filter(Boolean))].sort();
   const anni    = [...new Set(schede.map(s => s.anno).filter(Boolean))].sort().reverse();
-
   selS.innerHTML = '<option value="">— tutti i settori —</option>' +
     settori.map(s => `<option value="${s}">${s}</option>`).join('');
   selA.innerHTML = '<option value="">— tutti gli anni —</option>' +
@@ -5398,157 +5395,167 @@ function renderMatrix() {
   const settore = document.getElementById('matrix-settore')?.value || '';
   const anno    = document.getElementById('matrix-anno')?.value || '';
 
-  // Filtra schede
-  let schedeFiltered = schede.filter(s => {
+  let sel = schede.filter(s => {
     if (settore && s.saggio !== settore) return false;
     if (anno    && s.anno   !== anno)    return false;
     return true;
   });
 
-  document.getElementById('matrix-info').textContent =
-    `${schedeFiltered.length} US`;
+  document.getElementById('matrix-info').textContent = `${sel.length} US`;
+  const svg = document.getElementById('matrix-svg');
+  svg.innerHTML = '';
+  if (!sel.length) return;
 
-  if (!schedeFiltered.length) {
-    document.getElementById('matrix-svg').innerHTML = '';
-    return;
-  }
+  const usSet = new Set(sel.map(s => String(s.numero)));
 
-  // Costruisci grafo Dagre
-  const g = new dagre.graphlib.Graph({ multigraph: true });
-  g.setGraph({ rankdir: 'TB', ranksep: 50, nodesep: 30, marginx: 20, marginy: 20 });
-  g.setDefaultEdgeLabel(() => ({}));
+  // Costruisci grafo: predecessori e successori
+  const succ = {}; // us → [us più recenti (sopra)]
+  const pred = {}; // us → [us più antiche (sotto)]
+  const equalGroups = {}; // per uguale_a
+  sel.forEach(s => { succ[s.numero] = []; pred[s.numero] = []; });
 
-  // Set di numeri US presenti nel filtro
-  const usSet = new Set(schedeFiltered.map(s => String(s.numero)));
-
-  // Aggiungi nodi
-  const NODE_W = 52, NODE_H = 28;
-  schedeFiltered.forEach(s => {
-    g.setNode(String(s.numero), {
-      label:  String(s.numero),
-      tipo:   s.tipo || '',
-      width:  NODE_W,
-      height: NODE_H,
-    });
-  });
-
-  // Aggiungi archi dai rapporti
-  const TIPI_FRECCIA  = new Set(['posteriore','anteriore','coperto_da','copre','taglia','tagliato_da','riempie','riempito_da']);
-  const TIPI_TRATTEG  = new Set(['gli_si_appoggia','si_lega_a','lega_con']);
-  const tipoArco = {};
-
-  schedeFiltered.forEach(s => {
+  sel.forEach(s => {
     const raps = Array.isArray(s.rapporti) ? s.rapporti :
       (() => { try { return JSON.parse(s.rapporti||'[]'); } catch { return []; } })();
-
     raps.forEach(r => {
-      const from = String(s.numero);
-      const to   = String(r.us);
-      if (!usSet.has(to)) return; // ignora US fuori dal filtro
-
+      const a = String(s.numero), b = String(r.us);
+      if (!usSet.has(b)) return;
       if (r.tipo === 'posteriore' || r.tipo === 'coperto_da' || r.tipo === 'taglia' || r.tipo === 'riempie') {
-        const key = `${from}→${to}`;
-        if (!tipoArco[key]) { g.setEdge(from, to, { tipo: 'freccia' }, key); tipoArco[key] = true; }
+        if (!succ[a].includes(b)) succ[a].push(b);
+        if (!pred[b].includes(a)) pred[b].push(a);
       } else if (r.tipo === 'anteriore' || r.tipo === 'copre' || r.tipo === 'tagliato_da' || r.tipo === 'riempito_da') {
-        const key = `${to}→${from}`;
-        if (!tipoArco[key]) { g.setEdge(to, from, { tipo: 'freccia' }, key); tipoArco[key] = true; }
-      } else if (TIPI_TRATTEG.has(r.tipo)) {
-        const key = `${from}~${to}`;
-        if (!tipoArco[key]) { g.setEdge(from, to, { tipo: 'tratteg' }, key); tipoArco[key] = true; }
-      } else if (r.tipo === 'uguale_a') {
-        const key = `${from}=${to}`;
-        if (!tipoArco[key]) { g.setEdge(from, to, { tipo: 'uguale' }, key); tipoArco[key] = true; }
+        if (!succ[b].includes(a)) succ[b].push(a);
+        if (!pred[a].includes(b)) pred[a].push(b);
       }
     });
   });
 
-  // Layout
-  dagre.layout(g);
+  // Calcola livelli con topological sort
+  const levels = {};
+  const inDegree = {};
+  sel.forEach(s => { inDegree[s.numero] = pred[s.numero].length; });
 
-  // Dimensioni SVG
-  const gw = g.graph().width  + 60;
-  const gh = g.graph().height + 60;
-  const svg = d3.select('#matrix-svg')
-    .attr('width',  gw)
-    .attr('height', gh);
-  svg.selectAll('*').remove();
+  let queue = sel.filter(s => inDegree[s.numero] === 0).map(s => s.numero);
+  queue.forEach(n => levels[n] = 0);
 
-  const defs = svg.append('defs');
-  // Freccia nera
-  defs.append('marker').attr('id','arrowBlack').attr('viewBox','0 0 10 10')
-    .attr('refX',9).attr('refY',5).attr('markerWidth',6).attr('markerHeight',6)
-    .attr('orient','auto')
-    .append('path').attr('d','M 0 0 L 10 5 L 0 10 z').attr('fill','#555');
-  // Freccia tratteggiata
-  defs.append('marker').attr('id','arrowGray').attr('viewBox','0 0 10 10')
-    .attr('refX',9).attr('refY',5).attr('markerWidth',6).attr('markerHeight',6)
-    .attr('orient','auto')
-    .append('path').attr('d','M 0 0 L 10 5 L 0 10 z').attr('fill','#aaa');
+  while (queue.length) {
+    const next = [];
+    queue.forEach(n => {
+      (succ[n] || []).forEach(nb => {
+        levels[nb] = Math.max(levels[nb] || 0, (levels[n] || 0) + 1);
+        inDegree[nb]--;
+        if (inDegree[nb] === 0) next.push(nb);
+      });
+    });
+    queue = next;
+  }
 
-  const root = svg.append('g').attr('transform','translate(30,30)');
+  // Nodi senza livello (cicli) → mettili all'ultimo livello
+  const maxLvl = Math.max(0, ...Object.values(levels));
+  sel.forEach(s => { if (levels[s.numero] === undefined) levels[s.numero] = maxLvl + 1; });
 
-  // Archi
-  g.edges().forEach(e => {
-    const edge = g.edge(e);
-    const pts  = edge.points.map(p => [p.x, p.y]);
-    const line = d3.line().x(d=>d[0]).y(d=>d[1]).curve(d3.curveBasis);
-    const isTratt = edge.tipo === 'tratteg';
-    const isUgual = edge.tipo === 'uguale';
-    root.append('path')
-      .attr('d', line(pts))
-      .attr('fill','none')
-      .attr('stroke',     isUgual ? '#4a90d9' : isTratt ? '#aaa' : '#555')
-      .attr('stroke-width', 1.5)
-      .attr('stroke-dasharray', isTratt ? '5,4' : isUgual ? '4,3' : null)
-      .attr('marker-end', isTratt ? 'url(#arrowGray)' : isUgual ? null : 'url(#arrowBlack)');
+  // Raggruppa per livello
+  const byLevel = {};
+  sel.forEach(s => {
+    const lv = levels[s.numero] || 0;
+    if (!byLevel[lv]) byLevel[lv] = [];
+    byLevel[lv].push(String(s.numero));
   });
 
-  // Nodi
-  g.nodes().forEach(n => {
-    const node = g.node(n);
-    const scheda = schedeFiltered.find(s => String(s.numero) === n);
-    const isUguale = g.edges().some(e => (e.v===n||e.w===n) && g.edge(e).tipo==='uguale');
+  // Layout posizioni
+  const NW = 56, NH = 30, HGAP = 16, VGAP = 48;
+  const positions = {};
+  const sortedLevels = Object.keys(byLevel).map(Number).sort((a,b) => a-b);
 
-    const grp = root.append('g')
-      .attr('transform', `translate(${node.x - NODE_W/2},${node.y - NODE_H/2})`)
-      .style('cursor','pointer')
-      .on('click', () => { if (scheda) openEdit(scheda.id); });
+  sortedLevels.forEach(lv => {
+    const nodes = byLevel[lv];
+    nodes.forEach((n, i) => {
+      positions[n] = {
+        x: i * (NW + HGAP) + NW/2,
+        y: lv * (NH + VGAP) + NH/2
+      };
+    });
+  });
 
-    // Rettangolo esterno (doppio bordo per uguale_a)
-    if (isUguale) {
-      grp.append('rect')
-        .attr('width', NODE_W+4).attr('height', NODE_H+4)
-        .attr('x',-2).attr('y',-2).attr('rx',3)
-        .attr('fill','none').attr('stroke','#4a90d9').attr('stroke-width',1);
-    }
-    grp.append('rect')
-      .attr('width', NODE_W).attr('height', NODE_H).attr('rx',3)
-      .attr('fill', '#1e1b12')
-      .attr('stroke', isUguale ? '#4a90d9' : '#C9963A')
-      .attr('stroke-width', isUguale ? 1.5 : 1.2);
+  // Dimensioni SVG
+  const allX = Object.values(positions).map(p => p.x);
+  const allY = Object.values(positions).map(p => p.y);
+  const svgW = Math.max(...allX) + NW + 40;
+  const svgH = Math.max(...allY) + NH + 40;
 
-    // Numero US
-    grp.append('text')
-      .attr('x', NODE_W/2).attr('y', NODE_H/2 - 3)
-      .attr('text-anchor','middle').attr('dominant-baseline','middle')
-      .attr('fill','#C9963A')
-      .attr('font-family','Patrick Hand, cursive')
-      .attr('font-size','13')
-      .attr('font-weight','bold')
-      .text(n);
+  svg.setAttribute('width',  svgW);
+  svg.setAttribute('height', svgH);
+  svg.setAttribute('viewBox', `0 0 ${svgW} ${svgH}`);
 
-    // Tipo (piccolo sotto)
+  const ns = 'http://www.w3.org/2000/svg';
+  const mk = svg.appendChild(document.createElementNS(ns, 'defs'));
+  const marker = mk.appendChild(document.createElementNS(ns, 'marker'));
+  marker.setAttribute('id','arr'); marker.setAttribute('viewBox','0 0 10 10');
+  marker.setAttribute('refX','9'); marker.setAttribute('refY','5');
+  marker.setAttribute('markerWidth','5'); marker.setAttribute('markerHeight','5');
+  marker.setAttribute('orient','auto');
+  const mpath = marker.appendChild(document.createElementNS(ns, 'path'));
+  mpath.setAttribute('d','M 0 0 L 10 5 L 0 10 z');
+  mpath.setAttribute('fill','#C9963A');
+
+  const gRoot = svg.appendChild(document.createElementNS(ns, 'g'));
+  gRoot.setAttribute('transform', 'translate(20,20)');
+
+  // Disegna archi
+  sel.forEach(s => {
+    (succ[s.numero] || []).forEach(nb => {
+      const p1 = positions[s.numero], p2 = positions[nb];
+      if (!p1 || !p2) return;
+      const line = gRoot.appendChild(document.createElementNS(ns, 'line'));
+      line.setAttribute('x1', p1.x); line.setAttribute('y1', p1.y + NH/2);
+      line.setAttribute('x2', p2.x); line.setAttribute('y2', p2.y - NH/2);
+      line.setAttribute('stroke', '#C9963A');
+      line.setAttribute('stroke-width', '1.2');
+      line.setAttribute('marker-end', 'url(#arr)');
+      line.setAttribute('opacity', '0.7');
+    });
+  });
+
+  // Disegna nodi
+  sel.forEach(s => {
+    const p = positions[s.numero];
+    if (!p) return;
+    const scheda = sel.find(x => String(x.numero) === String(s.numero));
+
+    const grp = gRoot.appendChild(document.createElementNS(ns, 'g'));
+    grp.setAttribute('transform', `translate(${p.x - NW/2},${p.y - NH/2})`);
+    grp.style.cursor = 'pointer';
+    grp.addEventListener('click', () => openEdit(s.id));
+
+    const rect = grp.appendChild(document.createElementNS(ns, 'rect'));
+    rect.setAttribute('width', NW); rect.setAttribute('height', NH);
+    rect.setAttribute('rx', '4');
+    rect.setAttribute('fill', '#1e1b12');
+    rect.setAttribute('stroke', '#C9963A');
+    rect.setAttribute('stroke-width', '1.5');
+
+    const tNum = grp.appendChild(document.createElementNS(ns, 'text'));
+    tNum.setAttribute('x', NW/2); tNum.setAttribute('y', NH/2 - 2);
+    tNum.setAttribute('text-anchor', 'middle');
+    tNum.setAttribute('dominant-baseline', 'middle');
+    tNum.setAttribute('fill', '#C9963A');
+    tNum.setAttribute('font-family', 'Patrick Hand, cursive');
+    tNum.setAttribute('font-size', '14');
+    tNum.setAttribute('font-weight', 'bold');
+    tNum.textContent = String(s.numero);
+
     if (scheda?.tipo) {
-      grp.append('text')
-        .attr('x', NODE_W/2).attr('y', NODE_H - 5)
-        .attr('text-anchor','middle')
-        .attr('fill','#888')
-        .attr('font-family','Space Mono, monospace')
-        .attr('font-size','7')
-        .text(scheda.tipo.substring(0,12));
+      const tTipo = grp.appendChild(document.createElementNS(ns, 'text'));
+      tTipo.setAttribute('x', NW/2); tTipo.setAttribute('y', NH - 4);
+      tTipo.setAttribute('text-anchor', 'middle');
+      tTipo.setAttribute('fill', '#888');
+      tTipo.setAttribute('font-family', 'Space Mono, monospace');
+      tTipo.setAttribute('font-size', '7');
+      tTipo.textContent = scheda.tipo.substring(0, 10);
     }
   });
 }
+
 // ─── SYNC STATUS ─────────────────────────────────────────────────
 function setSyncStatus(state, label) {
   document.getElementById('syncDot').className = 'sync-dot ' + state;
@@ -5565,9 +5572,9 @@ function showToast(msg) {
   <script>
     if ('serviceWorker' in navigator && !location.hostname.includes('claudeusercontent.com')) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./service-worker.js?v=31')
+        navigator.serviceWorker.register('./service-worker.js?v=32')
           .then(reg => {
-            console.log('SW registrato v31:', reg.scope);
+            console.log('SW registrato v32:', reg.scope);
             // Forza aggiornamento immediato se c'è una nuova versione
             reg.update();
           })
