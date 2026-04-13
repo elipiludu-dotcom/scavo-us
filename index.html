@@ -5,7 +5,7 @@
   <!-- PWA -->
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#C9963A">
-  <meta name="app-version" content="35">
+  <meta name="app-version" content="38">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="SMP Scavo">
@@ -568,6 +568,31 @@
   }
 
   .export-section { padding: 20px 16px; }
+
+  /* Diario ad albero */
+  .diario-anno-group { margin-bottom: 8px; }
+  .diario-anno-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 10px 16px; cursor: pointer;
+    background: var(--parchment);
+    border: 1px solid var(--border); border-radius: 4px;
+    font-family: 'Patrick Hand', cursive; font-size: 1.05rem; color: var(--earth);
+    user-select: none;
+  }
+  .diario-anno-header:hover { background: rgba(201,150,58,0.08); }
+  .diario-anno-body { padding: 4px 0 4px 8px; }
+  .diario-settore-group { margin-bottom: 4px; }
+  .diario-settore-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 7px 14px; cursor: pointer;
+    background: rgba(255,255,255,0.02);
+    border: 1px solid rgba(255,255,255,0.06); border-radius: 3px;
+    font-family: 'Space Mono', monospace; font-size: 0.72rem; color: var(--muted);
+    user-select: none;
+  }
+  .diario-settore-header:hover { background: rgba(201,150,58,0.05); color: var(--ink); }
+  .diario-settore-body { padding: 2px 0 2px 8px; }
+  .diario-toggle { font-size: 0.65rem; color: var(--muted); }
   .export-card {
     background: var(--parchment);
     border: 1px solid var(--border);
@@ -967,7 +992,7 @@
         <h2 id="formTitle">Nuova Scheda US</h2>
         <div class="form-actions">
           <button class="btn btn-secondary" id="btnMappaUS" style="display:none;white-space:nowrap" onclick="apriMappaPerUS()">🗺 Vedi su mappa</button>
-          <button class="btn btn-secondary" onclick="showView('list')" style="white-space:nowrap">← Home</button>
+          <button class="btn btn-secondary" onclick="showView(window._editOrigin?.replace('view-','') || 'schede')" style="white-space:nowrap">← Indietro</button>
           <button class="btn btn-success" onclick="saveScheda()">Salva</button>
         </div>
       </div>
@@ -1164,7 +1189,7 @@
       <div class="form-header">
         <h2 id="tombaFormTitle">Nuova Scheda Tomba</h2>
         <div style="display:flex;gap:8px;flex-wrap:wrap">
-          <button class="btn btn-secondary" onclick="showView('list')" style="white-space:nowrap">← Home</button>
+          <button class="btn btn-secondary" onclick="showView(window._tombaOrigin?.replace('view-','') || 'tombe')" style="white-space:nowrap">← Indietro</button>
           <button class="btn btn-danger" id="btnDeleteTomba" style="display:none" onclick="deleteTomba()">🗑 Elimina</button>
           <button class="btn btn-secondary" id="btnExportTombaPDF" style="display:none" onclick="exportTombaPDF()">⬇ PDF</button>
           <button class="btn btn-secondary" id="btnMappaTomba" style="display:none;white-space:nowrap" onclick="apriMappaPerTomba()">🗺 Vedi su mappa</button>
@@ -1469,7 +1494,7 @@
           <div style="display:flex;gap:8px;flex-wrap:wrap">
             <button class="btn btn-danger" id="btnDeleteDiario" style="display:none" onclick="deleteDiario()">🗑 Elimina</button>
             <button class="btn btn-secondary" id="btnExportDiarioPDF" style="display:none" onclick="exportDiarioPDF()">⬇ PDF</button>
-            <button class="btn btn-secondary" onclick="showView('diario')">← Diario</button>
+            <button class="btn btn-secondary" onclick="showView('diario')">← Indietro</button>
             <button class="btn btn-success" onclick="saveDiario()">Salva</button>
           </div>
         </div>
@@ -1638,6 +1663,12 @@
           <input type="file" id="xlsxTombeInput" accept=".xlsx" style="display:none" onchange="importTombeFromExcel(this)">
           <button class="btn btn-primary" onclick="document.getElementById('xlsxTombeInput').click()">📂 Scegli tombe_estratte.xlsx</button>
           <div id="xlsxTombeStatus" style="margin-top:10px;font-family:'Space Mono',monospace;font-size:0.7rem;color:var(--muted);min-height:18px"></div>
+        </div>
+        <div class="export-card">
+          <h3>📓 Importa Diari da JSON</h3>
+          <p>Importa diari di scavo dal file <strong>diari_importati.json</strong> generato dallo script Python.</p>
+          <input type="file" id="diariJsonInput" accept=".json" style="display:none" onchange="importDiariFromJSON(this)">
+          <button class="btn btn-primary" onclick="document.getElementById('diariJsonInput').click()">📂 Scegli diari_importati.json</button>
         </div>
       </div>
     </div>
@@ -2674,6 +2705,7 @@ function getTombaFromForm(id) {
 
 function openNewTomba() {
   editingTombaId = null;
+  window._tombaOrigin = document.querySelector('.view.active')?.id || 'view-tombe';
   resetTombaForm();
   document.getElementById('tombaFormTitle').textContent = 'Nuova Scheda Tomba';
   document.getElementById('btnDeleteTomba').style.display = 'none';
@@ -2686,6 +2718,7 @@ function openNewTomba() {
 function openEditTomba(id) {
   const t = tombe.find(x => x.id === id);
   if (!t) return;
+  window._tombaOrigin = document.querySelector('.view.active')?.id || 'view-tombe';
   editingTombaId = id;
   resetTombaForm();
   loadTombaForm(t);
@@ -3589,6 +3622,52 @@ function eseguiStampaSingola() {
   } else if (_pdfSelectTipo === 'diario') {
     editingDiarioId = id;
     exportDiarioPDF();
+  }
+}
+
+async function importDiariFromJSON(input) {
+  const file = input.files[0];
+  if (!file) return;
+  try {
+    const text = await file.text();
+    const imported = JSON.parse(text);
+    if (!Array.isArray(imported)) throw new Error('Formato non valido');
+
+    const conferma = await showConfirm({
+      icon: '📓',
+      title: `Importare ${imported.length} diari?`,
+      message: 'I diari verranno aggiunti al foglio "Diario" su Google Sheets.',
+      okLabel: '📥 Importa',
+      okClass: 'btn-primary'
+    });
+    if (!conferma) return;
+
+    setSyncStatus('syncing', 'Importazione diari…');
+    await ensureSheetExists(SHEET_DIARIO, HEADERS_DIARIO);
+
+    let ok = 0, skip = 0;
+    for (const d of imported) {
+      // Salta se ID già presente
+      if (diari.find(x => x.id === d.id)) { skip++; continue; }
+      // Assicura tutti i campi
+      const row = HEADERS_DIARIO.map(h => String(d[h] || ''));
+      const url = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(SHEET_DIARIO)}:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`;
+      await fetch(url, {
+        method: 'POST',
+        headers: { Authorization: 'Bearer ' + accessToken, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ values: [row] })
+      });
+      diari.push(d);
+      ok++;
+    }
+
+    setSyncStatus('ok', 'Sincronizzato');
+    showToast(`✓ Importati ${ok} diari${skip ? ', ' + skip + ' già presenti' : ''}`);
+    input.value = '';
+    renderDiari();
+  } catch(e) {
+    setSyncStatus('error', 'Errore');
+    showToast('⚠ Errore importazione: ' + e.message);
   }
 }
 
@@ -5035,21 +5114,79 @@ function renderDiari() {
     container.innerHTML = '<div class="empty-state"><div class="icon">📓</div><p>Nessuna scheda diario.<br>Clicca "+ Nuova Scheda" per iniziare.</p></div>';
     return;
   }
-  const sorted = [...diari].sort((a,b) => { const s = (a.settore||'').localeCompare(b.settore||''); return s !== 0 ? s : (b.data||'').localeCompare(a.data||''); });
-  container.innerHTML = sorted.map(d => `
-    <div class="us-card" onclick="openEditDiario('${d.id}')" style="cursor:pointer">
-      <div style="display:flex;align-items:center;justify-content:space-between;width:100%">
-        <div>
-          <div style="font-family:'Patrick Hand',cursive;font-size:1.1rem;color:var(--earth)">${d.settore ? 'Settore ' + d.settore + ' — ' : ''}${d.data || 'Senza data'}</div>
-          <div style="font-size:0.8rem;color:var(--ink);margin-top:2px">${d.compilatori || ''}${d.anno ? ' · ' + d.anno : ''}</div>
-          <div style="font-size:0.75rem;color:var(--muted);margin-top:4px">
-            ${d.us_esame ? 'US: ' + d.us_esame : ''}
-          </div>
-        </div>
-        <button class="btn-edit-card" onclick="event.stopPropagation();openEditDiario('${d.id}')">✏ Modifica</button>
+
+  // Organizza per Anno → Settore → diari
+  const tree = {};
+  diari.forEach(d => {
+    const anno    = d.anno    || '—';
+    const settore = d.settore || 'Senza settore';
+    if (!tree[anno]) tree[anno] = {};
+    if (!tree[anno][settore]) tree[anno][settore] = [];
+    tree[anno][settore].push(d);
+  });
+
+  // Ordina: anni decrescenti, settori crescenti, diari per data decrescente
+  const anni = Object.keys(tree).sort((a,b) => b.localeCompare(a));
+
+  let html = '';
+  anni.forEach(anno => {
+    const settori = Object.keys(tree[anno]).sort();
+    html += `<div class="diario-anno-group">
+      <div class="diario-anno-header" onclick="toggleDiarioAnno(this)">
+        <span>📅 ${anno}</span>
+        <span style="font-size:0.65rem;color:var(--muted);font-family:'Space Mono',monospace">
+          ${Object.values(tree[anno]).flat().length} diari
+        </span>
+        <span class="diario-toggle">▼</span>
       </div>
-    </div>
-  `).join('');
+      <div class="diario-anno-body">`;
+
+    settori.forEach(settore => {
+      const diariSettore = tree[anno][settore].sort((a,b) => (b.data||'').localeCompare(a.data||''));
+      html += `<div class="diario-settore-group">
+        <div class="diario-settore-header" onclick="toggleDiarioSettore(this)">
+          <span>📁 ${settore}</span>
+          <span style="font-size:0.65rem;color:var(--muted);font-family:'Space Mono',monospace">${diariSettore.length}</span>
+          <span class="diario-toggle">▼</span>
+        </div>
+        <div class="diario-settore-body">`;
+
+      diariSettore.forEach(d => {
+        html += `<div class="us-card" onclick="openEditDiario('${d.id}')" style="cursor:pointer;margin-left:16px">
+          <div style="display:flex;align-items:center;justify-content:space-between;width:100%">
+            <div>
+              <div style="font-family:'Patrick Hand',cursive;font-size:1rem;color:var(--earth)">${d.data || 'Senza data'}</div>
+              <div style="font-size:0.78rem;color:var(--ink);margin-top:2px">${d.compilatori || ''}</div>
+              ${d.us_esame ? `<div style="font-size:0.72rem;color:var(--muted);margin-top:3px">US: ${d.us_esame.substring(0,60)}${d.us_esame.length>60?'...':''}</div>` : ''}
+            </div>
+            <button class="btn-edit-card" onclick="event.stopPropagation();openEditDiario('${d.id}')">✏</button>
+          </div>
+        </div>`;
+      });
+
+      html += `</div></div>`; // chiudi settore
+    });
+
+    html += `</div></div>`; // chiudi anno
+  });
+
+  container.innerHTML = html;
+}
+
+function toggleDiarioAnno(header) {
+  const body = header.nextElementSibling;
+  const toggle = header.querySelector('.diario-toggle');
+  const hidden = body.style.display === 'none';
+  body.style.display = hidden ? 'block' : 'none';
+  toggle.textContent = hidden ? '▼' : '▶';
+}
+
+function toggleDiarioSettore(header) {
+  const body = header.nextElementSibling;
+  const toggle = header.querySelector('.diario-toggle');
+  const hidden = body.style.display === 'none';
+  body.style.display = hidden ? 'block' : 'none';
+  toggle.textContent = hidden ? '▼' : '▶';
 }
 
 function nuovaDiarioScheda() {
@@ -5665,9 +5802,9 @@ function showToast(msg) {
   <script>
     if ('serviceWorker' in navigator && !location.hostname.includes('claudeusercontent.com')) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./service-worker.js?v=35')
+        navigator.serviceWorker.register('./service-worker.js?v=38')
           .then(reg => {
-            console.log('SW registrato v35:', reg.scope);
+            console.log('SW registrato v38:', reg.scope);
             // Forza aggiornamento immediato se c'è una nuova versione
             reg.update();
           })
