@@ -5,7 +5,7 @@
   <!-- PWA -->
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#C9963A">
-  <meta name="app-version" content="43">
+  <meta name="app-version" content="44">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="SMP Scavo">
@@ -869,6 +869,9 @@
         </div>
         <div class="nav-dropdown-item" onclick="exportCSVTombe()">
           <span class="nav-icon">⬇</span> Esporta CSV Tombe
+        </div>
+        <div class="nav-dropdown-item" onclick="exportCSVDiari()">
+          <span class="nav-icon">⬇</span> Esporta CSV Diari
         </div>
         <div class="nav-dropdown-sep"></div>
         <div class="nav-dropdown-item" onclick="document.getElementById('pdfImportInput').click()">
@@ -3686,6 +3689,20 @@ async function importDiariFromJSON(input) {
   }
 }
 
+function exportCSVDiari() {
+  if (!diari.length) { showToast('\u26A0 Nessun diario da esportare'); return; }
+  const headers = HEADERS_DIARIO.filter(h => h !== 'foto1_drive_id' && h !== 'foto2_drive_id');
+  const rows = diari.map(d => headers.map(h => {
+    const v = String(d[h] || '').replace(/\r/g, ' ').replace(/\n/g, ' ');
+    return v.includes(',') || v.includes('"') ? '"' + v.replace(/"/g, '""') + '"' : v;
+  }).join(','));
+  const csv = [headers.join(','), ...rows].join('\n');
+  const a = document.createElement('a');
+  a.href = 'data:text/csv;charset=utf-8,' + encodeURIComponent(csv);
+  a.download = 'diari_scavo.csv';
+  a.click();
+}
+
 function syncManual() {
   setSyncStatus('syncing', 'Sincronizzazione…');
   loadFromSheets(true).then(() => loadTombe());
@@ -5883,9 +5900,9 @@ function showToast(msg) {
   <script>
     if ('serviceWorker' in navigator && !location.hostname.includes('claudeusercontent.com')) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./service-worker.js?v=43')
+        navigator.serviceWorker.register('./service-worker.js?v=44')
           .then(reg => {
-            console.log('SW registrato v43:', reg.scope);
+            console.log('SW registrato v44:', reg.scope);
             // Forza aggiornamento immediato se c'è una nuova versione
             reg.update();
           })
