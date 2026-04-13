@@ -5,7 +5,7 @@
   <!-- PWA -->
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#C9963A">
-  <meta name="app-version" content="40">
+  <meta name="app-version" content="41">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="SMP Scavo">
@@ -3639,20 +3639,30 @@ async function importDiariFromJSON(input) {
     const conferma = await showConfirm({
       icon: '📓',
       title: `Importare ${imported.length} diari?`,
-      message: 'I diari verranno aggiunti al foglio "Diario" su Google Sheets.',
+      message: 'Il foglio "Diario" verrà riscritto con le intestazioni corrette e tutti i diari importati.',
       okLabel: '📥 Importa',
       okClass: 'btn-primary'
     });
     if (!conferma) return;
 
-    setSyncStatus('syncing', 'Importazione diari…');
+    setSyncStatus('syncing', 'Preparazione foglio…');
+
+    // 1. Assicura che il foglio esista
     await ensureSheetExists(SHEET_DIARIO, HEADERS_DIARIO);
 
+    // 2. Forza riscrittura intestazioni (riga 1) con i campi corretti
+    const urlHeaders = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(SHEET_DIARIO + '!A1')}?valueInputOption=RAW`;
+    await fetch(urlHeaders, {
+      method: 'PUT',
+      headers: { Authorization: 'Bearer ' + accessToken, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ values: [HEADERS_DIARIO] })
+    });
+
+    // 3. Importa i diari uno per uno
+    setSyncStatus('syncing', 'Importazione diari…');
     let ok = 0, skip = 0;
     for (const d of imported) {
-      // Salta se ID già presente
       if (diari.find(x => x.id === d.id)) { skip++; continue; }
-      // Assicura tutti i campi
       const row = HEADERS_DIARIO.map(h => String(d[h] || ''));
       const url = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(SHEET_DIARIO)}:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`;
       await fetch(url, {
@@ -3667,10 +3677,11 @@ async function importDiariFromJSON(input) {
     setSyncStatus('ok', 'Sincronizzato');
     showToast(`✓ Importati ${ok} diari${skip ? ', ' + skip + ' già presenti' : ''}`);
     input.value = '';
-    renderDiari();
+    await loadDiari();
   } catch(e) {
     setSyncStatus('error', 'Errore');
     showToast('⚠ Errore importazione: ' + e.message);
+    console.error(e);
   }
 }
 
@@ -5807,9 +5818,9 @@ function showToast(msg) {
   <script>
     if ('serviceWorker' in navigator && !location.hostname.includes('claudeusercontent.com')) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./service-worker.js?v=40')
+        navigator.serviceWorker.register('./service-worker.js?v=41')
           .then(reg => {
-            console.log('SW registrato v40:', reg.scope);
+            console.log('SW registrato v41:', reg.scope);
             // Forza aggiornamento immediato se c'è una nuova versione
             reg.update();
           })
