@@ -5,7 +5,7 @@
   <!-- PWA -->
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#C9963A">
-  <meta name="app-version" content="38">
+  <meta name="app-version" content="39">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="SMP Scavo">
@@ -879,6 +879,9 @@
         </div>
         <div class="nav-dropdown-item" onclick="document.getElementById('xlsxImportInput').click()">
           <span class="nav-icon">⬆</span> Importa Schede US (Excel)
+        </div>
+        <div class="nav-dropdown-item" onclick="document.getElementById('diariJsonInput').click()">
+          <span class="nav-icon">📓</span> Importa Diari (JSON)
         </div>
       </div>
     </div>
@@ -5802,9 +5805,9 @@ function showToast(msg) {
   <script>
     if ('serviceWorker' in navigator && !location.hostname.includes('claudeusercontent.com')) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./service-worker.js?v=38')
+        navigator.serviceWorker.register('./service-worker.js?v=39')
           .then(reg => {
-            console.log('SW registrato v38:', reg.scope);
+            console.log('SW registrato v39:', reg.scope);
             // Forza aggiornamento immediato se c'è una nuova versione
             reg.update();
           })
