@@ -5,7 +5,7 @@
   <!-- PWA -->
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#C9963A">
-  <meta name="app-version" content="39">
+  <meta name="app-version" content="40">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="SMP Scavo">
@@ -572,7 +572,7 @@
   /* Diario ad albero */
   .diario-anno-group { margin-bottom: 8px; }
   .diario-anno-header {
-    display: flex; align-items: center; justify-content: space-between;
+    display: flex; align-items: center; gap: 12px;
     padding: 10px 16px; cursor: pointer;
     background: var(--parchment);
     border: 1px solid var(--border); border-radius: 4px;
@@ -583,7 +583,7 @@
   .diario-anno-body { padding: 4px 0 4px 8px; }
   .diario-settore-group { margin-bottom: 4px; }
   .diario-settore-header {
-    display: flex; align-items: center; justify-content: space-between;
+    display: flex; align-items: center; gap: 12px;
     padding: 7px 14px; cursor: pointer;
     background: rgba(255,255,255,0.02);
     border: 1px solid rgba(255,255,255,0.06); border-radius: 3px;
@@ -5137,10 +5137,10 @@ function renderDiari() {
     html += `<div class="diario-anno-group">
       <div class="diario-anno-header" onclick="toggleDiarioAnno(this)">
         <span>📅 ${anno}</span>
-        <span style="font-size:0.65rem;color:var(--muted);font-family:'Space Mono',monospace">
-          ${Object.values(tree[anno]).flat().length} diari
-        </span>
-        <span class="diario-toggle">▼</span>
+        <div style="display:flex;align-items:center;gap:10px;margin-left:auto">
+          <span style="font-size:0.65rem;color:var(--muted);font-family:'Space Mono',monospace">${Object.values(tree[anno]).flat().length} diari</span>
+          <span class="diario-toggle">▼</span>
+        </div>
       </div>
       <div class="diario-anno-body">`;
 
@@ -5149,8 +5149,10 @@ function renderDiari() {
       html += `<div class="diario-settore-group">
         <div class="diario-settore-header" onclick="toggleDiarioSettore(this)">
           <span>📁 ${settore}</span>
-          <span style="font-size:0.65rem;color:var(--muted);font-family:'Space Mono',monospace">${diariSettore.length}</span>
-          <span class="diario-toggle">▼</span>
+          <div style="display:flex;align-items:center;gap:10px;margin-left:auto">
+            <span style="font-size:0.65rem;color:var(--muted);font-family:'Space Mono',monospace">${diariSettore.length}</span>
+            <span class="diario-toggle">▼</span>
+          </div>
         </div>
         <div class="diario-settore-body">`;
 
@@ -5805,9 +5807,9 @@ function showToast(msg) {
   <script>
     if ('serviceWorker' in navigator && !location.hostname.includes('claudeusercontent.com')) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./service-worker.js?v=39')
+        navigator.serviceWorker.register('./service-worker.js?v=40')
           .then(reg => {
-            console.log('SW registrato v39:', reg.scope);
+            console.log('SW registrato v40:', reg.scope);
             // Forza aggiornamento immediato se c'è una nuova versione
             reg.update();
           })
