@@ -5,7 +5,7 @@
   <!-- PWA -->
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#C9963A">
-  <meta name="app-version" content="42">
+  <meta name="app-version" content="43">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="SMP Scavo">
@@ -3658,24 +3658,25 @@ async function importDiariFromJSON(input) {
       body: JSON.stringify({ values: [HEADERS_DIARIO] })
     });
 
-    // 3. Importa i diari uno per uno
+    // 3. Importa tutti i diari in batch (una sola chiamata API)
     setSyncStatus('syncing', 'Importazione diari…');
-    let ok = 0, skip = 0;
-    for (const d of imported) {
-      if (diari.find(x => x.id === d.id)) { skip++; continue; }
-      const row = HEADERS_DIARIO.map(h => String(d[h] || ''));
+    const nuovi = imported.filter(d => !diari.find(x => x.id === d.id));
+    const skip = imported.length - nuovi.length;
+
+    if (nuovi.length > 0) {
+      const rows = nuovi.map(d => HEADERS_DIARIO.map(h => String(d[h] || '')));
       const url = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(SHEET_DIARIO)}:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`;
-      await fetch(url, {
+      const res = await fetch(url, {
         method: 'POST',
         headers: { Authorization: 'Bearer ' + accessToken, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ values: [row] })
+        body: JSON.stringify({ values: rows })
       });
-      diari.push(d);
-      ok++;
+      if (!res.ok) throw new Error('Errore API: ' + res.status);
+      nuovi.forEach(d => diari.push(d));
     }
 
     setSyncStatus('ok', 'Sincronizzato');
-    showToast(`✓ Importati ${ok} diari${skip ? ', ' + skip + ' già presenti' : ''}`);
+    showToast(`✓ Importati ${nuovi.length} diari${skip ? ', ' + skip + ' già presenti' : ''}`);
     input.value = '';
     await loadDiari();
   } catch(e) {
@@ -5882,9 +5883,9 @@ function showToast(msg) {
   <script>
     if ('serviceWorker' in navigator && !location.hostname.includes('claudeusercontent.com')) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./service-worker.js?v=42')
+        navigator.serviceWorker.register('./service-worker.js?v=43')
           .then(reg => {
-            console.log('SW registrato v42:', reg.scope);
+            console.log('SW registrato v43:', reg.scope);
             // Forza aggiornamento immediato se c'è una nuova versione
             reg.update();
           })
