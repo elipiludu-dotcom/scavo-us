@@ -5,7 +5,7 @@
   <!-- PWA -->
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#C9963A">
-  <meta name="app-version" content="41">
+  <meta name="app-version" content="42">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="SMP Scavo">
@@ -5153,7 +5153,7 @@ function renderDiari() {
           <span class="diario-toggle">▼</span>
         </div>
       </div>
-      <div class="diario-anno-body">`;
+      <div class="diario-anno-body" style="display:none">`;
 
     settori.forEach(settore => {
       const diariSettore = tree[anno][settore].sort((a,b) => (b.data||'').localeCompare(a.data||''));
@@ -5432,14 +5432,78 @@ function exportDiarioPDF() {
     txt(d.foto||'', ML+2, y+10, 8);
     y += 12;
 
-    // Osservazioni — grande
-    const ossH = 115;
-    rect(ML, y, IW, ossH);
-    lbl('OSSERVAZIONI E INTERPRETAZIONE', ML+2, y+4);
-    doc.setLineWidth(0.1); doc.setDrawColor(200,200,200);
-    doc.line(ML, y+6, W-MR, y+6);
-    multiTxt(d.osservazioni||'', ML+2, y+10, IW-4);
-    y += ossH;
+    // Osservazioni — calcola altezza necessaria dinamicamente
+    const ossText = d.osservazioni || '';
+    doc.setFontSize(8); doc.setFont('helvetica','normal');
+    const ossLines = doc.splitTextToSize(ossText, IW-4);
+    const ossLineH = 8 * 0.3528 * 1.35;
+    const ossContentH = ossLines.length * ossLineH + 4;
+    const ossMinH = 60;
+    const ossMaxH = H - y - 80; // lascia spazio per schizzo e note
+
+    if (ossContentH > ossMaxH) {
+      // Testo lungo: usa tutto lo spazio disponibile e continua su pagina 2
+      const ossH1 = ossMaxH;
+      rect(ML, y, IW, ossH1);
+      lbl('OSSERVAZIONI E INTERPRETAZIONE', ML+2, y+4);
+      doc.setLineWidth(0.1); doc.setDrawColor(200,200,200);
+      doc.line(ML, y+6, W-MR, y+6);
+      // Quante righe entrano
+      const righePerPagina = Math.floor((ossH1 - 10) / ossLineH);
+      const righe1 = ossLines.slice(0, righePerPagina);
+      const righe2 = ossLines.slice(righePerPagina);
+      doc.setFontSize(8); doc.setFont('helvetica','normal'); doc.setTextColor(0,0,0);
+      doc.text(righe1, ML+2, y+10);
+      y += ossH1;
+
+      // Schizzo e note nella stessa pagina se c'è spazio, altrimenti nuova pagina
+      if (righe2.length > 0) {
+        // Nuova pagina per il resto
+        doc.addPage();
+        let y2 = MT;
+        // Continua osservazioni
+        const ossH2 = Math.min(righe2.length * ossLineH + 14, H - y2 - 80);
+        rect(ML, y2, IW, ossH2);
+        lbl('OSSERVAZIONI E INTERPRETAZIONE (continua)', ML+2, y2+4);
+        doc.line(ML, y2+6, W-MR, y2+6);
+        doc.setFontSize(8); doc.setFont('helvetica','normal'); doc.setTextColor(0,0,0);
+        doc.text(righe2.slice(0, Math.floor((ossH2-10)/ossLineH)), ML+2, y2+10);
+        y2 += ossH2;
+
+        // Schizzo
+        const schH2 = 55;
+        rect(ML, y2, IW, schH2);
+        lbl('SCHIZZO O IMMAGINI DAL QUADERNO DI SCAVO', ML+2, y2+4);
+        doc.line(ML, y2+6, W-MR, y2+6);
+        doc.line(ML+IW/2, y2+6, ML+IW/2, y2+schH2);
+        if (d.schizzo1) multiTxt(d.schizzo1, ML+2, y2+10, IW/2-4, 7.5);
+        if (d.schizzo2) multiTxt(d.schizzo2, ML+IW/2+2, y2+10, IW/2-4, 7.5);
+        // Foto
+        const b64_1b = document.getElementById('d_foto1_b64')?.value;
+        const b64_2b = document.getElementById('d_foto2_b64')?.value;
+        if (b64_1b && b64_1b.startsWith('data:')) { try { const p=doc.getImageProperties(b64_1b); const r=p.width/p.height; const h=Math.min(schH2-9,fotoW/r); doc.addImage(b64_1b,'JPEG',ML+2,y2+7,h*r,h); } catch(e){} }
+        if (b64_2b && b64_2b.startsWith('data:')) { try { const p=doc.getImageProperties(b64_2b); const r=p.width/p.height; const h=Math.min(schH2-9,fotoW/r); doc.addImage(b64_2b,'JPEG',ML+IW/2+3,y2+7,h*r,h); } catch(e){} }
+        y2 += schH2;
+
+        // Note
+        const noteH2 = H - MT - y2 - 2;
+        rect(ML, y2, IW, Math.max(noteH2, 22));
+        lbl('NOTE E OBIETTIVI PER LA PROSSIMA SETTIMANA', ML+2, y2+4);
+        doc.line(ML, y2+6, W-MR, y2+6);
+        multiTxt(d.note_prossima||'', ML+2, y2+10, IW-4);
+        doc.save(`Diario_Sett${d.settore||'X'}_${d.data||'senza_data'}.pdf`);
+        return; // esce prima del save finale
+      }
+    } else {
+      const ossH = Math.max(ossMinH, ossContentH);
+      rect(ML, y, IW, ossH);
+      lbl('OSSERVAZIONI E INTERPRETAZIONE', ML+2, y+4);
+      doc.setLineWidth(0.1); doc.setDrawColor(200,200,200);
+      doc.line(ML, y+6, W-MR, y+6);
+      doc.setFontSize(8); doc.setFont('helvetica','normal'); doc.setTextColor(0,0,0);
+      doc.text(ossLines, ML+2, y+10);
+      y += ossH;
+    }
 
     // Schizzo — medio
     const schH = 55;
@@ -5818,9 +5882,9 @@ function showToast(msg) {
   <script>
     if ('serviceWorker' in navigator && !location.hostname.includes('claudeusercontent.com')) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./service-worker.js?v=41')
+        navigator.serviceWorker.register('./service-worker.js?v=42')
           .then(reg => {
-            console.log('SW registrato v41:', reg.scope);
+            console.log('SW registrato v42:', reg.scope);
             // Forza aggiornamento immediato se c'è una nuova versione
             reg.update();
           })
