@@ -5,7 +5,7 @@
   <!-- PWA -->
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#C9963A">
-  <meta name="app-version" content="31">
+  <meta name="app-version" content="32">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="SMP Scavo">
@@ -62,7 +62,7 @@
   .app-header {
     background: #252219;
     color: var(--ink);
-    padding: 0 20px;
+    padding: 0 16px;
     height: 52px;
     display: flex;
     align-items: center;
@@ -72,6 +72,7 @@
     z-index: 100;
     border-bottom: 1px solid var(--border);
     box-shadow: 0 1px 0 rgba(201,150,58,0.15);
+    gap: 10px;
   }
   .app-header h1 {
     font-family: 'Space Mono', monospace;
@@ -82,13 +83,22 @@
     display: flex;
     align-items: center;
     gap: 10px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    min-width: 0;
   }
   .app-header h1::before {
     content: '⛏';
     font-size: 1rem;
     filter: sepia(1) saturate(2);
   }
-  .header-right { display: flex; align-items: center; gap: 10px; }
+  .header-right { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+  .header-title-short { display: none; }
+  @media (max-width: 480px) {
+    .header-title-full { display: none; }
+    .header-title-short { display: inline; }
+  }
   .sync-status {
     font-family: 'Space Mono', monospace;
     font-size: 0.62rem;
@@ -161,7 +171,9 @@
     background: #1e1b12;
     border: 1px solid var(--border);
     border-top: none;
-    min-width: 220px;
+    min-width: 260px;
+    width: max-content;
+    max-width: calc(100vw - 16px);
     z-index: 2000;
     box-shadow: 0 8px 24px rgba(0,0,0,0.4);
   }
@@ -807,7 +819,10 @@
 <body>
 
 <div class="app-header">
-  <h1>Archivio Documentazione di Scavo</h1>
+  <h1>
+    <span class="header-title-full">Archivio Documentazione di Scavo</span>
+    <span class="header-title-short">SMP Scavo</span>
+  </h1>
   <div class="header-right">
     <div class="sync-status" id="syncStatus">
       <span class="sync-dot" id="syncDot"></span>
@@ -5393,9 +5408,9 @@ function showToast(msg) {
   <script>
     if ('serviceWorker' in navigator && !location.hostname.includes('claudeusercontent.com')) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./service-worker.js?v=31')
+        navigator.serviceWorker.register('./service-worker.js?v=32')
           .then(reg => {
-            console.log('SW registrato v31:', reg.scope);
+            console.log('SW registrato v32:', reg.scope);
             // Forza aggiornamento immediato se c'è una nuova versione
             reg.update();
           })
