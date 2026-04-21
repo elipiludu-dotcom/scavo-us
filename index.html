@@ -5,7 +5,7 @@
   <!-- PWA -->
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#C9963A">
-  <meta name="app-version" content="32">
+  <meta name="app-version" content="44">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="SMP Scavo">
@@ -62,7 +62,7 @@
   .app-header {
     background: #252219;
     color: var(--ink);
-    padding: 0 16px;
+    padding: 0 20px;
     height: 52px;
     display: flex;
     align-items: center;
@@ -72,7 +72,6 @@
     z-index: 100;
     border-bottom: 1px solid var(--border);
     box-shadow: 0 1px 0 rgba(201,150,58,0.15);
-    gap: 10px;
   }
   .app-header h1 {
     font-family: 'Space Mono', monospace;
@@ -88,17 +87,17 @@
     text-overflow: ellipsis;
     min-width: 0;
   }
-  .app-header h1::before {
-    content: '⛏';
-    font-size: 1rem;
-    filter: sepia(1) saturate(2);
-  }
-  .header-right { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
   .header-title-short { display: none; }
   @media (max-width: 480px) {
     .header-title-full { display: none; }
     .header-title-short { display: inline; }
   }
+  .app-header h1::before {
+    content: '⛏';
+    font-size: 1rem;
+    filter: sepia(1) saturate(2);
+  }
+  .header-right { display: flex; align-items: center; gap: 10px; }
   .sync-status {
     font-family: 'Space Mono', monospace;
     font-size: 0.62rem;
@@ -579,6 +578,31 @@
   }
 
   .export-section { padding: 20px 16px; }
+
+  /* Diario ad albero */
+  .diario-anno-group { margin-bottom: 8px; }
+  .diario-anno-header {
+    display: flex; align-items: center; gap: 12px;
+    padding: 10px 16px; cursor: pointer;
+    background: var(--parchment);
+    border: 1px solid var(--border); border-radius: 4px;
+    font-family: 'Patrick Hand', cursive; font-size: 1.05rem; color: var(--earth);
+    user-select: none;
+  }
+  .diario-anno-header:hover { background: rgba(201,150,58,0.08); }
+  .diario-anno-body { padding: 4px 0 4px 8px; }
+  .diario-settore-group { margin-bottom: 4px; }
+  .diario-settore-header {
+    display: flex; align-items: center; gap: 12px;
+    padding: 7px 14px; cursor: pointer;
+    background: rgba(255,255,255,0.02);
+    border: 1px solid rgba(255,255,255,0.06); border-radius: 3px;
+    font-family: 'Space Mono', monospace; font-size: 0.72rem; color: var(--muted);
+    user-select: none;
+  }
+  .diario-settore-header:hover { background: rgba(201,150,58,0.05); color: var(--ink); }
+  .diario-settore-body { padding: 2px 0 2px 8px; }
+  .diario-toggle { font-size: 0.65rem; color: var(--muted); }
   .export-card {
     background: var(--parchment);
     border: 1px solid var(--border);
@@ -808,6 +832,8 @@
 </style>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
+  <!-- D3 per Matrix di Harris -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
   <!-- Leaflet -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -867,6 +893,9 @@
         <div class="nav-dropdown-item" onclick="document.getElementById('xlsxImportInput').click()">
           <span class="nav-icon">⬆</span> Importa Schede US (Excel)
         </div>
+        <div class="nav-dropdown-item" onclick="document.getElementById('diariJsonInput').click()">
+          <span class="nav-icon">📓</span> Importa Diari (JSON)
+        </div>
       </div>
     </div>
 
@@ -886,6 +915,9 @@
         <div class="nav-dropdown-sep"></div>
         <div class="nav-dropdown-item" onclick="showView('mappa')">
           <span class="nav-icon">🗺</span> Apri GIS
+        </div>
+        <div class="nav-dropdown-item" onclick="showView('matrix')">
+          <span class="nav-icon">📊</span> Matrix di Harris
         </div>
         <div class="nav-dropdown-sep"></div>
         <div class="nav-dropdown-item" onclick="apriSelezionePDF('us')">
@@ -922,10 +954,50 @@
 
     <!-- SCHEDE CATALOGATE -->
     <div id="view-schede" class="view">
-      <div class="list-toolbar">
+      <div class="list-toolbar" style="flex-wrap:wrap;gap:8px">
         <button class="btn btn-secondary" onclick="showView('list')" style="white-space:nowrap">← Home</button>
-        <input class="search-box" type="search" placeholder="Cerca per numero US, area, descrizione…" oninput="renderList(this.value)">
+        <input class="search-box" id="us-search" type="search" placeholder="Cerca numero US, tipo, descrizione…" oninput="renderListFiltri()" style="flex:1;min-width:160px">
+        <button class="btn btn-secondary" onclick="toggleFiltriUS()" id="btn-filtri-us" style="white-space:nowrap">⚙ Filtri</button>
         <button class="btn btn-secondary" onclick="loadFromSheets(true)" title="Sincronizza">↻</button>
+      </div>
+      <!-- Pannello filtri avanzati -->
+      <div id="filtri-us-panel" style="display:none;padding:8px 16px 12px;background:var(--parchment);border-bottom:1px solid var(--border);display:none">
+        <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end">
+          <div style="display:flex;flex-direction:column;gap:3px">
+            <label style="font-size:0.6rem;font-family:'Space Mono',monospace;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted)">Anno</label>
+            <select id="f-anno" onchange="renderListFiltri()" style="padding:6px 10px;background:var(--parchment-light);border:1px solid var(--border);border-radius:3px;color:var(--ink);font-size:0.8rem;min-width:90px">
+              <option value="">Tutti</option>
+            </select>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:3px">
+            <label style="font-size:0.6rem;font-family:'Space Mono',monospace;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted)">Area</label>
+            <select id="f-area" onchange="renderListFiltri()" style="padding:6px 10px;background:var(--parchment-light);border:1px solid var(--border);border-radius:3px;color:var(--ink);font-size:0.8rem;min-width:90px">
+              <option value="">Tutte</option>
+            </select>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:3px">
+            <label style="font-size:0.6rem;font-family:'Space Mono',monospace;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted)">Saggio/Settore</label>
+            <select id="f-saggio" onchange="renderListFiltri()" style="padding:6px 10px;background:var(--parchment-light);border:1px solid var(--border);border-radius:3px;color:var(--ink);font-size:0.8rem;min-width:90px">
+              <option value="">Tutti</option>
+            </select>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:3px">
+            <label style="font-size:0.6rem;font-family:'Space Mono',monospace;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted)">Tipo</label>
+            <select id="f-tipo" onchange="renderListFiltri()" style="padding:6px 10px;background:var(--parchment-light);border:1px solid var(--border);border-radius:3px;color:var(--ink);font-size:0.8rem;min-width:120px">
+              <option value="">Tutti</option>
+            </select>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:3px">
+            <label style="font-size:0.6rem;font-family:'Space Mono',monospace;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted)">Stato</label>
+            <select id="f-stato" onchange="renderListFiltri()" style="padding:6px 10px;background:var(--parchment-light);border:1px solid var(--border);border-radius:3px;color:var(--ink);font-size:0.8rem;min-width:110px">
+              <option value="">Tutti</option>
+              <option value="completa">Completa</option>
+              <option value="parziale">Parziale</option>
+              <option value="bozza">Bozza</option>
+            </select>
+          </div>
+          <button class="btn btn-secondary" onclick="resetFiltriUS()" style="font-size:0.75rem;padding:6px 10px">✕ Reset</button>
+        </div>
       </div>
       <div class="us-list" id="usList"></div>
     </div>
@@ -936,7 +1008,7 @@
         <h2 id="formTitle">Nuova Scheda US</h2>
         <div class="form-actions">
           <button class="btn btn-secondary" id="btnMappaUS" style="display:none;white-space:nowrap" onclick="apriMappaPerUS()">🗺 Vedi su mappa</button>
-          <button class="btn btn-secondary" onclick="showView('list')" style="white-space:nowrap">← Home</button>
+          <button class="btn btn-secondary" onclick="showView(window._editOrigin?.replace('view-','') || 'schede')" style="white-space:nowrap">← Indietro</button>
           <button class="btn btn-success" onclick="saveScheda()">Salva</button>
         </div>
       </div>
@@ -1133,7 +1205,7 @@
       <div class="form-header">
         <h2 id="tombaFormTitle">Nuova Scheda Tomba</h2>
         <div style="display:flex;gap:8px;flex-wrap:wrap">
-          <button class="btn btn-secondary" onclick="showView('list')" style="white-space:nowrap">← Home</button>
+          <button class="btn btn-secondary" onclick="showView(window._tombaOrigin?.replace('view-','') || 'tombe')" style="white-space:nowrap">← Indietro</button>
           <button class="btn btn-danger" id="btnDeleteTomba" style="display:none" onclick="deleteTomba()">🗑 Elimina</button>
           <button class="btn btn-secondary" id="btnExportTombaPDF" style="display:none" onclick="exportTombaPDF()">⬇ PDF</button>
           <button class="btn btn-secondary" id="btnMappaTomba" style="display:none;white-space:nowrap" onclick="apriMappaPerTomba()">🗺 Vedi su mappa</button>
@@ -1388,6 +1460,33 @@
       </div>
     </div>
 
+    <!-- MATRIX DI HARRIS -->
+    <div id="view-matrix" class="view">
+      <div style="display:flex;align-items:center;gap:12px;padding:12px 16px;border-bottom:1px solid var(--border);flex-wrap:wrap">
+        <h2 style="margin:0;font-family:'Patrick Hand',cursive;color:var(--earth);font-size:1.2rem">📊 Matrix di Harris</h2>
+        <select id="matrix-settore" onchange="renderMatrix()"
+          style="padding:7px 12px;background:var(--parchment-light);border:1px solid var(--border);border-radius:3px;color:var(--ink);font-size:0.82rem;font-family:'Space Mono',monospace">
+          <option value="">— tutti i settori —</option>
+        </select>
+        <select id="matrix-anno" onchange="renderMatrix()"
+          style="padding:7px 12px;background:var(--parchment-light);border:1px solid var(--border);border-radius:3px;color:var(--ink);font-size:0.82rem;font-family:'Space Mono',monospace">
+          <option value="">— tutti gli anni —</option>
+        </select>
+        <button class="btn btn-secondary" onclick="showView('list')" style="white-space:nowrap">← Home</button>
+        <span id="matrix-info" style="font-size:0.72rem;color:var(--muted);font-family:'Space Mono',monospace;margin-left:auto"></span>
+      </div>
+      <div id="matrix-container" style="width:100%;overflow:auto;background:var(--parchment-light)">
+        <svg id="matrix-svg" style="min-width:600px"></svg>
+      </div>
+      <!-- Legenda -->
+      <div style="padding:8px 16px;border-top:1px solid var(--border);display:flex;gap:20px;flex-wrap:wrap;font-family:'Space Mono',monospace;font-size:0.62rem;color:var(--muted)">
+        <span>→ posteriore/anteriore</span>
+        <span style="border:2px solid var(--earth);padding:1px 6px;border-radius:2px">US normale</span>
+        <span style="border:2px solid #4a90d9;padding:1px 6px;border-radius:2px;color:#4a90d9">= uguale_a</span>
+        <span style="border:2px dashed var(--muted);padding:1px 6px;border-radius:2px">si lega / appoggia</span>
+      </div>
+    </div>
+
     <!-- DIARIO DI SCAVO -->
     <div id="view-diario" class="view">
       <div class="content" style="max-width:860px">
@@ -1411,7 +1510,7 @@
           <div style="display:flex;gap:8px;flex-wrap:wrap">
             <button class="btn btn-danger" id="btnDeleteDiario" style="display:none" onclick="deleteDiario()">🗑 Elimina</button>
             <button class="btn btn-secondary" id="btnExportDiarioPDF" style="display:none" onclick="exportDiarioPDF()">⬇ PDF</button>
-            <button class="btn btn-secondary" onclick="showView('diario')">← Diario</button>
+            <button class="btn btn-secondary" onclick="showView('diario')">← Indietro</button>
             <button class="btn btn-success" onclick="saveDiario()">Salva</button>
           </div>
         </div>
@@ -1580,6 +1679,12 @@
           <input type="file" id="xlsxTombeInput" accept=".xlsx" style="display:none" onchange="importTombeFromExcel(this)">
           <button class="btn btn-primary" onclick="document.getElementById('xlsxTombeInput').click()">📂 Scegli tombe_estratte.xlsx</button>
           <div id="xlsxTombeStatus" style="margin-top:10px;font-family:'Space Mono',monospace;font-size:0.7rem;color:var(--muted);min-height:18px"></div>
+        </div>
+        <div class="export-card">
+          <h3>📓 Importa Diari da JSON</h3>
+          <p>Importa diari di scavo dal file <strong>diari_importati.json</strong> generato dallo script Python.</p>
+          <input type="file" id="diariJsonInput" accept=".json" style="display:none" onchange="importDiariFromJSON(this)">
+          <button class="btn btn-primary" onclick="document.getElementById('diariJsonInput').click()">📂 Scegli diari_importati.json</button>
         </div>
       </div>
     </div>
@@ -1985,9 +2090,9 @@ function showView(v) {
   if (v === 'list') { editingId = null; renderList(); renderStats(); }
   if (v === 'mappa') {
     initMappa();
-    // Forza Leaflet a ricalcolare le dimensioni dopo che la view è visibile
     setTimeout(() => { if (_mappaMap) _mappaMap.invalidateSize(); }, 100);
   }
+  if (v === 'matrix') { popolaFiltriMatrix(); renderMatrix(); }
   if (v === 'schede') { renderList(); }
   if (v === 'tombe') { renderTombe(); }
 }
@@ -2020,15 +2125,66 @@ function getTombePerUS(numeroUS) {
   );
 }
 
-function renderList(q = '') {
+function renderListFiltri() {
+  const q      = document.getElementById('us-search')?.value || '';
+  const fAnno  = document.getElementById('f-anno')?.value   || '';
+  const fArea  = document.getElementById('f-area')?.value   || '';
+  const fSagg  = document.getElementById('f-saggio')?.value || '';
+  const fTipo  = document.getElementById('f-tipo')?.value   || '';
+  const fStato = document.getElementById('f-stato')?.value  || '';
+  renderList(q, { anno: fAnno, area: fArea, saggio: fSagg, tipo: fTipo, stato: fStato });
+}
+
+function toggleFiltriUS() {
+  const panel = document.getElementById('filtri-us-panel');
+  if (!panel) return;
+  const visible = panel.style.display === 'block';
+  panel.style.display = visible ? 'none' : 'block';
+  if (!visible) popolaSelectFiltriUS();
+  document.getElementById('btn-filtri-us').style.background =
+    visible ? '' : 'rgba(201,150,58,0.15)';
+}
+
+function resetFiltriUS() {
+  ['f-anno','f-area','f-saggio','f-tipo','f-stato'].forEach(id => {
+    const el = document.getElementById(id); if (el) el.value = '';
+  });
+  const el = document.getElementById('us-search'); if (el) el.value = '';
+  renderList();
+}
+
+function popolaSelectFiltriUS() {
+  const opts = (id, vals) => {
+    const el = document.getElementById(id); if (!el) return;
+    const cur = el.value;
+    el.innerHTML = '<option value="">Tutti</option>' +
+      [...new Set(vals)].filter(Boolean).sort().map(v => `<option value="${v}">${v}</option>`).join('');
+    el.value = cur;
+  };
+  opts('f-anno',  schede.map(s => s.anno));
+  opts('f-area',  schede.map(s => s.area));
+  opts('f-saggio',schede.map(s => s.saggio));
+  opts('f-tipo',  schede.map(s => s.tipo));
+}
+
+function renderList(q = '', filtri = {}) {
   const list = document.getElementById('usList');
   const term = q.toLowerCase();
-  const filtered = schede.filter(s =>
-    String(s.numero).includes(term) ||
-    (s.area||'').toLowerCase().includes(term) ||
-    (s.descrizione||'').toLowerCase().includes(term) ||
-    (s.tipo||'').toLowerCase().includes(term)
-  ).sort((a,b) => Math.abs(b.numero) - Math.abs(a.numero));
+  const filtered = schede.filter(s => {
+    if (term && !(
+      String(s.numero).includes(term) ||
+      (s.area||'').toLowerCase().includes(term) ||
+      (s.descrizione||'').toLowerCase().includes(term) ||
+      (s.tipo||'').toLowerCase().includes(term) ||
+      (s.saggio||'').toLowerCase().includes(term)
+    )) return false;
+    if (filtri.anno   && s.anno   !== filtri.anno)   return false;
+    if (filtri.area   && s.area   !== filtri.area)   return false;
+    if (filtri.saggio && s.saggio !== filtri.saggio) return false;
+    if (filtri.tipo   && s.tipo   !== filtri.tipo)   return false;
+    if (filtri.stato  && s.stato  !== filtri.stato)  return false;
+    return true;
+  }).sort((a,b) => Math.abs(b.numero) - Math.abs(a.numero));
 
   if (!filtered.length) {
     list.innerHTML = `<div class="empty-state"><div class="icon">🏺</div><p>${schede.length ? 'Nessun risultato.' : 'Nessuna scheda US ancora.<br>Tocca "+ Nuova US" per iniziare.'}</p></div>`;
@@ -2565,6 +2721,7 @@ function getTombaFromForm(id) {
 
 function openNewTomba() {
   editingTombaId = null;
+  window._tombaOrigin = document.querySelector('.view.active')?.id || 'view-tombe';
   resetTombaForm();
   document.getElementById('tombaFormTitle').textContent = 'Nuova Scheda Tomba';
   document.getElementById('btnDeleteTomba').style.display = 'none';
@@ -2577,6 +2734,7 @@ function openNewTomba() {
 function openEditTomba(id) {
   const t = tombe.find(x => x.id === id);
   if (!t) return;
+  window._tombaOrigin = document.querySelector('.view.active')?.id || 'view-tombe';
   editingTombaId = id;
   resetTombaForm();
   loadTombaForm(t);
@@ -3480,6 +3638,64 @@ function eseguiStampaSingola() {
   } else if (_pdfSelectTipo === 'diario') {
     editingDiarioId = id;
     exportDiarioPDF();
+  }
+}
+
+async function importDiariFromJSON(input) {
+  const file = input.files[0];
+  if (!file) return;
+  try {
+    const text = await file.text();
+    const imported = JSON.parse(text);
+    if (!Array.isArray(imported)) throw new Error('Formato non valido');
+
+    const conferma = await showConfirm({
+      icon: '📓',
+      title: `Importare ${imported.length} diari?`,
+      message: 'Il foglio "Diario" verrà riscritto con le intestazioni corrette e tutti i diari importati.',
+      okLabel: '📥 Importa',
+      okClass: 'btn-primary'
+    });
+    if (!conferma) return;
+
+    setSyncStatus('syncing', 'Preparazione foglio…');
+
+    // 1. Assicura che il foglio esista
+    await ensureSheetExists(SHEET_DIARIO, HEADERS_DIARIO);
+
+    // 2. Forza riscrittura intestazioni (riga 1) con i campi corretti
+    const urlHeaders = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(SHEET_DIARIO + '!A1')}?valueInputOption=RAW`;
+    await fetch(urlHeaders, {
+      method: 'PUT',
+      headers: { Authorization: 'Bearer ' + accessToken, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ values: [HEADERS_DIARIO] })
+    });
+
+    // 3. Importa tutti i diari in batch (una sola chiamata API)
+    setSyncStatus('syncing', 'Importazione diari…');
+    const nuovi = imported.filter(d => !diari.find(x => x.id === d.id));
+    const skip = imported.length - nuovi.length;
+
+    if (nuovi.length > 0) {
+      const rows = nuovi.map(d => HEADERS_DIARIO.map(h => String(d[h] || '')));
+      const url = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(SHEET_DIARIO)}:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`;
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { Authorization: 'Bearer ' + accessToken, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ values: rows })
+      });
+      if (!res.ok) throw new Error('Errore API: ' + res.status);
+      nuovi.forEach(d => diari.push(d));
+    }
+
+    setSyncStatus('ok', 'Sincronizzato');
+    showToast(`✓ Importati ${nuovi.length} diari${skip ? ', ' + skip + ' già presenti' : ''}`);
+    input.value = '';
+    await loadDiari();
+  } catch(e) {
+    setSyncStatus('error', 'Errore');
+    showToast('⚠ Errore importazione: ' + e.message);
+    console.error(e);
   }
 }
 
@@ -4926,21 +5142,81 @@ function renderDiari() {
     container.innerHTML = '<div class="empty-state"><div class="icon">📓</div><p>Nessuna scheda diario.<br>Clicca "+ Nuova Scheda" per iniziare.</p></div>';
     return;
   }
-  const sorted = [...diari].sort((a,b) => { const s = (a.settore||'').localeCompare(b.settore||''); return s !== 0 ? s : (b.data||'').localeCompare(a.data||''); });
-  container.innerHTML = sorted.map(d => `
-    <div class="us-card" onclick="openEditDiario('${d.id}')" style="cursor:pointer">
-      <div style="display:flex;align-items:center;justify-content:space-between;width:100%">
-        <div>
-          <div style="font-family:'Patrick Hand',cursive;font-size:1.1rem;color:var(--earth)">${d.settore ? 'Settore ' + d.settore + ' — ' : ''}${d.data || 'Senza data'}</div>
-          <div style="font-size:0.8rem;color:var(--ink);margin-top:2px">${d.compilatori || ''}${d.anno ? ' · ' + d.anno : ''}</div>
-          <div style="font-size:0.75rem;color:var(--muted);margin-top:4px">
-            ${d.us_esame ? 'US: ' + d.us_esame : ''}
+
+  // Organizza per Anno → Settore → diari
+  const tree = {};
+  diari.forEach(d => {
+    const anno    = d.anno    || '—';
+    const settore = d.settore || 'Senza settore';
+    if (!tree[anno]) tree[anno] = {};
+    if (!tree[anno][settore]) tree[anno][settore] = [];
+    tree[anno][settore].push(d);
+  });
+
+  // Ordina: anni decrescenti, settori crescenti, diari per data decrescente
+  const anni = Object.keys(tree).sort((a,b) => b.localeCompare(a));
+
+  let html = '';
+  anni.forEach(anno => {
+    const settori = Object.keys(tree[anno]).sort();
+    html += `<div class="diario-anno-group">
+      <div class="diario-anno-header" onclick="toggleDiarioAnno(this)">
+        <span>📅 ${anno}</span>
+        <div style="display:flex;align-items:center;gap:10px;margin-left:auto">
+          <span style="font-size:0.65rem;color:var(--muted);font-family:'Space Mono',monospace">${Object.values(tree[anno]).flat().length} diari</span>
+          <span class="diario-toggle">▼</span>
+        </div>
+      </div>
+      <div class="diario-anno-body" style="display:none">`;
+
+    settori.forEach(settore => {
+      const diariSettore = tree[anno][settore].sort((a,b) => (b.data||'').localeCompare(a.data||''));
+      html += `<div class="diario-settore-group">
+        <div class="diario-settore-header" onclick="toggleDiarioSettore(this)">
+          <span>📁 ${settore}</span>
+          <div style="display:flex;align-items:center;gap:10px;margin-left:auto">
+            <span style="font-size:0.65rem;color:var(--muted);font-family:'Space Mono',monospace">${diariSettore.length}</span>
+            <span class="diario-toggle">▼</span>
           </div>
         </div>
-        <button class="btn-edit-card" onclick="event.stopPropagation();openEditDiario('${d.id}')">✏ Modifica</button>
-      </div>
-    </div>
-  `).join('');
+        <div class="diario-settore-body">`;
+
+      diariSettore.forEach(d => {
+        html += `<div class="us-card" onclick="openEditDiario('${d.id}')" style="cursor:pointer;margin-left:16px">
+          <div style="display:flex;align-items:center;justify-content:space-between;width:100%">
+            <div>
+              <div style="font-family:'Patrick Hand',cursive;font-size:1rem;color:var(--earth)">${d.data || 'Senza data'}</div>
+              <div style="font-size:0.78rem;color:var(--ink);margin-top:2px">${d.compilatori || ''}</div>
+              ${d.us_esame ? `<div style="font-size:0.72rem;color:var(--muted);margin-top:3px">US: ${d.us_esame.substring(0,60)}${d.us_esame.length>60?'...':''}</div>` : ''}
+            </div>
+            <button class="btn-edit-card" onclick="event.stopPropagation();openEditDiario('${d.id}')">✏</button>
+          </div>
+        </div>`;
+      });
+
+      html += `</div></div>`; // chiudi settore
+    });
+
+    html += `</div></div>`; // chiudi anno
+  });
+
+  container.innerHTML = html;
+}
+
+function toggleDiarioAnno(header) {
+  const body = header.nextElementSibling;
+  const toggle = header.querySelector('.diario-toggle');
+  const hidden = body.style.display === 'none';
+  body.style.display = hidden ? 'block' : 'none';
+  toggle.textContent = hidden ? '▼' : '▶';
+}
+
+function toggleDiarioSettore(header) {
+  const body = header.nextElementSibling;
+  const toggle = header.querySelector('.diario-toggle');
+  const hidden = body.style.display === 'none';
+  body.style.display = hidden ? 'block' : 'none';
+  toggle.textContent = hidden ? '▼' : '▶';
 }
 
 function nuovaDiarioScheda() {
@@ -5170,14 +5446,78 @@ function exportDiarioPDF() {
     txt(d.foto||'', ML+2, y+10, 8);
     y += 12;
 
-    // Osservazioni — grande
-    const ossH = 115;
-    rect(ML, y, IW, ossH);
-    lbl('OSSERVAZIONI E INTERPRETAZIONE', ML+2, y+4);
-    doc.setLineWidth(0.1); doc.setDrawColor(200,200,200);
-    doc.line(ML, y+6, W-MR, y+6);
-    multiTxt(d.osservazioni||'', ML+2, y+10, IW-4);
-    y += ossH;
+    // Osservazioni — calcola altezza necessaria dinamicamente
+    const ossText = d.osservazioni || '';
+    doc.setFontSize(8); doc.setFont('helvetica','normal');
+    const ossLines = doc.splitTextToSize(ossText, IW-4);
+    const ossLineH = 8 * 0.3528 * 1.35;
+    const ossContentH = ossLines.length * ossLineH + 4;
+    const ossMinH = 60;
+    const ossMaxH = H - y - 80; // lascia spazio per schizzo e note
+
+    if (ossContentH > ossMaxH) {
+      // Testo lungo: usa tutto lo spazio disponibile e continua su pagina 2
+      const ossH1 = ossMaxH;
+      rect(ML, y, IW, ossH1);
+      lbl('OSSERVAZIONI E INTERPRETAZIONE', ML+2, y+4);
+      doc.setLineWidth(0.1); doc.setDrawColor(200,200,200);
+      doc.line(ML, y+6, W-MR, y+6);
+      // Quante righe entrano
+      const righePerPagina = Math.floor((ossH1 - 10) / ossLineH);
+      const righe1 = ossLines.slice(0, righePerPagina);
+      const righe2 = ossLines.slice(righePerPagina);
+      doc.setFontSize(8); doc.setFont('helvetica','normal'); doc.setTextColor(0,0,0);
+      doc.text(righe1, ML+2, y+10);
+      y += ossH1;
+
+      // Schizzo e note nella stessa pagina se c'è spazio, altrimenti nuova pagina
+      if (righe2.length > 0) {
+        // Nuova pagina per il resto
+        doc.addPage();
+        let y2 = MT;
+        // Continua osservazioni
+        const ossH2 = Math.min(righe2.length * ossLineH + 14, H - y2 - 80);
+        rect(ML, y2, IW, ossH2);
+        lbl('OSSERVAZIONI E INTERPRETAZIONE (continua)', ML+2, y2+4);
+        doc.line(ML, y2+6, W-MR, y2+6);
+        doc.setFontSize(8); doc.setFont('helvetica','normal'); doc.setTextColor(0,0,0);
+        doc.text(righe2.slice(0, Math.floor((ossH2-10)/ossLineH)), ML+2, y2+10);
+        y2 += ossH2;
+
+        // Schizzo
+        const schH2 = 55;
+        rect(ML, y2, IW, schH2);
+        lbl('SCHIZZO O IMMAGINI DAL QUADERNO DI SCAVO', ML+2, y2+4);
+        doc.line(ML, y2+6, W-MR, y2+6);
+        doc.line(ML+IW/2, y2+6, ML+IW/2, y2+schH2);
+        if (d.schizzo1) multiTxt(d.schizzo1, ML+2, y2+10, IW/2-4, 7.5);
+        if (d.schizzo2) multiTxt(d.schizzo2, ML+IW/2+2, y2+10, IW/2-4, 7.5);
+        // Foto
+        const b64_1b = document.getElementById('d_foto1_b64')?.value;
+        const b64_2b = document.getElementById('d_foto2_b64')?.value;
+        if (b64_1b && b64_1b.startsWith('data:')) { try { const p=doc.getImageProperties(b64_1b); const r=p.width/p.height; const h=Math.min(schH2-9,fotoW/r); doc.addImage(b64_1b,'JPEG',ML+2,y2+7,h*r,h); } catch(e){} }
+        if (b64_2b && b64_2b.startsWith('data:')) { try { const p=doc.getImageProperties(b64_2b); const r=p.width/p.height; const h=Math.min(schH2-9,fotoW/r); doc.addImage(b64_2b,'JPEG',ML+IW/2+3,y2+7,h*r,h); } catch(e){} }
+        y2 += schH2;
+
+        // Note
+        const noteH2 = H - MT - y2 - 2;
+        rect(ML, y2, IW, Math.max(noteH2, 22));
+        lbl('NOTE E OBIETTIVI PER LA PROSSIMA SETTIMANA', ML+2, y2+4);
+        doc.line(ML, y2+6, W-MR, y2+6);
+        multiTxt(d.note_prossima||'', ML+2, y2+10, IW-4);
+        doc.save(`Diario_Sett${d.settore||'X'}_${d.data||'senza_data'}.pdf`);
+        return; // esce prima del save finale
+      }
+    } else {
+      const ossH = Math.max(ossMinH, ossContentH);
+      rect(ML, y, IW, ossH);
+      lbl('OSSERVAZIONI E INTERPRETAZIONE', ML+2, y+4);
+      doc.setLineWidth(0.1); doc.setDrawColor(200,200,200);
+      doc.line(ML, y+6, W-MR, y+6);
+      doc.setFontSize(8); doc.setFont('helvetica','normal'); doc.setTextColor(0,0,0);
+      doc.text(ossLines, ML+2, y+10);
+      y += ossH;
+    }
 
     // Schizzo — medio
     const schH = 55;
@@ -5358,6 +5698,188 @@ function apriMappaPerTomba() {
   apriMappaPopup(possibili, `Tomba ${tombaNum}`);
 }
 
+
+// ─── MATRIX DI HARRIS ────────────────────────────────────────────
+
+function popolaFiltriMatrix() {
+  const selS = document.getElementById('matrix-settore');
+  const selA = document.getElementById('matrix-anno');
+  if (!selS || !selA) return;
+  const settori = [...new Set(schede.map(s => s.saggio).filter(Boolean))].sort();
+  const anni    = [...new Set(schede.map(s => s.anno).filter(Boolean))].sort().reverse();
+  selS.innerHTML = '<option value="">— tutti i settori —</option>' +
+    settori.map(s => `<option value="${s}">${s}</option>`).join('');
+  selA.innerHTML = '<option value="">— tutti gli anni —</option>' +
+    anni.map(a => `<option value="${a}">${a}</option>`).join('');
+}
+
+function renderMatrix() {
+  const settore = document.getElementById('matrix-settore')?.value || '';
+  const anno    = document.getElementById('matrix-anno')?.value || '';
+
+  let sel = schede.filter(s => {
+    if (settore && s.saggio !== settore) return false;
+    if (anno    && s.anno   !== anno)    return false;
+    return true;
+  });
+
+  document.getElementById('matrix-info').textContent = `${sel.length} US`;
+  const svg = document.getElementById('matrix-svg');
+  svg.innerHTML = '';
+  if (!sel.length) return;
+
+  const usSet = new Set(sel.map(s => String(s.numero)));
+
+  // Costruisci grafo: predecessori e successori
+  const succ = {}; // us → [us più recenti (sopra)]
+  const pred = {}; // us → [us più antiche (sotto)]
+  const equalGroups = {}; // per uguale_a
+  sel.forEach(s => { succ[s.numero] = []; pred[s.numero] = []; });
+
+  sel.forEach(s => {
+    const raps = Array.isArray(s.rapporti) ? s.rapporti :
+      (() => { try { return JSON.parse(s.rapporti||'[]'); } catch { return []; } })();
+    raps.forEach(r => {
+      const a = String(s.numero), b = String(r.us);
+      if (!usSet.has(b)) return;
+      if (r.tipo === 'posteriore' || r.tipo === 'coperto_da' || r.tipo === 'taglia' || r.tipo === 'riempie') {
+        if (!succ[a].includes(b)) succ[a].push(b);
+        if (!pred[b].includes(a)) pred[b].push(a);
+      } else if (r.tipo === 'anteriore' || r.tipo === 'copre' || r.tipo === 'tagliato_da' || r.tipo === 'riempito_da') {
+        if (!succ[b].includes(a)) succ[b].push(a);
+        if (!pred[a].includes(b)) pred[a].push(b);
+      }
+    });
+  });
+
+  // Calcola livelli con topological sort
+  const levels = {};
+  const inDegree = {};
+  sel.forEach(s => { inDegree[s.numero] = pred[s.numero].length; });
+
+  let queue = sel.filter(s => inDegree[s.numero] === 0).map(s => s.numero);
+  queue.forEach(n => levels[n] = 0);
+
+  while (queue.length) {
+    const next = [];
+    queue.forEach(n => {
+      (succ[n] || []).forEach(nb => {
+        levels[nb] = Math.max(levels[nb] || 0, (levels[n] || 0) + 1);
+        inDegree[nb]--;
+        if (inDegree[nb] === 0) next.push(nb);
+      });
+    });
+    queue = next;
+  }
+
+  // Nodi senza livello (cicli) → mettili all'ultimo livello
+  const maxLvl = Math.max(0, ...Object.values(levels));
+  sel.forEach(s => { if (levels[s.numero] === undefined) levels[s.numero] = maxLvl + 1; });
+
+  // Raggruppa per livello
+  const byLevel = {};
+  sel.forEach(s => {
+    const lv = levels[s.numero] || 0;
+    if (!byLevel[lv]) byLevel[lv] = [];
+    byLevel[lv].push(String(s.numero));
+  });
+
+  // Layout posizioni
+  const NW = 56, NH = 30, HGAP = 16, VGAP = 48;
+  const positions = {};
+  const sortedLevels = Object.keys(byLevel).map(Number).sort((a,b) => a-b);
+
+  sortedLevels.forEach(lv => {
+    const nodes = byLevel[lv];
+    nodes.forEach((n, i) => {
+      positions[n] = {
+        x: i * (NW + HGAP) + NW/2,
+        y: lv * (NH + VGAP) + NH/2
+      };
+    });
+  });
+
+  // Dimensioni SVG
+  const allX = Object.values(positions).map(p => p.x);
+  const allY = Object.values(positions).map(p => p.y);
+  const svgW = Math.max(...allX) + NW + 40;
+  const svgH = Math.max(...allY) + NH + 40;
+
+  svg.setAttribute('width',  svgW);
+  svg.setAttribute('height', svgH);
+  svg.setAttribute('viewBox', `0 0 ${svgW} ${svgH}`);
+
+  const ns = 'http://www.w3.org/2000/svg';
+  // nessuna freccia
+
+  const gRoot = svg.appendChild(document.createElementNS(ns, 'g'));
+  gRoot.setAttribute('transform', 'translate(20,20)');
+
+  // Disegna archi ortogonali (con angoli retti, senza frecce)
+  sel.forEach(s => {
+    (succ[s.numero] || []).forEach(nb => {
+      const p1 = positions[s.numero], p2 = positions[nb];
+      if (!p1 || !p2) return;
+      // Punto di partenza (bordo inferiore nodo padre) e arrivo (bordo superiore nodo figlio)
+      const x1 = p1.x, y1 = p1.y + NH/2;
+      const x2 = p2.x, y2 = p2.y - NH/2;
+      const my = (y1 + y2) / 2; // punto medio verticale
+      // Percorso ortogonale: scendi a metà → vai in orizzontale → scendi al nodo figlio
+      const d = `M ${x1} ${y1} L ${x1} ${my} L ${x2} ${my} L ${x2} ${y2}`;
+      const path = gRoot.appendChild(document.createElementNS(ns, 'path'));
+      path.setAttribute('d', d);
+      path.setAttribute('fill', 'none');
+      path.setAttribute('stroke', '#C9963A');
+      path.setAttribute('stroke-width', '1.2');
+      path.setAttribute('opacity', '0.8');
+    });
+  });
+
+  // Disegna nodi
+  sel.forEach(s => {
+    const p = positions[s.numero];
+    if (!p) return;
+    const scheda = sel.find(x => String(x.numero) === String(s.numero));
+
+    const grp = gRoot.appendChild(document.createElementNS(ns, 'g'));
+    grp.setAttribute('transform', `translate(${p.x - NW/2},${p.y - NH/2})`);
+    grp.style.cursor = 'pointer';
+    grp.addEventListener('click', () => openUSModal(s.id));
+
+    const isNeg = String(s.numero).startsWith('-');
+    const fillCol   = isNeg ? '#C9963A' : '#1e1b12';
+    const strokeCol = isNeg ? '#8B6520' : '#C9963A';
+    const textCol   = isNeg ? '#1e1b12' : '#C9963A';
+
+    const rect = grp.appendChild(document.createElementNS(ns, 'rect'));
+    rect.setAttribute('width', NW); rect.setAttribute('height', NH);
+    rect.setAttribute('rx', '4');
+    rect.setAttribute('fill', fillCol);
+    rect.setAttribute('stroke', strokeCol);
+    rect.setAttribute('stroke-width', '1.5');
+
+    const tNum = grp.appendChild(document.createElementNS(ns, 'text'));
+    tNum.setAttribute('x', NW/2); tNum.setAttribute('y', NH/2 - 2);
+    tNum.setAttribute('text-anchor', 'middle');
+    tNum.setAttribute('dominant-baseline', 'middle');
+    tNum.setAttribute('fill', textCol);
+    tNum.setAttribute('font-family', 'Patrick Hand, cursive');
+    tNum.setAttribute('font-size', '14');
+    tNum.setAttribute('font-weight', 'bold');
+    tNum.textContent = String(s.numero);
+
+    if (scheda?.tipo) {
+      const tTipo = grp.appendChild(document.createElementNS(ns, 'text'));
+      tTipo.setAttribute('x', NW/2); tTipo.setAttribute('y', NH - 4);
+      tTipo.setAttribute('text-anchor', 'middle');
+      tTipo.setAttribute('fill', isNeg ? '#1e1b12' : '#888');
+      tTipo.setAttribute('font-family', 'Space Mono, monospace');
+      tTipo.setAttribute('font-size', '7');
+      tTipo.textContent = scheda.tipo.substring(0, 10);
+    }
+  });
+}
+
 // ─── DROPDOWN MENU ───────────────────────────────────────────────
 function toggleDropdown(id) {
   const dd = document.getElementById(id);
@@ -5365,13 +5887,9 @@ function toggleDropdown(id) {
   const menu = dd.querySelector('.nav-dropdown-menu');
   if (!menu) return;
   const isOpen = menu.classList.contains('open');
-  // Chiudi tutti i dropdown aperti
   document.querySelectorAll('.nav-dropdown-menu.open').forEach(m => m.classList.remove('open'));
-  // Se era chiuso, aprilo
   if (!isOpen) menu.classList.add('open');
 }
-
-// Chiudi dropdown cliccando fuori
 document.addEventListener('click', e => {
   if (!e.target.closest('.nav-dropdown')) {
     document.querySelectorAll('.nav-dropdown-menu.open').forEach(m => m.classList.remove('open'));
@@ -5382,8 +5900,6 @@ document.addEventListener('touchstart', e => {
     document.querySelectorAll('.nav-dropdown-menu.open').forEach(m => m.classList.remove('open'));
   }
 }, { passive: true });
-
-// Chiudi dropdown dopo aver cliccato una voce
 document.addEventListener('click', e => {
   if (e.target.closest('.nav-dropdown-item')) {
     setTimeout(() => {
@@ -5408,9 +5924,9 @@ function showToast(msg) {
   <script>
     if ('serviceWorker' in navigator && !location.hostname.includes('claudeusercontent.com')) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./service-worker.js?v=32')
+        navigator.serviceWorker.register('./service-worker.js?v=44')
           .then(reg => {
-            console.log('SW registrato v32:', reg.scope);
+            console.log('SW registrato v44:', reg.scope);
             // Forza aggiornamento immediato se c'è una nuova versione
             reg.update();
           })
