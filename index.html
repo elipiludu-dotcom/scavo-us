@@ -5,7 +5,7 @@
   <!-- PWA -->
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#C9963A">
-  <meta name="app-version" content="49">
+  <meta name="app-version" content="51">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="SMP Scavo">
@@ -1503,16 +1503,17 @@
         <span style="font-family:'Space Mono',monospace;font-size:0.6rem;color:var(--muted);margin-left:6px;opacity:0.6">🖱 rotella = zoom · drag = sposta</span>
       </div>
       <!-- SVG container pan/zoom -->
-      <div id="matrix-container" style="width:100%;height:calc(100vh - 220px);min-height:320px;overflow:hidden;background:var(--parchment-light);cursor:grab;position:relative;user-select:none">
+      <div id="matrix-container" style="width:100%;height:calc(100vh - 270px);min-height:280px;overflow:hidden;background:var(--parchment-light);cursor:grab;position:relative;user-select:none">
         <svg id="matrix-svg" style="display:block;position:absolute;top:0;left:0;transform-origin:0 0"></svg>
       </div>
       <!-- Legenda -->
       <div style="padding:8px 16px;border-top:1px solid var(--border);display:flex;gap:16px;flex-wrap:wrap;font-family:'Space Mono',monospace;font-size:0.62rem;color:var(--muted);align-items:center">
         <span style="font-size:0.6rem;color:var(--muted);opacity:0.7;text-transform:uppercase;letter-spacing:0.08em">Legenda:</span>
         <span><span style="display:inline-block;width:20px;height:1.5px;background:var(--earth);vertical-align:middle;margin-right:4px"></span>copre / taglia / riempie</span>
-        <span><span style="display:inline-block;width:20px;height:1.5px;background:#4a90d9;border-top:1.5px dashed #4a90d9;vertical-align:middle;margin-right:4px"></span>si lega / appoggia</span>
+        <span><span style="display:inline-block;width:20px;height:1px;background:#7aaddd;border-top:1px dashed #7aaddd;vertical-align:middle;margin-right:4px"></span>si lega / appoggia</span>
         <span style="border:1.5px solid var(--earth);padding:1px 6px;border-radius:2px">US stratigrafica</span>
         <span style="border:1.5px solid var(--earth);padding:1px 6px;border-radius:2px;background:var(--earth);color:#1e1b12">USN (negativa)</span>
+        <span style="border:1.5px dashed #4a90d9;padding:1px 10px;border-radius:4px;color:#4a90d9">= uguale_a</span>
         <span style="border:1.5px solid var(--accent);padding:1px 6px;border-radius:2px;color:var(--accent)">⚠ conflitto</span>
       </div>
     </div>
@@ -6053,7 +6054,41 @@ function renderMatrix() {
     document.getElementById('btn-print-conflicts').style.display = 'none';
   }
 
-  // ── 2. COSTRUZIONE GRAFO ────────────────────────────────────────
+  // ── 2. UNION-FIND per gruppi uguale_a ───────────────────────────
+  const ufParent = {};
+  sel.forEach(s => { ufParent[String(s.numero)] = String(s.numero); });
+  function ufFind(x) {
+    while (ufParent[x] !== x) { ufParent[x] = ufParent[ufParent[x]]; x = ufParent[x]; }
+    return x;
+  }
+  function ufUnion(a, b) {
+    const ra = ufFind(a), rb = ufFind(b);
+    if (ra !== rb) ufParent[ra] = rb;
+  }
+
+  // Prima passata: raccogli i legami uguale_a per union-find
+  sel.forEach(s => {
+    const raps = Array.isArray(s.rapporti) ? s.rapporti :
+      (() => { try { return JSON.parse(s.rapporti || '[]'); } catch { return []; } })();
+    raps.forEach(r => {
+      if (r.tipo === 'uguale_a' && usSet.has(String(r.us))) {
+        ufUnion(String(s.numero), String(r.us));
+      }
+    });
+  });
+
+  // Mappa root → lista di US nel gruppo
+  const ugualGroups = {}; // root → [us, ...]
+  sel.forEach(s => {
+    const root = ufFind(String(s.numero));
+    if (!ugualGroups[root]) ugualGroups[root] = [];
+    ugualGroups[root].push(String(s.numero));
+  });
+  // nodeGroup[us] = root del suo gruppo
+  const nodeGroup = {};
+  sel.forEach(s => { nodeGroup[String(s.numero)] = ufFind(String(s.numero)); });
+
+  // ── 3. COSTRUZIONE GRAFO ────────────────────────────────────────
   const succ = {}, pred = {}, succLega = {};
   sel.forEach(s => { succ[s.numero] = []; pred[s.numero] = []; succLega[s.numero] = []; });
 
@@ -6064,20 +6099,21 @@ function renderMatrix() {
       const a = String(s.numero), b = String(r.us);
       if (!usSet.has(b)) return;
       if (['coperto_da', 'tagliato_da', 'riempito_da'].includes(r.tipo)) {
-        // A è più recente di B: A sopra B nell'Harris → succ[B] = A
         if (!succ[b].includes(a)) succ[b].push(a);
         if (!pred[a].includes(b)) pred[a].push(b);
       } else if (['copre', 'taglia', 'riempie'].includes(r.tipo)) {
-        // A è più antico di B: B sopra A → succ[A] = B
         if (!succ[a].includes(b)) succ[a].push(b);
         if (!pred[b].includes(a)) pred[b].push(a);
-      } else if (['si_lega_a', 'gli_si_appoggia', 'uguale_a', 'si_appoggia_a'].includes(r.tipo)) {
+      } else if (['si_lega_a', 'gli_si_appoggia', 'si_appoggia_a'].includes(r.tipo)) {
         if (!succLega[a].includes(b)) succLega[a].push(b);
       }
+      // uguale_a: non crea archi nel grafo stratigrafico, gestito separatamente
     });
   });
 
-  // ── 3. TOPOLOGICAL SORT → LIVELLI ───────────────────────────────
+  // ── 4. TOPOLOGICAL SORT → LIVELLI ───────────────────────────────
+  // Le US uguale_a devono stare allo stesso livello: propaghiamo il livello
+  // massimo a tutti i membri del gruppo dopo il sort.
   const levels = {};
   const inDeg = {};
   sel.forEach(s => { inDeg[s.numero] = pred[s.numero].length; });
@@ -6101,7 +6137,14 @@ function renderMatrix() {
   const maxLvl = Object.values(levels).length ? Math.max(...Object.values(levels)) : 0;
   sel.forEach(s => { if (levels[s.numero] === undefined) levels[s.numero] = maxLvl + 1; });
 
-  // ── 4. RAGGRUPPA PER LIVELLO ────────────────────────────────────
+  // Allinea livelli dentro ogni gruppo uguale_a: usa il livello massimo del gruppo
+  Object.values(ugualGroups).forEach(members => {
+    if (members.length < 2) return;
+    const maxGroupLvl = Math.max(...members.map(m => levels[m] ?? 0));
+    members.forEach(m => { levels[m] = maxGroupLvl; });
+  });
+
+  // ── 5. RAGGRUPPA PER LIVELLO ────────────────────────────────────
   const byLevel = {};
   sel.forEach(s => {
     const lv = levels[s.numero] ?? 0;
@@ -6111,51 +6154,56 @@ function renderMatrix() {
 
   const sortedLevels = Object.keys(byLevel).map(Number).sort((a, b) => a - b);
 
-  // ── 5. ORDINAMENTO BARICENTRICO (riduce incroci) ─────────────────
-  // Inizializza ordine: primo livello per numero crescente
+  // ── 6. ORDINAMENTO BARICENTRICO (riduce incroci) ─────────────────
+  // Dentro ogni livello, i membri dello stesso gruppo uguale_a vengono
+  // tenuti contigui: prima si ordina per baricentro del gruppo, poi
+  // i membri si affiancano nell'ordine naturale.
   sortedLevels.forEach(lv => {
     byLevel[lv].sort((a, b) => parseFloat(a) - parseFloat(b));
   });
 
-  // Passate top-down e bottom-up (3 iterazioni)
   for (let iter = 0; iter < 3; iter++) {
-    // Top-down: ordina ogni livello in base alla media delle posizioni dei predecessori
     for (let i = 1; i < sortedLevels.length; i++) {
       const lv = sortedLevels[i];
       const prevLv = sortedLevels[i - 1];
       const posAbove = {};
       byLevel[prevLv].forEach((n, idx) => { posAbove[n] = idx; });
-
       byLevel[lv].sort((a, b) => {
-        const avgA = pred[a].length
-          ? pred[a].filter(p => posAbove[p] !== undefined).reduce((s, p) => s + posAbove[p], 0) / pred[a].filter(p => posAbove[p] !== undefined).length
-          : parseFloat(a);
-        const avgB = pred[b].length
-          ? pred[b].filter(p => posAbove[p] !== undefined).reduce((s, p) => s + posAbove[p], 0) / pred[b].filter(p => posAbove[p] !== undefined).length
-          : parseFloat(b);
-        return (isNaN(avgA) ? parseFloat(a) : avgA) - (isNaN(avgB) ? parseFloat(b) : avgB);
+        const ga = nodeGroup[a], gb = nodeGroup[b];
+        // Baricentro del gruppo rispetto al livello superiore
+        const grpAvg = (g) => {
+          const members = ugualGroups[g] || [g];
+          const allPreds = members.flatMap(m => pred[m] || []).filter(p => posAbove[p] !== undefined);
+          if (allPreds.length) return allPreds.reduce((s, p) => s + posAbove[p], 0) / allPreds.length;
+          return parseFloat(members[0]);
+        };
+        const cmp = grpAvg(ga) - grpAvg(gb);
+        if (Math.abs(cmp) > 0.001) return cmp;
+        // Stesso gruppo: ordina per numero
+        return parseFloat(a) - parseFloat(b);
       });
     }
-    // Bottom-up: ordina in base ai successori
     for (let i = sortedLevels.length - 2; i >= 0; i--) {
       const lv = sortedLevels[i];
       const nextLv = sortedLevels[i + 1];
       const posBelow = {};
       byLevel[nextLv].forEach((n, idx) => { posBelow[n] = idx; });
-
       byLevel[lv].sort((a, b) => {
-        const avgA = succ[a].length
-          ? succ[a].filter(s => posBelow[s] !== undefined).reduce((s2, s3) => s2 + posBelow[s3], 0) / succ[a].filter(s => posBelow[s] !== undefined).length
-          : parseFloat(a);
-        const avgB = succ[b].length
-          ? succ[b].filter(s => posBelow[s] !== undefined).reduce((s2, s3) => s2 + posBelow[s3], 0) / succ[b].filter(s => posBelow[s] !== undefined).length
-          : parseFloat(b);
-        return (isNaN(avgA) ? parseFloat(a) : avgA) - (isNaN(avgB) ? parseFloat(b) : avgB);
+        const ga = nodeGroup[a], gb = nodeGroup[b];
+        const grpAvg = (g) => {
+          const members = ugualGroups[g] || [g];
+          const allSucc = members.flatMap(m => succ[m] || []).filter(s => posBelow[s] !== undefined);
+          if (allSucc.length) return allSucc.reduce((s2, s3) => s2 + posBelow[s3], 0) / allSucc.length;
+          return parseFloat(members[0]);
+        };
+        const cmp = grpAvg(ga) - grpAvg(gb);
+        if (Math.abs(cmp) > 0.001) return cmp;
+        return parseFloat(a) - parseFloat(b);
       });
     }
   }
 
-  // ── 6. CALCOLO POSIZIONI (centering per livello) ─────────────────
+  // ── 7. CALCOLO POSIZIONI (centering per livello) ─────────────────
   const maxNodesInLevel = Math.max(...sortedLevels.map(lv => byLevel[lv].length));
   const totalW = maxNodesInLevel * (NW + HGAP) - HGAP;
 
@@ -6163,7 +6211,7 @@ function renderMatrix() {
   sortedLevels.forEach(lv => {
     const nodes = byLevel[lv];
     const rowW = nodes.length * (NW + HGAP) - HGAP;
-    const offsetX = (totalW - rowW) / 2; // centra la riga
+    const offsetX = (totalW - rowW) / 2;
     nodes.forEach((n, i) => {
       positions[n] = {
         x: offsetX + i * (NW + HGAP) + NW / 2,
@@ -6267,7 +6315,56 @@ function renderMatrix() {
     path.setAttribute('opacity', '0.8');
   });
 
-  // ── 9. ARCHI LEGA/APPOGGIA (tratteggiati orizzontali) ────────────
+  // ── 9. GRUPPI UGUALE_A: rettangolo contenitore + linee orizzontali ─
+  Object.entries(ugualGroups).forEach(([root, members]) => {
+    if (members.length < 2) return;
+    // Solo membri che hanno posizione
+    const pts = members.map(m => positions[m]).filter(Boolean);
+    if (pts.length < 2) return;
+    const xs = pts.map(p => p.x);
+    const y  = pts[0].y; // stesso livello per tutti
+    const x1 = Math.min(...xs) - NW / 2 - 4;
+    const x2 = Math.max(...xs) + NW / 2 + 4;
+    const y1 = y - NH / 2 - 4;
+    const y2 = y + NH / 2 + 4;
+
+    // Rettangolo tratteggiato attorno al gruppo
+    const rect = gRoot.appendChild(document.createElementNS(ns, 'rect'));
+    rect.setAttribute('x', x1); rect.setAttribute('y', y1);
+    rect.setAttribute('width', x2 - x1); rect.setAttribute('height', y2 - y1);
+    rect.setAttribute('rx', '6');
+    rect.setAttribute('fill', 'none');
+    rect.setAttribute('stroke', '#4a90d9');
+    rect.setAttribute('stroke-width', '1.2');
+    rect.setAttribute('stroke-dasharray', '5 3');
+    rect.setAttribute('opacity', '0.6');
+
+    // Etichetta "=" sopra il gruppo
+    const lbl = gRoot.appendChild(document.createElementNS(ns, 'text'));
+    lbl.setAttribute('x', (x1 + x2) / 2);
+    lbl.setAttribute('y', y1 - 4);
+    lbl.setAttribute('text-anchor', 'middle');
+    lbl.setAttribute('fill', '#4a90d9');
+    lbl.setAttribute('font-family', 'Space Mono, monospace');
+    lbl.setAttribute('font-size', '9');
+    lbl.setAttribute('opacity', '0.8');
+    lbl.textContent = '= uguale_a';
+
+    // Linee orizzontali tra i nodi del gruppo (bordo destro → bordo sinistro)
+    const sorted = [...members].filter(m => positions[m]).sort((a, b) => positions[a].x - positions[b].x);
+    for (let i = 0; i < sorted.length - 1; i++) {
+      const pa = positions[sorted[i]], pb = positions[sorted[i + 1]];
+      const line = gRoot.appendChild(document.createElementNS(ns, 'line'));
+      line.setAttribute('x1', pa.x + NW / 2); line.setAttribute('y1', pa.y);
+      line.setAttribute('x2', pb.x - NW / 2); line.setAttribute('y2', pb.y);
+      line.setAttribute('stroke', '#4a90d9');
+      line.setAttribute('stroke-width', '1.5');
+      line.setAttribute('stroke-dasharray', '4 3');
+      line.setAttribute('opacity', '0.8');
+    }
+  });
+
+  // ── 10. ARCHI LEGA/APPOGGIA (tratteggiati, solo si_lega_a e si_appoggia_a) ─
   const drawnLega = new Set();
   sel.forEach(s => {
     (succLega[s.numero] || []).forEach(nb => {
@@ -6276,14 +6373,18 @@ function renderMatrix() {
       drawnLega.add(key);
       const p1 = positions[s.numero], p2 = positions[nb];
       if (!p1 || !p2) return;
+      // Disegna come linea orizzontale se stesso livello, altrimenti tratteggiata diagonale
       const path = gRoot.appendChild(document.createElementNS(ns, 'path'));
-      const d = `M ${p1.x + NW/2} ${p1.y} L ${p2.x - NW/2} ${p2.y}`;
+      const sameLevel = Math.abs(p1.y - p2.y) < 2;
+      const d = sameLevel
+        ? `M ${p1.x + NW/2} ${p1.y} L ${p2.x - NW/2} ${p2.y}`
+        : `M ${p1.x} ${p1.y + NH/2} L ${p2.x} ${p2.y - NH/2}`;
       path.setAttribute('d', d);
       path.setAttribute('fill', 'none');
-      path.setAttribute('stroke', '#4a90d9');
-      path.setAttribute('stroke-width', '1.2');
-      path.setAttribute('stroke-dasharray', '4 3');
-      path.setAttribute('opacity', '0.7');
+      path.setAttribute('stroke', '#7aaddd');
+      path.setAttribute('stroke-width', '1');
+      path.setAttribute('stroke-dasharray', '3 4');
+      path.setAttribute('opacity', '0.5');
     });
   });
 
@@ -6370,27 +6471,93 @@ function exportMatrixPNG() {
   if (!svg || !svg.innerHTML.trim()) { showToast('⚠ Genera prima il matrix'); return; }
   const settore = document.getElementById('matrix-settore')?.value || 'tutti';
   const anno    = document.getElementById('matrix-anno')?.value    || 'tutti';
-  const w = parseFloat(svg.getAttribute('width'))  || 800;
-  const h = parseFloat(svg.getAttribute('height')) || 600;
-  const scale = 2; // retina
-  const serializer = new XMLSerializer();
-  const svgStr = serializer.serializeToString(svg);
-  const svgBlob = new Blob([svgStr], { type: 'image/svg+xml;charset=utf-8' });
-  const url = URL.createObjectURL(svgBlob);
-  const img = new Image();
+
+  const svgW = parseFloat(svg.getAttribute('width'))  || 800;
+  const svgH = parseFloat(svg.getAttribute('height')) || 600;
+
+  // Dimensioni stampa: A3 landscape a 150dpi = 4961×3508 px
+  // A4 landscape a 150dpi = 3508×2480 px
+  // Scegliamo A3 se il grafo è molto largo, A4 altrimenti
+  const A4_W = 3508, A4_H = 2480;
+  const A3_W = 4961, A3_H = 3508;
+  const MARGIN = 120; // px margine bianco
+
+  // Scegli formato in base alle proporzioni del grafo
+  let pageW, pageH;
+  if (svgW / svgH > 1.5 || svgW > 900) {
+    pageW = A3_W; pageH = A3_H;
+  } else {
+    pageW = A4_W; pageH = A4_H;
+  }
+
+  // Scala per far stare il grafo nella pagina con margini
+  const scaleX = (pageW - MARGIN * 2) / svgW;
+  const scaleY = (pageH - MARGIN * 2) / svgH;
+  const scale  = Math.min(scaleX, scaleY, 3); // max 3× per non perdere qualità
+
+  const canvasW = Math.round(svgW * scale + MARGIN * 2);
+  const canvasH = Math.round(svgH * scale + MARGIN * 2);
+
+  // Clona l'SVG e sostituisci sfondo scuro con bianco
+  const svgClone = svg.cloneNode(true);
+  svgClone.setAttribute('width',  svgW);
+  svgClone.setAttribute('height', svgH);
+
+  // Sostituisci colori scuri con equivalenti chiari per la stampa
+  const svgString = new XMLSerializer().serializeToString(svgClone)
+    .replace(/#2e2b26/g, '#ffffff')   // sfondo body → bianco
+    .replace(/#1e1b12/g, '#ffffff')   // fill nodo → bianco
+    .replace(/#252219/g, '#ffffff')
+    .replace(/fill="#2e2b26"/g, 'fill="#ffffff"')
+    .replace(/fill="#1e1b12"/g, 'fill="#ffffff"')
+    // Testi chiari → scuri per leggibilità
+    .replace(/#C9963A/g, '#8B5E10')   // oro → marrone
+    .replace(/#ede5d8/g, '#1a1a1a')   // ink chiaro → quasi nero
+    .replace(/#8a7f70/g, '#555555')   // muted → grigio medio
+    .replace(/#4a9e6b/g, '#1e7a45');  // verde → verde scuro
+
+  const blob = new Blob([svgString], { type: 'image/svg+xml;charset=utf-8' });
+  const url  = URL.createObjectURL(blob);
+  const img  = new Image();
+
   img.onload = () => {
     const canvas = document.createElement('canvas');
-    canvas.width  = w * scale;
-    canvas.height = h * scale;
+    canvas.width  = canvasW;
+    canvas.height = canvasH;
     const ctx = canvas.getContext('2d');
-    ctx.scale(scale, scale);
-    ctx.drawImage(img, 0, 0);
+
+    // Sfondo bianco
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, canvasW, canvasH);
+
+    // Bordo sottile grigio per indicare i margini
+    ctx.strokeStyle = '#dddddd';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(MARGIN / 2, MARGIN / 2, canvasW - MARGIN, canvasH - MARGIN);
+
+    // Disegna il grafo centrato con margini
+    ctx.drawImage(img, MARGIN, MARGIN, Math.round(svgW * scale), Math.round(svgH * scale));
+
+    // Intestazione in basso
+    const sito = 'Area Archeologica SMP — Peccioli (PI)';
+    const label = `Matrix Stratigrafica · Settore: ${settore} · Anno: ${anno}`;
+    const oggi  = new Date().toLocaleDateString('it-IT', { day:'2-digit', month:'long', year:'numeric' });
+    ctx.fillStyle = '#888888';
+    ctx.font = `${Math.round(scale * 7)}px monospace`;
+    ctx.textAlign = 'left';
+    ctx.fillText(sito, MARGIN, canvasH - Math.round(MARGIN * 0.35));
+    ctx.textAlign = 'center';
+    ctx.fillText(label, canvasW / 2, canvasH - Math.round(MARGIN * 0.35));
+    ctx.textAlign = 'right';
+    ctx.fillText(oggi, canvasW - MARGIN, canvasH - Math.round(MARGIN * 0.35));
+
     URL.revokeObjectURL(url);
     const a = document.createElement('a');
-    a.download = `matrix_harris_${settore}_${anno}.png`;
+    a.download = `matrix_${settore}_${anno}.png`;
     a.href = canvas.toDataURL('image/png');
     a.click();
-    showToast('✓ PNG esportato');
+    const fmt = (pageW === A3_W) ? 'A3' : 'A4';
+    showToast(`✓ PNG esportato (${fmt} landscape, sfondo bianco)`);
   };
   img.onerror = () => { showToast('⚠ Errore esportazione PNG'); URL.revokeObjectURL(url); };
   img.src = url;
@@ -6491,9 +6658,9 @@ function showToast(msg) {
   <script>
     if ('serviceWorker' in navigator && !location.hostname.includes('claudeusercontent.com')) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./service-worker.js?v=49')
+        navigator.serviceWorker.register('./service-worker.js?v=51')
           .then(reg => {
-            console.log('SW registrato v49:', reg.scope);
+            console.log('SW registrato v51:', reg.scope);
             // Forza aggiornamento immediato se c'è una nuova versione
             reg.update();
           })
