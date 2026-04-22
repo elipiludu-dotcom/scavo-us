@@ -5,7 +5,7 @@
   <!-- PWA -->
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#C9963A">
-  <meta name="app-version" content="48">
+  <meta name="app-version" content="49">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="SMP Scavo">
@@ -6025,7 +6025,7 @@ function renderMatrix() {
 
   const usSet = new Set(sel.map(s => String(s.numero)));
   const ns = 'http://www.w3.org/2000/svg';
-  const NW = 60, NH = 32, HGAP = 18, VGAP = 52;
+  const NW = 60, NH = 32, HGAP = 20, VGAP = 70;
   const PAD = 24;
 
   // ── 1. VALIDAZIONE CONFLITTI ────────────────────────────────────
@@ -6195,22 +6195,76 @@ function renderMatrix() {
   const gRoot = svg.appendChild(document.createElementNS(ns, 'g'));
   gRoot.setAttribute('transform', `translate(${PAD},${PAD})`);
 
-  // ── 8. ARCHI STRATIGRAFICI (ortogonali) ──────────────────────────
+  // ── 8. ARCHI STRATIGRAFICI (ortogonali con porte dedicate) ──────
+  // Per ogni nodo calcola quante connessioni escono (basso) ed entrano (alto)
+  // e assegna a ognuna un offset X unico sul bordo del nodo.
+  // Il tratto orizzontale di ogni arco viaggia su una Y esclusiva nel gap.
+
+  // Raccogli tutti gli archi come lista
+  const edges = [];
   sel.forEach(s => {
     (succ[s.numero] || []).forEach(nb => {
-      const p1 = positions[s.numero], p2 = positions[nb];
-      if (!p1 || !p2) return;
-      const x1 = p1.x, y1 = p1.y + NH / 2;
-      const x2 = p2.x, y2 = p2.y - NH / 2;
-      const my = (y1 + y2) / 2;
-      const d = `M ${x1} ${y1} L ${x1} ${my} L ${x2} ${my} L ${x2} ${y2}`;
-      const path = gRoot.appendChild(document.createElementNS(ns, 'path'));
-      path.setAttribute('d', d);
-      path.setAttribute('fill', 'none');
-      path.setAttribute('stroke', conflictNodes.has(String(s.numero)) || conflictNodes.has(String(nb)) ? '#d94f30' : '#C9963A');
-      path.setAttribute('stroke-width', '1.3');
-      path.setAttribute('opacity', '0.75');
+      if (positions[s.numero] && positions[nb]) {
+        edges.push({ from: String(s.numero), to: String(nb) });
+      }
     });
+  });
+
+  // Per ogni nodo: conta uscite (basso) e entrate (alto)
+  const outCount = {}, inCount = {};
+  edges.forEach(e => {
+    outCount[e.from] = (outCount[e.from] || 0) + 1;
+    inCount[e.to]   = (inCount[e.to]   || 0) + 1;
+  });
+
+  // Assegna indice progressivo per ogni arco (uscita dal nodo padre, entrata nel figlio)
+  const outIdx = {}, inIdx = {};
+  edges.forEach(e => {
+    if (outIdx[e.from] === undefined) outIdx[e.from] = 0;
+    if (inIdx[e.to]   === undefined) inIdx[e.to]   = 0;
+    e.outI = outIdx[e.from]++;
+    e.inI  = inIdx[e.to]++;
+    e.outN = outCount[e.from];
+    e.inN  = inCount[e.to];
+  });
+
+  // Funzione: distribuisce n punti equidistanti sulla larghezza del nodo
+  // con margini ai bordi (usable = NW * 0.8, centrata)
+  function portX(nodeX, i, n) {
+    const usable = NW * 0.78;
+    const margin = (NW - usable) / 2;
+    if (n === 1) return nodeX; // singolo: centro
+    return (nodeX - NW / 2) + margin + (usable / (n - 1)) * i;
+  }
+
+  // Disegna gli archi
+  edges.forEach(e => {
+    const p1 = positions[e.from], p2 = positions[e.to];
+    const isConflict = conflictNodes.has(e.from) || conflictNodes.has(e.to);
+
+    // Punto di uscita (bordo inferiore del nodo padre)
+    const x1 = portX(p1.x, e.outI, e.outN);
+    const y1 = p1.y + NH / 2;
+
+    // Punto di entrata (bordo superiore del nodo figlio)
+    const x2 = portX(p2.x, e.inI, e.inN);
+    const y2 = p2.y - NH / 2;
+
+    // Y del tratto orizzontale: suddivide il gap verticale in (outN * inN) corsie
+    // ogni arco prende la corsia corrispondente al suo (outI, inI)
+    const totalSlots = Math.max(e.outN, e.inN, 1);
+    const slotIdx    = Math.max(e.outI, e.inI);
+    const gapTop     = y1 + 4;
+    const gapBot     = y2 - 4;
+    const my = gapTop + ((gapBot - gapTop) / (totalSlots + 1)) * (slotIdx + 1);
+
+    const d = `M ${x1} ${y1} L ${x1} ${my} L ${x2} ${my} L ${x2} ${y2}`;
+    const path = gRoot.appendChild(document.createElementNS(ns, 'path'));
+    path.setAttribute('d', d);
+    path.setAttribute('fill', 'none');
+    path.setAttribute('stroke', isConflict ? '#d94f30' : '#C9963A');
+    path.setAttribute('stroke-width', '1.3');
+    path.setAttribute('opacity', '0.8');
   });
 
   // ── 9. ARCHI LEGA/APPOGGIA (tratteggiati orizzontali) ────────────
@@ -6437,9 +6491,9 @@ function showToast(msg) {
   <script>
     if ('serviceWorker' in navigator && !location.hostname.includes('claudeusercontent.com')) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./service-worker.js?v=48')
+        navigator.serviceWorker.register('./service-worker.js?v=49')
           .then(reg => {
-            console.log('SW registrato v48:', reg.scope);
+            console.log('SW registrato v49:', reg.scope);
             // Forza aggiornamento immediato se c'è una nuova versione
             reg.update();
           })
