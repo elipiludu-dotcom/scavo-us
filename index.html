@@ -5,7 +5,7 @@
   <!-- PWA -->
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#C9963A">
-  <meta name="app-version" content="53">
+  <meta name="app-version" content="54">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="SMP Scavo">
@@ -6532,82 +6532,93 @@ function exportMatrixPDF() {
   const settore = document.getElementById('matrix-settore')?.value || 'tutti';
   const anno    = document.getElementById('matrix-anno')?.value    || 'tutti';
 
-  showToast('⏳ Generazione PDF…');
+  const svgW = parseFloat(svg.getAttribute('width'))  || 800;
+  const svgH = parseFloat(svg.getAttribute('height')) || 600;
+  const oggi  = new Date().toLocaleDateString('it-IT', { day:'2-digit', month:'long', year:'numeric' });
 
-  // Carica svg2pdf.js se non ancora caricato, poi jsPDF
-  function loadSvg2pdf() {
-    return new Promise((resolve, reject) => {
-      if (window.svg2pdf) { resolve(); return; }
-      const s = document.createElement('script');
-      s.src = 'https://cdnjs.cloudflare.com/ajax/libs/svg2pdf.js/2.2.3/svg2pdf.umd.min.js';
-      s.onload = resolve;
-      s.onerror = reject;
-      document.head.appendChild(s);
-    });
-  }
+  // Adatta i colori per stampa su bianco
+  const clone = svg.cloneNode(true);
+  clone.setAttribute('width',  '100%');
+  clone.setAttribute('height', 'auto');
+  clone.style.maxWidth = '100%';
+  let svgStr = new XMLSerializer().serializeToString(clone);
+  svgStr = svgStr
+    .replace(/fill="#2e2b26"/g,  'fill="#ffffff"')
+    .replace(/fill="#1e1b12"/g,  'fill="#ffffff"')
+    .replace(/fill="#252219"/g,  'fill="#f8f6f1"')
+    .replace(/rgba\(30,27,18[^)]*\)/g, 'rgba(255,255,255,0.92)')
+    .replace(/#C9963A/g, '#8B5E10').replace(/#c9963a/g, '#8B5E10')
+    .replace(/#ede5d8/g, '#111111').replace(/#8a7f70/g, '#555555')
+    .replace(/#d94f30/g, '#b03010').replace(/#4a4540/g, '#bbbbbb')
+    .replace(/#7aaddd/g, '#3a7ab0').replace(/#4a90d9/g, '#2060a0');
 
-  Promise.all([loadJsPDF(), loadSvg2pdf()]).then(async () => {
-    try {
-      const { jsPDF } = window.jspdf;
-      const svgW = parseFloat(svg.getAttribute('width'))  || 800;
-      const svgH = parseFloat(svg.getAttribute('height')) || 600;
+  const isLandscape = svgW > svgH * 1.2;
 
-      // Scegli orientamento e formato in base alle proporzioni
-      const isLandscape = svgW > svgH;
-      const fmt   = (svgW > 600 || svgH > 800) ? 'a3' : 'a4';
-      const ori   = isLandscape ? 'landscape' : 'portrait';
-
-      const doc = new jsPDF({ orientation: ori, unit: 'mm', format: fmt });
-      const pageW = doc.internal.pageSize.getWidth();
-      const pageH = doc.internal.pageSize.getHeight();
-      const MARGIN = 10; // mm
-
-      // Scala per far stare il grafo nella pagina con margini
-      const scaleX = (pageW - MARGIN * 2) / svgW;
-      const scaleY = (pageH - MARGIN * 2 - 8) / svgH; // 8mm footer
-      const scale  = Math.min(scaleX, scaleY);
-      const drawW  = svgW * scale;
-      const drawH  = svgH * scale;
-      const offX   = (pageW - drawW) / 2;
-
-      // Clona SVG e adatta i colori per stampa su bianco
-      const clone = svg.cloneNode(true);
-      clone.setAttribute('width',  svgW);
-      clone.setAttribute('height', svgH);
-      // Sfondo SVG → bianco
-      const bgRect = clone.querySelector('rect');
-      if (bgRect) bgRect.setAttribute('fill', '#ffffff');
-      // Colori testo/tratti per stampa
-      let svgStr = new XMLSerializer().serializeToString(clone);
-      svgStr = svgStr
-        .replace(/#2e2b26/g, '#ffffff').replace(/#1e1b12/g, '#ffffff')
-        .replace(/rgba\(30,27,18[^)]*\)/g, 'rgba(255,255,255,0.9)')
-        .replace(/#C9963A/g, '#8B5E10').replace(/#c9963a/g, '#8B5E10')
-        .replace(/#ede5d8/g, '#111111').replace(/#8a7f70/g, '#555555')
-        .replace(/#d94f30/g, '#b03010').replace(/#4a4540/g, '#cccccc');
-
-      // Reinserisce come elemento DOM per svg2pdf
-      const parser = new DOMParser();
-      const svgDoc = parser.parseFromString(svgStr, 'image/svg+xml');
-      const svgEl  = svgDoc.documentElement;
-
-      await svg2pdf(svgEl, doc, { x: offX, y: MARGIN, width: drawW, height: drawH });
-
-      // Footer
-      const oggi = new Date().toLocaleDateString('it-IT', { day:'2-digit', month:'long', year:'numeric' });
-      doc.setFontSize(7);
-      doc.setTextColor(140, 130, 120);
-      doc.text('Area Archeologica SMP — Peccioli (PI)', MARGIN, pageH - 4);
-      doc.text(`Matrix Stratigrafica · Settore: ${settore} · Anno: ${anno}`, pageW / 2, pageH - 4, { align: 'center' });
-      doc.text(oggi, pageW - MARGIN, pageH - 4, { align: 'right' });
-
-      doc.save(`matrix_${settore}_${anno}.pdf`);
-      showToast(`✓ PDF esportato (${fmt.toUpperCase()} ${ori === 'landscape' ? 'landscape' : 'portrait'})`);
-    } catch (err) {
-      console.error('PDF export error:', err);
-      showToast('⚠ Errore generazione PDF');
+  const html = `<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <title>Matrix Stratigrafica — ${settore} — ${anno}</title>
+  <style>
+    @page {
+      size: ${isLandscape ? 'A3 landscape' : 'A3 portrait'};
+      margin: 10mm 12mm 14mm 12mm;
     }
-  }).catch(() => showToast('⚠ Impossibile caricare libreria PDF'));
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Courier New', monospace;
+      background: white;
+      color: #333;
+    }
+    .wrap {
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    .svg-wrap {
+      width: 100%;
+      display: flex;
+      justify-content: center;
+    }
+    .svg-wrap svg {
+      width: 100%;
+      height: auto;
+    }
+    .footer {
+      width: 100%;
+      display: flex;
+      justify-content: space-between;
+      font-size: 7pt;
+      color: #888;
+      margin-top: 4mm;
+      padding-top: 2mm;
+      border-top: 0.3px solid #ccc;
+    }
+    @media print {
+      html, body { width: 100%; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="svg-wrap">${svgStr}</div>
+    <div class="footer">
+      <span>Area Archeologica SMP — Peccioli (PI)</span>
+      <span>Matrix Stratigrafica &nbsp;·&nbsp; Settore: ${settore} &nbsp;·&nbsp; Anno: ${anno}</span>
+      <span>${oggi}</span>
+    </div>
+  </div>
+  <script>
+    window.onload = () => { window.print(); };
+  <\/script>
+</body>
+</html>`;
+
+  const w = window.open('', '_blank');
+  if (!w) { showToast('⚠ Popup bloccato — consenti i popup per questo sito'); return; }
+  w.document.write(html);
+  w.document.close();
 }
 
 function printMatrixConflicts() {
@@ -6705,9 +6716,9 @@ function showToast(msg) {
   <script>
     if ('serviceWorker' in navigator && !location.hostname.includes('claudeusercontent.com')) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./service-worker.js?v=53')
+        navigator.serviceWorker.register('./service-worker.js?v=54')
           .then(reg => {
-            console.log('SW registrato v53:', reg.scope);
+            console.log('SW registrato v54:', reg.scope);
             // Forza aggiornamento immediato se c'è una nuova versione
             reg.update();
           })
