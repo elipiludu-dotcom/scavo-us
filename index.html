@@ -5,7 +5,7 @@
   <!-- PWA -->
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#C9963A">
-  <meta name="app-version" content="47">
+  <meta name="app-version" content="48">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="SMP Scavo">
@@ -6008,6 +6008,7 @@ function _mxInitEvents() {
 }
 
 
+function renderMatrix() {
   const settore = document.getElementById('matrix-settore')?.value || '';
   const anno    = document.getElementById('matrix-anno')?.value || '';
 
@@ -6436,9 +6437,9 @@ function showToast(msg) {
   <script>
     if ('serviceWorker' in navigator && !location.hostname.includes('claudeusercontent.com')) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./service-worker.js?v=47')
+        navigator.serviceWorker.register('./service-worker.js?v=48')
           .then(reg => {
-            console.log('SW registrato v47:', reg.scope);
+            console.log('SW registrato v48:', reg.scope);
             // Forza aggiornamento immediato se c'è una nuova versione
             reg.update();
           })
