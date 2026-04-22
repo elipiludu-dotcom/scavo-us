@@ -5,7 +5,7 @@
   <!-- PWA -->
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#C9963A">
-  <meta name="app-version" content="46">
+  <meta name="app-version" content="47">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="SMP Scavo">
@@ -1493,9 +1493,18 @@
           <p style="margin-top:8px;font-family:'Space Mono',monospace;font-size:0.62rem;color:var(--muted)">I nodi evidenziati in rosso nella matrix corrispondono alle US coinvolte. Correggi i rapporti stratigrafici nelle relative schede.</p>
         </div>
       </div>
-      <!-- SVG container -->
-      <div id="matrix-container" style="width:100%;overflow:auto;background:var(--parchment-light)">
-        <svg id="matrix-svg" style="min-width:600px;display:block"></svg>
+      <!-- Controlli zoom -->
+      <div style="display:flex;align-items:center;gap:6px;padding:6px 14px;background:var(--parchment-light);border-bottom:1px solid var(--border)">
+        <span style="font-family:'Space Mono',monospace;font-size:0.6rem;color:var(--muted);margin-right:4px;text-transform:uppercase;letter-spacing:0.08em">Zoom</span>
+        <button onclick="matrixZoom(1.25)"  style="width:28px;height:28px;border:1px solid var(--border);background:var(--parchment);color:var(--ink);border-radius:3px;cursor:pointer;font-size:1rem;line-height:1;display:flex;align-items:center;justify-content:center">+</button>
+        <button onclick="matrixZoom(0.8)"   style="width:28px;height:28px;border:1px solid var(--border);background:var(--parchment);color:var(--ink);border-radius:3px;cursor:pointer;font-size:1rem;line-height:1;display:flex;align-items:center;justify-content:center">−</button>
+        <button onclick="matrixZoomReset()" style="padding:0 10px;height:28px;border:1px solid var(--border);background:var(--parchment);color:var(--muted);border-radius:3px;cursor:pointer;font-family:'Space Mono',monospace;font-size:0.62rem;white-space:nowrap">↺ Reset</button>
+        <span id="matrix-zoom-label" style="font-family:'Space Mono',monospace;font-size:0.62rem;color:var(--muted);min-width:38px">100%</span>
+        <span style="font-family:'Space Mono',monospace;font-size:0.6rem;color:var(--muted);margin-left:6px;opacity:0.6">🖱 rotella = zoom · drag = sposta</span>
+      </div>
+      <!-- SVG container pan/zoom -->
+      <div id="matrix-container" style="width:100%;height:calc(100vh - 220px);min-height:320px;overflow:hidden;background:var(--parchment-light);cursor:grab;position:relative;user-select:none">
+        <svg id="matrix-svg" style="display:block;position:absolute;top:0;left:0;transform-origin:0 0"></svg>
       </div>
       <!-- Legenda -->
       <div style="padding:8px 16px;border-top:1px solid var(--border);display:flex;gap:16px;flex-wrap:wrap;font-family:'Space Mono',monospace;font-size:0.62rem;color:var(--muted);align-items:center">
@@ -5890,7 +5899,115 @@ function toggleMatrixWarnings() {
   toggle.textContent = isOpen ? '▼ mostra' : '▲ nascondi';
 }
 
-function renderMatrix() {
+// ─── MATRIX PAN / ZOOM ───────────────────────────────────────────
+const _mx = { scale: 1, tx: 0, ty: 0, dragging: false, startX: 0, startY: 0, lastTx: 0, lastTy: 0, pinchDist: null };
+
+function _mxApply() {
+  const svg = document.getElementById('matrix-svg');
+  if (!svg) return;
+  svg.style.transform = `translate(${_mx.tx}px,${_mx.ty}px) scale(${_mx.scale})`;
+  const lbl = document.getElementById('matrix-zoom-label');
+  if (lbl) lbl.textContent = Math.round(_mx.scale * 100) + '%';
+}
+
+function matrixZoom(factor, cx, cy) {
+  const container = document.getElementById('matrix-container');
+  if (!container) return;
+  const rect = container.getBoundingClientRect();
+  const pivotX = (cx !== undefined ? cx : rect.width  / 2) - _mx.tx;
+  const pivotY = (cy !== undefined ? cy : rect.height / 2) - _mx.ty;
+  const newScale = Math.min(4, Math.max(0.1, _mx.scale * factor));
+  const ratio = newScale / _mx.scale;
+  _mx.tx = _mx.tx + pivotX * (1 - ratio);
+  _mx.ty = _mx.ty + pivotY * (1 - ratio);
+  _mx.scale = newScale;
+  _mxApply();
+}
+
+function matrixZoomReset() {
+  const container = document.getElementById('matrix-container');
+  const svg = document.getElementById('matrix-svg');
+  if (!container || !svg) return;
+  // Scala per far entrare il grafo nel viewport
+  const svgW = parseFloat(svg.getAttribute('width'))  || container.clientWidth;
+  const svgH = parseFloat(svg.getAttribute('height')) || container.clientHeight;
+  const scaleX = container.clientWidth  / svgW;
+  const scaleY = container.clientHeight / svgH;
+  _mx.scale = Math.min(1, scaleX, scaleY) * 0.95;
+  _mx.tx = (container.clientWidth  - svgW * _mx.scale) / 2;
+  _mx.ty = 12;
+  _mxApply();
+}
+
+function _mxInitEvents() {
+  const container = document.getElementById('matrix-container');
+  if (!container || container._mxBound) return;
+  container._mxBound = true;
+
+  // Wheel zoom
+  container.addEventListener('wheel', e => {
+    e.preventDefault();
+    const rect = container.getBoundingClientRect();
+    matrixZoom(e.deltaY < 0 ? 1.12 : 0.89, e.clientX - rect.left, e.clientY - rect.top);
+  }, { passive: false });
+
+  // Mouse drag
+  container.addEventListener('mousedown', e => {
+    if (e.button !== 0) return;
+    _mx.dragging = true;
+    _mx.startX = e.clientX; _mx.startY = e.clientY;
+    _mx.lastTx = _mx.tx;    _mx.lastTy = _mx.ty;
+    container.style.cursor = 'grabbing';
+  });
+  window.addEventListener('mousemove', e => {
+    if (!_mx.dragging) return;
+    _mx.tx = _mx.lastTx + (e.clientX - _mx.startX);
+    _mx.ty = _mx.lastTy + (e.clientY - _mx.startY);
+    _mxApply();
+  });
+  window.addEventListener('mouseup', () => {
+    _mx.dragging = false;
+    const c = document.getElementById('matrix-container');
+    if (c) c.style.cursor = 'grab';
+  });
+
+  // Touch: pan e pinch
+  container.addEventListener('touchstart', e => {
+    if (e.touches.length === 1) {
+      _mx.dragging = true;
+      _mx.startX = e.touches[0].clientX; _mx.startY = e.touches[0].clientY;
+      _mx.lastTx = _mx.tx; _mx.lastTy = _mx.ty;
+      _mx.pinchDist = null;
+    } else if (e.touches.length === 2) {
+      _mx.dragging = false;
+      _mx.pinchDist = Math.hypot(
+        e.touches[0].clientX - e.touches[1].clientX,
+        e.touches[0].clientY - e.touches[1].clientY
+      );
+    }
+  }, { passive: true });
+  container.addEventListener('touchmove', e => {
+    e.preventDefault();
+    if (e.touches.length === 1 && _mx.dragging) {
+      _mx.tx = _mx.lastTx + (e.touches[0].clientX - _mx.startX);
+      _mx.ty = _mx.lastTy + (e.touches[0].clientY - _mx.startY);
+      _mxApply();
+    } else if (e.touches.length === 2 && _mx.pinchDist) {
+      const rect = container.getBoundingClientRect();
+      const newDist = Math.hypot(
+        e.touches[0].clientX - e.touches[1].clientX,
+        e.touches[0].clientY - e.touches[1].clientY
+      );
+      const cx = (e.touches[0].clientX + e.touches[1].clientX) / 2 - rect.left;
+      const cy = (e.touches[0].clientY + e.touches[1].clientY) / 2 - rect.top;
+      matrixZoom(newDist / _mx.pinchDist, cx, cy);
+      _mx.pinchDist = newDist;
+    }
+  }, { passive: false });
+  container.addEventListener('touchend', () => { _mx.dragging = false; _mx.pinchDist = null; });
+}
+
+
   const settore = document.getElementById('matrix-settore')?.value || '';
   const anno    = document.getElementById('matrix-anno')?.value || '';
 
@@ -6062,7 +6179,12 @@ function renderMatrix() {
 
   svg.setAttribute('width',  svgW + PAD);
   svg.setAttribute('height', svgH + PAD);
-  svg.setAttribute('viewBox', `0 0 ${svgW + PAD} ${svgH + PAD}`);
+  svg.removeAttribute('viewBox');
+  // Reset trasformazione e auto-fit nel viewport
+  _mx.scale = 1; _mx.tx = 0; _mx.ty = 0;
+  _mxApply();
+  _mxInitEvents();
+  requestAnimationFrame(() => matrixZoomReset());
 
   // Sfondo
   const bg = svg.appendChild(document.createElementNS(ns, 'rect'));
@@ -6314,9 +6436,9 @@ function showToast(msg) {
   <script>
     if ('serviceWorker' in navigator && !location.hostname.includes('claudeusercontent.com')) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./service-worker.js?v=46')
+        navigator.serviceWorker.register('./service-worker.js?v=47')
           .then(reg => {
-            console.log('SW registrato v46:', reg.scope);
+            console.log('SW registrato v47:', reg.scope);
             // Forza aggiornamento immediato se c'è una nuova versione
             reg.update();
           })
