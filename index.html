@@ -5,7 +5,7 @@
   <!-- PWA -->
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#C9963A">
-  <meta name="app-version" content="51">
+  <meta name="app-version" content="52">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="SMP Scavo">
@@ -1505,16 +1505,6 @@
       <!-- SVG container pan/zoom -->
       <div id="matrix-container" style="width:100%;height:calc(100vh - 270px);min-height:280px;overflow:hidden;background:var(--parchment-light);cursor:grab;position:relative;user-select:none">
         <svg id="matrix-svg" style="display:block;position:absolute;top:0;left:0;transform-origin:0 0"></svg>
-      </div>
-      <!-- Legenda -->
-      <div style="padding:8px 16px;border-top:1px solid var(--border);display:flex;gap:16px;flex-wrap:wrap;font-family:'Space Mono',monospace;font-size:0.62rem;color:var(--muted);align-items:center">
-        <span style="font-size:0.6rem;color:var(--muted);opacity:0.7;text-transform:uppercase;letter-spacing:0.08em">Legenda:</span>
-        <span><span style="display:inline-block;width:20px;height:1.5px;background:var(--earth);vertical-align:middle;margin-right:4px"></span>copre / taglia / riempie</span>
-        <span><span style="display:inline-block;width:20px;height:1px;background:#7aaddd;border-top:1px dashed #7aaddd;vertical-align:middle;margin-right:4px"></span>si lega / appoggia</span>
-        <span style="border:1.5px solid var(--earth);padding:1px 6px;border-radius:2px">US stratigrafica</span>
-        <span style="border:1.5px solid var(--earth);padding:1px 6px;border-radius:2px;background:var(--earth);color:#1e1b12">USN (negativa)</span>
-        <span style="border:1.5px dashed #4a90d9;padding:1px 10px;border-radius:4px;color:#4a90d9">= uguale_a</span>
-        <span style="border:1.5px solid var(--accent);padding:1px 6px;border-radius:2px;color:var(--accent)">⚠ conflitto</span>
       </div>
     </div>
 
@@ -6243,6 +6233,76 @@ function renderMatrix() {
   const gRoot = svg.appendChild(document.createElementNS(ns, 'g'));
   gRoot.setAttribute('transform', `translate(${PAD},${PAD})`);
 
+  // ── LEGENDA (in alto a sinistra, verticale, dentro l'SVG) ────────
+  const LEG_X = 10, LEG_Y = 10, LEG_LH = 18, LEG_PAD = 8;
+  const legendItems = [
+    { type: 'line',  color: '#C9963A', dash: '',    label: 'copre / taglia / riempie' },
+    { type: 'line',  color: '#7aaddd', dash: '3 4', label: 'si lega / si appoggia' },
+    { type: 'rect',  color: '#C9963A', fill: '#1e1b12', label: 'US stratigrafica' },
+    { type: 'rect',  color: '#C9963A', fill: '#C9963A', label: 'USN (negativa)' },
+    { type: 'dbox',  color: '#4a90d9', fill: 'none',   label: '= uguale_a' },
+    { type: 'rect',  color: '#d94f30', fill: '#3a1010', label: '⚠ conflitto' },
+  ];
+  const legH = legendItems.length * LEG_LH + LEG_PAD * 2;
+  const legW = 168;
+
+  const legG = gRoot.appendChild(document.createElementNS(ns, 'g'));
+  legG.setAttribute('transform', `translate(${LEG_X},${LEG_Y})`);
+
+  // Sfondo legenda
+  const legBg = legG.appendChild(document.createElementNS(ns, 'rect'));
+  legBg.setAttribute('width', legW); legBg.setAttribute('height', legH);
+  legBg.setAttribute('rx', '4');
+  legBg.setAttribute('fill', 'rgba(30,27,18,0.82)');
+  legBg.setAttribute('stroke', '#4a4540');
+  legBg.setAttribute('stroke-width', '1');
+
+  // Titolo
+  const legTitle = legG.appendChild(document.createElementNS(ns, 'text'));
+  legTitle.setAttribute('x', LEG_PAD); legTitle.setAttribute('y', LEG_PAD + 9);
+  legTitle.setAttribute('fill', '#8a7f70');
+  legTitle.setAttribute('font-family', 'Space Mono, monospace');
+  legTitle.setAttribute('font-size', '7');
+  legTitle.setAttribute('letter-spacing', '0.08em');
+  legTitle.textContent = 'LEGENDA';
+
+  legendItems.forEach((item, i) => {
+    const y = LEG_PAD + 18 + i * LEG_LH;
+    const iconX = LEG_PAD + 2;
+    const iconY = y + 5;
+    const textX = LEG_PAD + 28;
+
+    if (item.type === 'line') {
+      const l = legG.appendChild(document.createElementNS(ns, 'line'));
+      l.setAttribute('x1', iconX); l.setAttribute('y1', iconY);
+      l.setAttribute('x2', iconX + 20); l.setAttribute('y2', iconY);
+      l.setAttribute('stroke', item.color); l.setAttribute('stroke-width', '1.5');
+      if (item.dash) l.setAttribute('stroke-dasharray', item.dash);
+    } else if (item.type === 'rect') {
+      const r = legG.appendChild(document.createElementNS(ns, 'rect'));
+      r.setAttribute('x', iconX); r.setAttribute('y', iconY - 5);
+      r.setAttribute('width', 20); r.setAttribute('height', 11);
+      r.setAttribute('rx', '2');
+      r.setAttribute('fill', item.fill); r.setAttribute('stroke', item.color);
+      r.setAttribute('stroke-width', '1.2');
+    } else if (item.type === 'dbox') {
+      const r = legG.appendChild(document.createElementNS(ns, 'rect'));
+      r.setAttribute('x', iconX); r.setAttribute('y', iconY - 5);
+      r.setAttribute('width', 20); r.setAttribute('height', 11);
+      r.setAttribute('rx', '2');
+      r.setAttribute('fill', 'none'); r.setAttribute('stroke', item.color);
+      r.setAttribute('stroke-width', '1.2');
+      r.setAttribute('stroke-dasharray', '3 2');
+    }
+
+    const t = legG.appendChild(document.createElementNS(ns, 'text'));
+    t.setAttribute('x', textX); t.setAttribute('y', iconY + 4);
+    t.setAttribute('fill', '#ede5d8');
+    t.setAttribute('font-family', 'Space Mono, monospace');
+    t.setAttribute('font-size', '8');
+    t.textContent = item.label;
+  });
+
   // ── 8. ARCHI STRATIGRAFICI (ortogonali con porte dedicate) ──────
   // Per ogni nodo calcola quante connessioni escono (basso) ed entrano (alto)
   // e assegna a ognuna un offset X unico sul bordo del nodo.
@@ -6475,89 +6535,85 @@ function exportMatrixPNG() {
   const svgW = parseFloat(svg.getAttribute('width'))  || 800;
   const svgH = parseFloat(svg.getAttribute('height')) || 600;
 
-  // Dimensioni stampa: A3 landscape a 150dpi = 4961×3508 px
-  // A4 landscape a 150dpi = 3508×2480 px
-  // Scegliamo A3 se il grafo è molto largo, A4 altrimenti
-  const A4_W = 3508, A4_H = 2480;
-  const A3_W = 4961, A3_H = 3508;
-  const MARGIN = 120; // px margine bianco
+  // A4 portrait 150dpi = 1240×1754, landscape = 1754×1240
+  // A3 portrait 150dpi = 1754×2480, landscape = 2480×1754
+  // Usiamo portrait perché il matrix è tipicamente più alto che largo
+  const MARGIN = 80;
 
-  // Scegli formato in base alle proporzioni del grafo
-  let pageW, pageH;
-  if (svgW / svgH > 1.5 || svgW > 900) {
-    pageW = A3_W; pageH = A3_H;
+  // Scegli A3 se il grafo è grande, A4 altrimenti
+  let pageW, pageH, fmt;
+  if (svgW > 600 || svgH > 900) {
+    pageW = 2480; pageH = 3508; fmt = 'A3';  // A3 portrait 300dpi equiv
   } else {
-    pageW = A4_W; pageH = A4_H;
+    pageW = 1748; pageH = 2480; fmt = 'A4';  // A4 portrait
   }
 
-  // Scala per far stare il grafo nella pagina con margini
+  // Scala il grafo per riempire la pagina con margini
   const scaleX = (pageW - MARGIN * 2) / svgW;
-  const scaleY = (pageH - MARGIN * 2) / svgH;
-  const scale  = Math.min(scaleX, scaleY, 3); // max 3× per non perdere qualità
+  const scaleY = (pageH - MARGIN * 2 - 60) / svgH; // 60 per footer
+  const scale  = Math.min(scaleX, scaleY);
 
-  const canvasW = Math.round(svgW * scale + MARGIN * 2);
-  const canvasH = Math.round(svgH * scale + MARGIN * 2);
+  const drawW = Math.round(svgW * scale);
+  const drawH = Math.round(svgH * scale);
+  // Centra orizzontalmente
+  const offsetX = Math.round((pageW - drawW) / 2);
 
-  // Clona l'SVG e sostituisci sfondo scuro con bianco
+  // Crea SVG con sfondo bianco e colori adatti alla stampa
   const svgClone = svg.cloneNode(true);
-  svgClone.setAttribute('width',  svgW);
+  svgClone.setAttribute('width', svgW);
   svgClone.setAttribute('height', svgH);
 
-  // Sostituisci colori scuri con equivalenti chiari per la stampa
-  const svgString = new XMLSerializer().serializeToString(svgClone)
-    .replace(/#2e2b26/g, '#ffffff')   // sfondo body → bianco
-    .replace(/#1e1b12/g, '#ffffff')   // fill nodo → bianco
-    .replace(/#252219/g, '#ffffff')
-    .replace(/fill="#2e2b26"/g, 'fill="#ffffff"')
-    .replace(/fill="#1e1b12"/g, 'fill="#ffffff"')
-    // Testi chiari → scuri per leggibilità
-    .replace(/#C9963A/g, '#8B5E10')   // oro → marrone
-    .replace(/#ede5d8/g, '#1a1a1a')   // ink chiaro → quasi nero
-    .replace(/#8a7f70/g, '#555555')   // muted → grigio medio
-    .replace(/#4a9e6b/g, '#1e7a45');  // verde → verde scuro
+  // Cambia solo il rettangolo di sfondo (rgba dark) → bianco
+  // e adatta i colori scuri del tema per la stampa
+  let svgStr = new XMLSerializer().serializeToString(svgClone);
+  // Sfondo SVG → bianco
+  svgStr = svgStr.replace(/fill="rgba\(30,27,18[^"]*\)"/g, 'fill="rgba(255,255,255,0.92)"');
+  svgStr = svgStr.replace(/fill="#2e2b26"/g, 'fill="#ffffff"');
+  svgStr = svgStr.replace(/fill="#1e1b12"/g, 'fill="#ffffff"');
+  svgStr = svgStr.replace(/fill="#252219"/g, 'fill="#f5f2ec"');
+  // Colori testo/tratti: versioni scure per stampa
+  svgStr = svgStr.replace(/#C9963A/g, '#8B5E10');
+  svgStr = svgStr.replace(/#c9963a/g, '#8B5E10');
+  svgStr = svgStr.replace(/#ede5d8/g, '#1a1200');
+  svgStr = svgStr.replace(/#8a7f70/g, '#555555');
+  svgStr = svgStr.replace(/#d94f30/g, '#b03010');
+  svgStr = svgStr.replace(/#4a4540/g, '#cccccc');
 
-  const blob = new Blob([svgString], { type: 'image/svg+xml;charset=utf-8' });
+  const blob = new Blob([svgStr], { type: 'image/svg+xml;charset=utf-8' });
   const url  = URL.createObjectURL(blob);
   const img  = new Image();
 
   img.onload = () => {
     const canvas = document.createElement('canvas');
-    canvas.width  = canvasW;
-    canvas.height = canvasH;
+    canvas.width  = pageW;
+    canvas.height = pageH;
     const ctx = canvas.getContext('2d');
 
-    // Sfondo bianco
+    // Sfondo bianco pieno
     ctx.fillStyle = '#ffffff';
-    ctx.fillRect(0, 0, canvasW, canvasH);
+    ctx.fillRect(0, 0, pageW, pageH);
 
-    // Bordo sottile grigio per indicare i margini
-    ctx.strokeStyle = '#dddddd';
-    ctx.lineWidth = 1;
-    ctx.strokeRect(MARGIN / 2, MARGIN / 2, canvasW - MARGIN, canvasH - MARGIN);
+    // Disegna il grafo scalato e centrato
+    ctx.drawImage(img, offsetX, MARGIN, drawW, drawH);
 
-    // Disegna il grafo centrato con margini
-    ctx.drawImage(img, MARGIN, MARGIN, Math.round(svgW * scale), Math.round(svgH * scale));
-
-    // Intestazione in basso
-    const sito = 'Area Archeologica SMP — Peccioli (PI)';
-    const label = `Matrix Stratigrafica · Settore: ${settore} · Anno: ${anno}`;
+    // Footer
     const oggi  = new Date().toLocaleDateString('it-IT', { day:'2-digit', month:'long', year:'numeric' });
+    const footY = pageH - 30;
     ctx.fillStyle = '#888888';
-    ctx.font = `${Math.round(scale * 7)}px monospace`;
+    ctx.font = '22px monospace';
     ctx.textAlign = 'left';
-    ctx.fillText(sito, MARGIN, canvasH - Math.round(MARGIN * 0.35));
+    ctx.fillText('Area Archeologica SMP — Peccioli (PI)', MARGIN, footY);
     ctx.textAlign = 'center';
-    ctx.fillText(label, canvasW / 2, canvasH - Math.round(MARGIN * 0.35));
+    ctx.fillText(`Matrix Stratigrafica · Settore: ${settore} · Anno: ${anno}`, pageW / 2, footY);
     ctx.textAlign = 'right';
-    ctx.fillText(oggi, canvasW - MARGIN, canvasH - Math.round(MARGIN * 0.35));
+    ctx.fillText(oggi, pageW - MARGIN, footY);
 
     URL.revokeObjectURL(url);
     const a = document.createElement('a');
     a.download = `matrix_${settore}_${anno}.png`;
     a.href = canvas.toDataURL('image/png');
     a.click();
-    const fmt = (pageW === A3_W) ? 'A3' : 'A4';
-    showToast(`✓ PNG esportato (${fmt} landscape, sfondo bianco)`);
+    showToast(`✓ PNG esportato (${fmt} portrait, sfondo bianco)`);
   };
   img.onerror = () => { showToast('⚠ Errore esportazione PNG'); URL.revokeObjectURL(url); };
   img.src = url;
@@ -6658,9 +6714,9 @@ function showToast(msg) {
   <script>
     if ('serviceWorker' in navigator && !location.hostname.includes('claudeusercontent.com')) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./service-worker.js?v=51')
+        navigator.serviceWorker.register('./service-worker.js?v=52')
           .then(reg => {
-            console.log('SW registrato v51:', reg.scope);
+            console.log('SW registrato v52:', reg.scope);
             // Forza aggiornamento immediato se c'è una nuova versione
             reg.update();
           })
