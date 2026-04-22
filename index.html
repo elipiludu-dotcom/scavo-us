@@ -5,7 +5,7 @@
   <!-- PWA -->
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#C9963A">
-  <meta name="app-version" content="55">
+  <meta name="app-version" content="56">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="SMP Scavo">
@@ -6538,12 +6538,16 @@ function exportMatrixPDF() {
   const isLandscape = svgW > svgH * 1.1;
   const pageSize = (svgW > 500 || svgH > 700) ? 'A3' : 'A4';
 
-  // Adatta colori per stampa su bianco
+  // Clona e prepara SVG per stampa
   const clone = svg.cloneNode(true);
+  // viewBox fondamentale per il rescaling
+  clone.setAttribute('viewBox', `0 0 ${svgW} ${svgH}`);
+  clone.setAttribute('preserveAspectRatio', 'xMidYMid meet');
   clone.removeAttribute('style');
-  clone.setAttribute('width',  svgW);
-  clone.setAttribute('height', svgH);
-  clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+  clone.removeAttribute('width');
+  clone.removeAttribute('height');
+
+  // Adatta colori per sfondo bianco
   let svgStr = new XMLSerializer().serializeToString(clone);
   svgStr = svgStr
     .replace(/fill="#2e2b26"/g,  'fill="#ffffff"')
@@ -6555,68 +6559,57 @@ function exportMatrixPDF() {
     .replace(/#d94f30/g, '#b03010').replace(/#4a4540/g, '#cccccc')
     .replace(/#7aaddd/g, '#3a7ab0').replace(/#4a90d9/g, '#2060a0');
 
-  const FOOTER_H = 8; // mm
-
   const html = `<!DOCTYPE html>
-<html lang="it">
-<head>
+<html lang="it"><head>
 <meta charset="UTF-8">
 <title>Matrix — ${settore} — ${anno}</title>
 <style>
-  * { margin: 0; padding: 0; box-sizing: border-box; }
+  * { margin:0; padding:0; box-sizing:border-box; }
   @page {
     size: ${pageSize} ${isLandscape ? 'landscape' : 'portrait'};
-    margin: 8mm;
+    margin: 8mm 8mm 14mm 8mm;
   }
-  html, body {
-    width: 100%;
-    height: 100%;
-    background: white;
-  }
+  html, body { width:100%; height:100%; background:white; }
   body {
     display: flex;
     flex-direction: column;
-    height: calc(100vh - 16mm);
+    height: 100vh;
     font-family: 'Courier New', monospace;
   }
-  .svg-container {
+  #svg-wrap {
     flex: 1;
     min-height: 0;
-    display: flex;
-    align-items: flex-start;
-    justify-content: center;
+    width: 100%;
+    overflow: hidden;
   }
-  .svg-container svg {
+  #svg-wrap svg {
     width: 100%;
     height: 100%;
     display: block;
   }
-  .footer {
+  #footer {
     flex-shrink: 0;
-    height: ${FOOTER_H}mm;
     display: flex;
     justify-content: space-between;
-    align-items: flex-end;
-    font-size: 6.5pt;
+    font-size: 6pt;
     color: #888;
-    border-top: 0.3px solid #ddd;
-    padding-top: 1.5mm;
-    margin-top: 2mm;
+    padding-top: 2mm;
+    border-top: 0.3px solid #ccc;
+    height: 8mm;
+    align-items: center;
   }
 </style>
-</head>
-<body>
-  <div class="svg-container">${svgStr}</div>
-  <div class="footer">
+</head><body>
+  <div id="svg-wrap">${svgStr}</div>
+  <div id="footer">
     <span>Area Archeologica SMP — Peccioli (PI)</span>
     <span>Matrix Stratigrafica &nbsp;·&nbsp; Settore: ${settore} &nbsp;·&nbsp; Anno: ${anno}</span>
     <span>${oggi}</span>
   </div>
   <script>
-    window.addEventListener('load', () => setTimeout(() => window.print(), 300));
+    window.addEventListener('load', () => setTimeout(() => window.print(), 400));
   <\/script>
-</body>
-</html>`;
+</body></html>`;
 
   const w = window.open('', '_blank');
   if (!w) { showToast('⚠ Popup bloccato — consenti i popup per questo sito'); return; }
@@ -6720,9 +6713,9 @@ function showToast(msg) {
   <script>
     if ('serviceWorker' in navigator && !location.hostname.includes('claudeusercontent.com')) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./service-worker.js?v=55')
+        navigator.serviceWorker.register('./service-worker.js?v=56')
           .then(reg => {
-            console.log('SW registrato v55:', reg.scope);
+            console.log('SW registrato v56:', reg.scope);
             // Forza aggiornamento immediato se c'è una nuova versione
             reg.update();
           })
