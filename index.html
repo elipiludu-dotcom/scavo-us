@@ -5,7 +5,7 @@
   <!-- PWA -->
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#C9963A">
-  <meta name="app-version" content="44">
+  <meta name="app-version" content="45">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="SMP Scavo">
@@ -1462,28 +1462,48 @@
 
     <!-- MATRIX DI HARRIS -->
     <div id="view-matrix" class="view">
-      <div style="display:flex;align-items:center;gap:12px;padding:12px 16px;border-bottom:1px solid var(--border);flex-wrap:wrap">
-        <h2 style="margin:0;font-family:'Patrick Hand',cursive;color:var(--earth);font-size:1.2rem">📊 Matrix di Harris</h2>
+      <!-- Toolbar -->
+      <div style="display:flex;align-items:center;gap:10px;padding:10px 16px;border-bottom:1px solid var(--border);flex-wrap:wrap">
+        <h2 style="margin:0;font-family:'Patrick Hand',cursive;color:var(--earth);font-size:1.2rem;white-space:nowrap">📊 Matrix di Harris</h2>
         <select id="matrix-settore" onchange="renderMatrix()"
-          style="padding:7px 12px;background:var(--parchment-light);border:1px solid var(--border);border-radius:3px;color:var(--ink);font-size:0.82rem;font-family:'Space Mono',monospace">
+          style="padding:6px 10px;background:var(--parchment-light);border:1px solid var(--border);border-radius:3px;color:var(--ink);font-size:0.8rem;font-family:'Space Mono',monospace">
           <option value="">— tutti i settori —</option>
         </select>
         <select id="matrix-anno" onchange="renderMatrix()"
-          style="padding:7px 12px;background:var(--parchment-light);border:1px solid var(--border);border-radius:3px;color:var(--ink);font-size:0.82rem;font-family:'Space Mono',monospace">
+          style="padding:6px 10px;background:var(--parchment-light);border:1px solid var(--border);border-radius:3px;color:var(--ink);font-size:0.8rem;font-family:'Space Mono',monospace">
           <option value="">— tutti gli anni —</option>
         </select>
-        <button class="btn btn-secondary" onclick="showView('list')" style="white-space:nowrap">← Home</button>
-        <span id="matrix-info" style="font-size:0.72rem;color:var(--muted);font-family:'Space Mono',monospace;margin-left:auto"></span>
+        <div style="display:flex;gap:6px;margin-left:auto;align-items:center;flex-wrap:wrap">
+          <span id="matrix-info" style="font-size:0.72rem;color:var(--muted);font-family:'Space Mono',monospace;white-space:nowrap"></span>
+          <button class="btn btn-secondary" onclick="exportMatrixSVG()" style="font-size:0.72rem;padding:5px 10px;white-space:nowrap">⬇ SVG</button>
+          <button class="btn btn-secondary" onclick="exportMatrixPNG()" style="font-size:0.72rem;padding:5px 10px;white-space:nowrap">⬇ PNG</button>
+          <button class="btn btn-secondary" onclick="showView('list')" style="font-size:0.72rem;padding:5px 10px;white-space:nowrap">← Home</button>
+        </div>
       </div>
+      <!-- Pannello warning conflitti -->
+      <div id="matrix-warnings" style="display:none;background:#2a1a1a;border-bottom:2px solid var(--accent);padding:10px 16px">
+        <div style="display:flex;align-items:center;gap:8px;cursor:pointer" onclick="toggleMatrixWarnings()">
+          <span style="color:var(--accent);font-size:1rem">⚠</span>
+          <span id="matrix-warnings-title" style="font-family:'Space Mono',monospace;font-size:0.72rem;color:var(--accent);font-weight:700;flex:1"></span>
+          <span id="matrix-warnings-toggle" style="font-family:'Space Mono',monospace;font-size:0.65rem;color:var(--muted)">▼ mostra</span>
+        </div>
+        <div id="matrix-warnings-body" style="display:none;margin-top:10px;display:none">
+          <ul id="matrix-warnings-list" style="list-style:none;padding:0;margin:0;display:flex;flex-direction:column;gap:5px"></ul>
+          <p style="margin-top:8px;font-family:'Space Mono',monospace;font-size:0.62rem;color:var(--muted)">I nodi evidenziati in rosso nella matrix corrispondono alle US coinvolte. Correggi i rapporti stratigrafici nelle relative schede.</p>
+        </div>
+      </div>
+      <!-- SVG container -->
       <div id="matrix-container" style="width:100%;overflow:auto;background:var(--parchment-light)">
-        <svg id="matrix-svg" style="min-width:600px"></svg>
+        <svg id="matrix-svg" style="min-width:600px;display:block"></svg>
       </div>
       <!-- Legenda -->
-      <div style="padding:8px 16px;border-top:1px solid var(--border);display:flex;gap:20px;flex-wrap:wrap;font-family:'Space Mono',monospace;font-size:0.62rem;color:var(--muted)">
-        <span>→ posteriore/anteriore</span>
-        <span style="border:2px solid var(--earth);padding:1px 6px;border-radius:2px">US normale</span>
-        <span style="border:2px solid #4a90d9;padding:1px 6px;border-radius:2px;color:#4a90d9">= uguale_a</span>
-        <span style="border:2px dashed var(--muted);padding:1px 6px;border-radius:2px">si lega / appoggia</span>
+      <div style="padding:8px 16px;border-top:1px solid var(--border);display:flex;gap:16px;flex-wrap:wrap;font-family:'Space Mono',monospace;font-size:0.62rem;color:var(--muted);align-items:center">
+        <span style="font-size:0.6rem;color:var(--muted);opacity:0.7;text-transform:uppercase;letter-spacing:0.08em">Legenda:</span>
+        <span><span style="display:inline-block;width:20px;height:1.5px;background:var(--earth);vertical-align:middle;margin-right:4px"></span>copre / taglia / riempie</span>
+        <span><span style="display:inline-block;width:20px;height:1.5px;background:#4a90d9;border-top:1.5px dashed #4a90d9;vertical-align:middle;margin-right:4px"></span>si lega / appoggia</span>
+        <span style="border:1.5px solid var(--earth);padding:1px 6px;border-radius:2px">US stratigrafica</span>
+        <span style="border:1.5px solid var(--earth);padding:1px 6px;border-radius:2px;background:var(--earth);color:#1e1b12">USN (negativa)</span>
+        <span style="border:1.5px solid var(--accent);padding:1px 6px;border-radius:2px;color:var(--accent)">⚠ conflitto</span>
       </div>
     </div>
 
@@ -5713,6 +5733,162 @@ function popolaFiltriMatrix() {
     anni.map(a => `<option value="${a}">${a}</option>`).join('');
 }
 
+// ─── MATRIX: VALIDAZIONE CONFLITTI ───────────────────────────────
+function validateMatrixConflicts(sel) {
+  // Coppie inverse attese
+  const INVERSE = {
+    'copre':           'coperto_da',
+    'coperto_da':      'copre',
+    'taglia':          'tagliato_da',
+    'tagliato_da':     'taglia',
+    'riempie':         'riempito_da',
+    'riempito_da':     'riempie',
+    'si_appoggia_a':   'gli_si_appoggia',
+    'gli_si_appoggia': 'si_appoggia_a',
+    'uguale_a':        'uguale_a',
+    'si_lega_a':       'si_lega_a',
+  };
+
+  const conflicts = [];
+  const conflictNodes = new Set();
+  const seen = new Set(); // evita duplicati A↔B e B↔A
+
+  // Mappa numero → rapporti per lookup rapido
+  const rapMap = {};
+  sel.forEach(s => {
+    const raps = Array.isArray(s.rapporti) ? s.rapporti :
+      (() => { try { return JSON.parse(s.rapporti || '[]'); } catch { return []; } })();
+    rapMap[String(s.numero)] = { scheda: s, raps };
+  });
+
+  const usSet = new Set(sel.map(s => String(s.numero)));
+
+  sel.forEach(s => {
+    const a = String(s.numero);
+    const { raps } = rapMap[a];
+
+    raps.forEach(r => {
+      const b = String(r.us);
+      if (!usSet.has(b)) return;
+      if (!INVERSE[r.tipo]) return; // tipo non gestito, skip
+
+      const pairKey = [a, b].sort().join('↔') + ':' + r.tipo;
+      if (seen.has(pairKey)) return;
+      seen.add(pairKey);
+
+      const expectedFromB = INVERSE[r.tipo];
+      const bRaps = rapMap[b]?.raps || [];
+
+      // Contraddizione diretta: B dichiara verso A un tipo incompatibile
+      const bDeclares = bRaps.filter(br => String(br.us) === a).map(br => br.tipo);
+
+      if (bDeclares.length === 0) {
+        // Mancanza di reciprocità — warning soft (non bloccante, solo informativo)
+        // Non lo trattiamo come conflitto grave, solo i casi contraddittori
+      } else {
+        bDeclares.forEach(bTipo => {
+          if (bTipo !== expectedFromB) {
+            conflictNodes.add(a);
+            conflictNodes.add(b);
+            const label = tipoRapportoLabel(r.tipo);
+            const labelB = tipoRapportoLabel(bTipo);
+            const labelExpected = tipoRapportoLabel(expectedFromB);
+            conflicts.push({
+              type: 'contradiction',
+              msg: `US ${a} dichiara "${label}" US ${b} — ma US ${b} dichiara "${labelB}" US ${a} (atteso: "${labelExpected}")`,
+              nodes: [a, b]
+            });
+          }
+        });
+      }
+    });
+  });
+
+  // Rilevamento cicli con DFS
+  const succ = buildSuccGraph(sel, usSet);
+  const visited = {}, inStack = {};
+  sel.forEach(s => { visited[s.numero] = false; inStack[s.numero] = false; });
+
+  function dfsCycle(node, path) {
+    visited[node] = true;
+    inStack[node] = true;
+    for (const nb of (succ[node] || [])) {
+      if (!visited[nb]) {
+        const cycle = dfsCycle(nb, [...path, nb]);
+        if (cycle) return cycle;
+      } else if (inStack[nb]) {
+        // Trovato ciclo: estrai il loop
+        const cycleStart = path.indexOf(String(nb));
+        const loop = cycleStart >= 0 ? path.slice(cycleStart) : [...path, String(nb)];
+        return loop;
+      }
+    }
+    inStack[node] = false;
+    return null;
+  }
+
+  const reportedCycles = new Set();
+  sel.forEach(s => {
+    if (!visited[s.numero]) {
+      const cycle = dfsCycle(s.numero, [String(s.numero)]);
+      if (cycle) {
+        const key = [...cycle].sort().join(',');
+        if (!reportedCycles.has(key)) {
+          reportedCycles.add(key);
+          cycle.forEach(n => conflictNodes.add(n));
+          conflicts.push({
+            type: 'cycle',
+            msg: `Ciclo stratigrafico impossibile: US ${cycle.join(' → US ')}`,
+            nodes: cycle
+          });
+        }
+      }
+    }
+  });
+
+  return { conflicts, conflictNodes };
+}
+
+function tipoRapportoLabel(tipo) {
+  const map = {
+    'copre': 'Copre', 'coperto_da': 'Coperto da',
+    'taglia': 'Taglia', 'tagliato_da': 'Tagliato da',
+    'riempie': 'Riempie', 'riempito_da': 'Riempito da',
+    'uguale_a': 'Uguale a', 'si_lega_a': 'Si lega a',
+    'si_appoggia_a': 'Si appoggia a', 'gli_si_appoggia': 'Gli si appoggia'
+  };
+  return map[tipo] || tipo;
+}
+
+function buildSuccGraph(sel, usSet) {
+  const succ = {};
+  sel.forEach(s => { succ[s.numero] = []; });
+  sel.forEach(s => {
+    const raps = Array.isArray(s.rapporti) ? s.rapporti :
+      (() => { try { return JSON.parse(s.rapporti || '[]'); } catch { return []; } })();
+    raps.forEach(r => {
+      const a = String(s.numero), b = String(r.us);
+      if (!usSet.has(b)) return;
+      // Solo relazioni che implicano ordine temporale (non lega/appoggia/uguale)
+      if (['copre', 'taglia', 'riempie'].includes(r.tipo)) {
+        if (!succ[a].includes(b)) succ[a].push(b);
+      } else if (['coperto_da', 'tagliato_da', 'riempito_da'].includes(r.tipo)) {
+        if (!succ[b].includes(a)) succ[b].push(a);
+      }
+    });
+  });
+  return succ;
+}
+
+function toggleMatrixWarnings() {
+  const body = document.getElementById('matrix-warnings-body');
+  const toggle = document.getElementById('matrix-warnings-toggle');
+  if (!body) return;
+  const isOpen = body.style.display !== 'none';
+  body.style.display = isOpen ? 'none' : 'block';
+  toggle.textContent = isOpen ? '▼ mostra' : '▲ nascondi';
+}
+
 function renderMatrix() {
   const settore = document.getElementById('matrix-settore')?.value || '';
   const anno    = document.getElementById('matrix-anno')?.value || '';
@@ -5729,155 +5905,315 @@ function renderMatrix() {
   if (!sel.length) return;
 
   const usSet = new Set(sel.map(s => String(s.numero)));
+  const ns = 'http://www.w3.org/2000/svg';
+  const NW = 60, NH = 32, HGAP = 18, VGAP = 52;
+  const PAD = 24;
 
-  // Costruisci grafo: predecessori e successori
-  const succ = {}; // us → [us più recenti (sopra)]
-  const pred = {}; // us → [us più antiche (sotto)]
-  const equalGroups = {}; // per uguale_a
-  sel.forEach(s => { succ[s.numero] = []; pred[s.numero] = []; });
+  // ── 1. VALIDAZIONE CONFLITTI ────────────────────────────────────
+  const { conflicts, conflictNodes } = validateMatrixConflicts(sel);
+  const warnPanel  = document.getElementById('matrix-warnings');
+  const warnTitle  = document.getElementById('matrix-warnings-title');
+  const warnList   = document.getElementById('matrix-warnings-list');
+  const warnBody   = document.getElementById('matrix-warnings-body');
+  const warnToggle = document.getElementById('matrix-warnings-toggle');
+
+  if (conflicts.length > 0) {
+    warnPanel.style.display = 'block';
+    warnTitle.textContent = `${conflicts.length} conflitt${conflicts.length === 1 ? 'o' : 'i'} stratigrafico${conflicts.length === 1 ? '' : 'i'} rilevat${conflicts.length === 1 ? 'o' : 'i'} — correggi le schede US prima di usare questo matrix`;
+    warnList.innerHTML = conflicts.map(c =>
+      `<li style="font-family:'Space Mono',monospace;font-size:0.65rem;color:${c.type === 'cycle' ? '#e8a020' : '#d94f30'};padding:3px 0;border-bottom:1px solid rgba(255,255,255,0.05);line-height:1.5">
+        <span style="margin-right:6px">${c.type === 'cycle' ? '🔄' : '⚡'}</span>${c.msg}
+      </li>`
+    ).join('');
+    // Apri automaticamente il pannello se ci sono conflitti
+    warnBody.style.display = 'block';
+    warnToggle.textContent = '▲ nascondi';
+  } else {
+    warnPanel.style.display = 'none';
+  }
+
+  // ── 2. COSTRUZIONE GRAFO ────────────────────────────────────────
+  const succ = {}, pred = {}, succLega = {};
+  sel.forEach(s => { succ[s.numero] = []; pred[s.numero] = []; succLega[s.numero] = []; });
 
   sel.forEach(s => {
     const raps = Array.isArray(s.rapporti) ? s.rapporti :
-      (() => { try { return JSON.parse(s.rapporti||'[]'); } catch { return []; } })();
+      (() => { try { return JSON.parse(s.rapporti || '[]'); } catch { return []; } })();
     raps.forEach(r => {
       const a = String(s.numero), b = String(r.us);
       if (!usSet.has(b)) return;
-      if (r.tipo === 'posteriore' || r.tipo === 'coperto_da' || r.tipo === 'taglia' || r.tipo === 'riempie') {
-        if (!succ[a].includes(b)) succ[a].push(b);
-        if (!pred[b].includes(a)) pred[b].push(a);
-      } else if (r.tipo === 'anteriore' || r.tipo === 'copre' || r.tipo === 'tagliato_da' || r.tipo === 'riempito_da') {
+      if (['coperto_da', 'tagliato_da', 'riempito_da'].includes(r.tipo)) {
+        // A è più recente di B: A sopra B nell'Harris → succ[B] = A
         if (!succ[b].includes(a)) succ[b].push(a);
         if (!pred[a].includes(b)) pred[a].push(b);
+      } else if (['copre', 'taglia', 'riempie'].includes(r.tipo)) {
+        // A è più antico di B: B sopra A → succ[A] = B
+        if (!succ[a].includes(b)) succ[a].push(b);
+        if (!pred[b].includes(a)) pred[b].push(a);
+      } else if (['si_lega_a', 'gli_si_appoggia', 'uguale_a', 'si_appoggia_a'].includes(r.tipo)) {
+        if (!succLega[a].includes(b)) succLega[a].push(b);
       }
     });
   });
 
-  // Calcola livelli con topological sort
+  // ── 3. TOPOLOGICAL SORT → LIVELLI ───────────────────────────────
   const levels = {};
-  const inDegree = {};
-  sel.forEach(s => { inDegree[s.numero] = pred[s.numero].length; });
+  const inDeg = {};
+  sel.forEach(s => { inDeg[s.numero] = pred[s.numero].length; });
 
-  let queue = sel.filter(s => inDegree[s.numero] === 0).map(s => s.numero);
-  queue.forEach(n => levels[n] = 0);
+  let queue = sel.filter(s => inDeg[s.numero] === 0).map(s => s.numero);
+  queue.forEach(n => { levels[n] = 0; });
 
   while (queue.length) {
     const next = [];
     queue.forEach(n => {
       (succ[n] || []).forEach(nb => {
-        levels[nb] = Math.max(levels[nb] || 0, (levels[n] || 0) + 1);
-        inDegree[nb]--;
-        if (inDegree[nb] === 0) next.push(nb);
+        levels[nb] = Math.max(levels[nb] ?? 0, (levels[n] ?? 0) + 1);
+        inDeg[nb]--;
+        if (inDeg[nb] === 0) next.push(nb);
       });
     });
     queue = next;
   }
 
-  // Nodi senza livello (cicli) → mettili all'ultimo livello
-  const maxLvl = Math.max(0, ...Object.values(levels));
+  // Nodi non raggiunti (cicli o isolati)
+  const maxLvl = Object.values(levels).length ? Math.max(...Object.values(levels)) : 0;
   sel.forEach(s => { if (levels[s.numero] === undefined) levels[s.numero] = maxLvl + 1; });
 
-  // Raggruppa per livello
+  // ── 4. RAGGRUPPA PER LIVELLO ────────────────────────────────────
   const byLevel = {};
   sel.forEach(s => {
-    const lv = levels[s.numero] || 0;
+    const lv = levels[s.numero] ?? 0;
     if (!byLevel[lv]) byLevel[lv] = [];
     byLevel[lv].push(String(s.numero));
   });
 
-  // Layout posizioni
-  const NW = 56, NH = 30, HGAP = 16, VGAP = 48;
-  const positions = {};
-  const sortedLevels = Object.keys(byLevel).map(Number).sort((a,b) => a-b);
+  const sortedLevels = Object.keys(byLevel).map(Number).sort((a, b) => a - b);
 
+  // ── 5. ORDINAMENTO BARICENTRICO (riduce incroci) ─────────────────
+  // Inizializza ordine: primo livello per numero crescente
+  sortedLevels.forEach(lv => {
+    byLevel[lv].sort((a, b) => parseFloat(a) - parseFloat(b));
+  });
+
+  // Passate top-down e bottom-up (3 iterazioni)
+  for (let iter = 0; iter < 3; iter++) {
+    // Top-down: ordina ogni livello in base alla media delle posizioni dei predecessori
+    for (let i = 1; i < sortedLevels.length; i++) {
+      const lv = sortedLevels[i];
+      const prevLv = sortedLevels[i - 1];
+      const posAbove = {};
+      byLevel[prevLv].forEach((n, idx) => { posAbove[n] = idx; });
+
+      byLevel[lv].sort((a, b) => {
+        const avgA = pred[a].length
+          ? pred[a].filter(p => posAbove[p] !== undefined).reduce((s, p) => s + posAbove[p], 0) / pred[a].filter(p => posAbove[p] !== undefined).length
+          : parseFloat(a);
+        const avgB = pred[b].length
+          ? pred[b].filter(p => posAbove[p] !== undefined).reduce((s, p) => s + posAbove[p], 0) / pred[b].filter(p => posAbove[p] !== undefined).length
+          : parseFloat(b);
+        return (isNaN(avgA) ? parseFloat(a) : avgA) - (isNaN(avgB) ? parseFloat(b) : avgB);
+      });
+    }
+    // Bottom-up: ordina in base ai successori
+    for (let i = sortedLevels.length - 2; i >= 0; i--) {
+      const lv = sortedLevels[i];
+      const nextLv = sortedLevels[i + 1];
+      const posBelow = {};
+      byLevel[nextLv].forEach((n, idx) => { posBelow[n] = idx; });
+
+      byLevel[lv].sort((a, b) => {
+        const avgA = succ[a].length
+          ? succ[a].filter(s => posBelow[s] !== undefined).reduce((s2, s3) => s2 + posBelow[s3], 0) / succ[a].filter(s => posBelow[s] !== undefined).length
+          : parseFloat(a);
+        const avgB = succ[b].length
+          ? succ[b].filter(s => posBelow[s] !== undefined).reduce((s2, s3) => s2 + posBelow[s3], 0) / succ[b].filter(s => posBelow[s] !== undefined).length
+          : parseFloat(b);
+        return (isNaN(avgA) ? parseFloat(a) : avgA) - (isNaN(avgB) ? parseFloat(b) : avgB);
+      });
+    }
+  }
+
+  // ── 6. CALCOLO POSIZIONI (centering per livello) ─────────────────
+  const maxNodesInLevel = Math.max(...sortedLevels.map(lv => byLevel[lv].length));
+  const totalW = maxNodesInLevel * (NW + HGAP) - HGAP;
+
+  const positions = {};
   sortedLevels.forEach(lv => {
     const nodes = byLevel[lv];
+    const rowW = nodes.length * (NW + HGAP) - HGAP;
+    const offsetX = (totalW - rowW) / 2; // centra la riga
     nodes.forEach((n, i) => {
       positions[n] = {
-        x: i * (NW + HGAP) + NW/2,
-        y: lv * (NH + VGAP) + NH/2
+        x: offsetX + i * (NW + HGAP) + NW / 2,
+        y: lv * (NH + VGAP) + NH / 2
       };
     });
   });
 
-  // Dimensioni SVG
+  // ── 7. DIMENSIONI SVG ────────────────────────────────────────────
   const allX = Object.values(positions).map(p => p.x);
   const allY = Object.values(positions).map(p => p.y);
-  const svgW = Math.max(...allX) + NW + 40;
-  const svgH = Math.max(...allY) + NH + 40;
+  const svgW = Math.max(...allX) + NW / 2 + PAD;
+  const svgH = Math.max(...allY) + NH / 2 + PAD;
 
-  svg.setAttribute('width',  svgW);
-  svg.setAttribute('height', svgH);
-  svg.setAttribute('viewBox', `0 0 ${svgW} ${svgH}`);
+  svg.setAttribute('width',  svgW + PAD);
+  svg.setAttribute('height', svgH + PAD);
+  svg.setAttribute('viewBox', `0 0 ${svgW + PAD} ${svgH + PAD}`);
 
-  const ns = 'http://www.w3.org/2000/svg';
-  // nessuna freccia
+  // Sfondo
+  const bg = svg.appendChild(document.createElementNS(ns, 'rect'));
+  bg.setAttribute('width', svgW + PAD); bg.setAttribute('height', svgH + PAD);
+  bg.setAttribute('fill', '#2e2b26');
 
   const gRoot = svg.appendChild(document.createElementNS(ns, 'g'));
-  gRoot.setAttribute('transform', 'translate(20,20)');
+  gRoot.setAttribute('transform', `translate(${PAD},${PAD})`);
 
-  // Disegna archi ortogonali (con angoli retti, senza frecce)
+  // ── 8. ARCHI STRATIGRAFICI (ortogonali) ──────────────────────────
   sel.forEach(s => {
     (succ[s.numero] || []).forEach(nb => {
       const p1 = positions[s.numero], p2 = positions[nb];
       if (!p1 || !p2) return;
-      // Punto di partenza (bordo inferiore nodo padre) e arrivo (bordo superiore nodo figlio)
-      const x1 = p1.x, y1 = p1.y + NH/2;
-      const x2 = p2.x, y2 = p2.y - NH/2;
-      const my = (y1 + y2) / 2; // punto medio verticale
-      // Percorso ortogonale: scendi a metà → vai in orizzontale → scendi al nodo figlio
+      const x1 = p1.x, y1 = p1.y + NH / 2;
+      const x2 = p2.x, y2 = p2.y - NH / 2;
+      const my = (y1 + y2) / 2;
       const d = `M ${x1} ${y1} L ${x1} ${my} L ${x2} ${my} L ${x2} ${y2}`;
       const path = gRoot.appendChild(document.createElementNS(ns, 'path'));
       path.setAttribute('d', d);
       path.setAttribute('fill', 'none');
-      path.setAttribute('stroke', '#C9963A');
-      path.setAttribute('stroke-width', '1.2');
-      path.setAttribute('opacity', '0.8');
+      path.setAttribute('stroke', conflictNodes.has(String(s.numero)) || conflictNodes.has(String(nb)) ? '#d94f30' : '#C9963A');
+      path.setAttribute('stroke-width', '1.3');
+      path.setAttribute('opacity', '0.75');
     });
   });
 
-  // Disegna nodi
+  // ── 9. ARCHI LEGA/APPOGGIA (tratteggiati orizzontali) ────────────
+  const drawnLega = new Set();
+  sel.forEach(s => {
+    (succLega[s.numero] || []).forEach(nb => {
+      const key = [s.numero, nb].sort().join('-');
+      if (drawnLega.has(key)) return;
+      drawnLega.add(key);
+      const p1 = positions[s.numero], p2 = positions[nb];
+      if (!p1 || !p2) return;
+      const path = gRoot.appendChild(document.createElementNS(ns, 'path'));
+      const d = `M ${p1.x + NW/2} ${p1.y} L ${p2.x - NW/2} ${p2.y}`;
+      path.setAttribute('d', d);
+      path.setAttribute('fill', 'none');
+      path.setAttribute('stroke', '#4a90d9');
+      path.setAttribute('stroke-width', '1.2');
+      path.setAttribute('stroke-dasharray', '4 3');
+      path.setAttribute('opacity', '0.7');
+    });
+  });
+
+  // ── 10. NODI ─────────────────────────────────────────────────────
   sel.forEach(s => {
     const p = positions[s.numero];
     if (!p) return;
-    const scheda = sel.find(x => String(x.numero) === String(s.numero));
+    const isNeg      = String(s.numero).startsWith('-');
+    const isConflict = conflictNodes.has(String(s.numero));
+
+    const fillCol   = isConflict ? '#3a1010' : (isNeg ? '#C9963A' : '#1e1b12');
+    const strokeCol = isConflict ? '#d94f30'  : (isNeg ? '#8B6520' : '#C9963A');
+    const textCol   = isConflict ? '#d94f30'  : (isNeg ? '#1e1b12' : '#C9963A');
 
     const grp = gRoot.appendChild(document.createElementNS(ns, 'g'));
     grp.setAttribute('transform', `translate(${p.x - NW/2},${p.y - NH/2})`);
     grp.style.cursor = 'pointer';
     grp.addEventListener('click', () => openUSModal(s.id));
 
-    const isNeg = String(s.numero).startsWith('-');
-    const fillCol   = isNeg ? '#C9963A' : '#1e1b12';
-    const strokeCol = isNeg ? '#8B6520' : '#C9963A';
-    const textCol   = isNeg ? '#1e1b12' : '#C9963A';
-
     const rect = grp.appendChild(document.createElementNS(ns, 'rect'));
     rect.setAttribute('width', NW); rect.setAttribute('height', NH);
     rect.setAttribute('rx', '4');
     rect.setAttribute('fill', fillCol);
     rect.setAttribute('stroke', strokeCol);
-    rect.setAttribute('stroke-width', '1.5');
+    rect.setAttribute('stroke-width', isConflict ? '2' : '1.5');
 
+    // Numero US
     const tNum = grp.appendChild(document.createElementNS(ns, 'text'));
-    tNum.setAttribute('x', NW/2); tNum.setAttribute('y', NH/2 - 2);
+    tNum.setAttribute('x', isConflict ? NW/2 - 6 : NW/2);
+    tNum.setAttribute('y', NH / 2);
     tNum.setAttribute('text-anchor', 'middle');
     tNum.setAttribute('dominant-baseline', 'middle');
     tNum.setAttribute('fill', textCol);
     tNum.setAttribute('font-family', 'Patrick Hand, cursive');
-    tNum.setAttribute('font-size', '14');
+    tNum.setAttribute('font-size', '13');
     tNum.setAttribute('font-weight', 'bold');
     tNum.textContent = String(s.numero);
 
-    if (scheda?.tipo) {
+    // Icona warning per nodi in conflitto
+    if (isConflict) {
+      const tWarn = grp.appendChild(document.createElementNS(ns, 'text'));
+      tWarn.setAttribute('x', NW - 8);
+      tWarn.setAttribute('y', NH / 2);
+      tWarn.setAttribute('text-anchor', 'middle');
+      tWarn.setAttribute('dominant-baseline', 'middle');
+      tWarn.setAttribute('font-size', '9');
+      tWarn.textContent = '⚠';
+    }
+
+    // Tipo US (etichetta piccola sotto il numero)
+    if (s.tipo) {
       const tTipo = grp.appendChild(document.createElementNS(ns, 'text'));
-      tTipo.setAttribute('x', NW/2); tTipo.setAttribute('y', NH - 4);
+      tTipo.setAttribute('x', NW / 2);
+      tTipo.setAttribute('y', NH - 4);
       tTipo.setAttribute('text-anchor', 'middle');
-      tTipo.setAttribute('fill', isNeg ? '#1e1b12' : '#888');
+      tTipo.setAttribute('fill', isConflict ? '#a04040' : (isNeg ? '#1e1b12' : '#777'));
       tTipo.setAttribute('font-family', 'Space Mono, monospace');
-      tTipo.setAttribute('font-size', '7');
-      tTipo.textContent = scheda.tipo.substring(0, 10);
+      tTipo.setAttribute('font-size', '6.5');
+      tTipo.textContent = s.tipo.substring(0, 11);
     }
   });
+}
+
+// ─── MATRIX EXPORT ───────────────────────────────────────────────
+function exportMatrixSVG() {
+  const svg = document.getElementById('matrix-svg');
+  if (!svg || !svg.innerHTML.trim()) { showToast('⚠ Genera prima il matrix'); return; }
+  const settore = document.getElementById('matrix-settore')?.value || 'tutti';
+  const anno    = document.getElementById('matrix-anno')?.value    || 'tutti';
+  const serializer = new XMLSerializer();
+  const svgStr = serializer.serializeToString(svg);
+  const blob = new Blob([svgStr], { type: 'image/svg+xml' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `matrix_harris_${settore}_${anno}.svg`;
+  a.click();
+  URL.revokeObjectURL(url);
+  showToast('✓ SVG esportato');
+}
+
+function exportMatrixPNG() {
+  const svg = document.getElementById('matrix-svg');
+  if (!svg || !svg.innerHTML.trim()) { showToast('⚠ Genera prima il matrix'); return; }
+  const settore = document.getElementById('matrix-settore')?.value || 'tutti';
+  const anno    = document.getElementById('matrix-anno')?.value    || 'tutti';
+  const w = parseFloat(svg.getAttribute('width'))  || 800;
+  const h = parseFloat(svg.getAttribute('height')) || 600;
+  const scale = 2; // retina
+  const serializer = new XMLSerializer();
+  const svgStr = serializer.serializeToString(svg);
+  const svgBlob = new Blob([svgStr], { type: 'image/svg+xml;charset=utf-8' });
+  const url = URL.createObjectURL(svgBlob);
+  const img = new Image();
+  img.onload = () => {
+    const canvas = document.createElement('canvas');
+    canvas.width  = w * scale;
+    canvas.height = h * scale;
+    const ctx = canvas.getContext('2d');
+    ctx.scale(scale, scale);
+    ctx.drawImage(img, 0, 0);
+    URL.revokeObjectURL(url);
+    const a = document.createElement('a');
+    a.download = `matrix_harris_${settore}_${anno}.png`;
+    a.href = canvas.toDataURL('image/png');
+    a.click();
+    showToast('✓ PNG esportato');
+  };
+  img.onerror = () => { showToast('⚠ Errore esportazione PNG'); URL.revokeObjectURL(url); };
+  img.src = url;
 }
 
 // ─── DROPDOWN MENU ───────────────────────────────────────────────
@@ -5924,9 +6260,9 @@ function showToast(msg) {
   <script>
     if ('serviceWorker' in navigator && !location.hostname.includes('claudeusercontent.com')) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./service-worker.js?v=44')
+        navigator.serviceWorker.register('./service-worker.js?v=45')
           .then(reg => {
-            console.log('SW registrato v44:', reg.scope);
+            console.log('SW registrato v45:', reg.scope);
             // Forza aggiornamento immediato se c'è una nuova versione
             reg.update();
           })
