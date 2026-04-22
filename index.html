@@ -5,7 +5,7 @@
   <!-- PWA -->
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#C9963A">
-  <meta name="app-version" content="45">
+  <meta name="app-version" content="46">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="SMP Scavo">
@@ -832,7 +832,7 @@
 </style>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
-  <!-- D3 per Matrix di Harris -->
+  <!-- D3 per Matrix -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
   <!-- Leaflet -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
@@ -917,7 +917,7 @@
           <span class="nav-icon">🗺</span> Apri GIS
         </div>
         <div class="nav-dropdown-item" onclick="showView('matrix')">
-          <span class="nav-icon">📊</span> Matrix di Harris
+          <span class="nav-icon">📊</span> Matrix
         </div>
         <div class="nav-dropdown-sep"></div>
         <div class="nav-dropdown-item" onclick="apriSelezionePDF('us')">
@@ -1464,7 +1464,7 @@
     <div id="view-matrix" class="view">
       <!-- Toolbar -->
       <div style="display:flex;align-items:center;gap:10px;padding:10px 16px;border-bottom:1px solid var(--border);flex-wrap:wrap">
-        <h2 style="margin:0;font-family:'Patrick Hand',cursive;color:var(--earth);font-size:1.2rem;white-space:nowrap">📊 Matrix di Harris</h2>
+        <h2 style="margin:0;font-family:'Patrick Hand',cursive;color:var(--earth);font-size:1.2rem;white-space:nowrap">📊 Matrix</h2>
         <select id="matrix-settore" onchange="renderMatrix()"
           style="padding:6px 10px;background:var(--parchment-light);border:1px solid var(--border);border-radius:3px;color:var(--ink);font-size:0.8rem;font-family:'Space Mono',monospace">
           <option value="">— tutti i settori —</option>
@@ -1477,6 +1477,7 @@
           <span id="matrix-info" style="font-size:0.72rem;color:var(--muted);font-family:'Space Mono',monospace;white-space:nowrap"></span>
           <button class="btn btn-secondary" onclick="exportMatrixSVG()" style="font-size:0.72rem;padding:5px 10px;white-space:nowrap">⬇ SVG</button>
           <button class="btn btn-secondary" onclick="exportMatrixPNG()" style="font-size:0.72rem;padding:5px 10px;white-space:nowrap">⬇ PNG</button>
+          <button class="btn btn-secondary" onclick="printMatrixConflicts()" id="btn-print-conflicts" style="font-size:0.72rem;padding:5px 10px;white-space:nowrap;display:none">🖨 Report conflitti</button>
           <button class="btn btn-secondary" onclick="showView('list')" style="font-size:0.72rem;padding:5px 10px;white-space:nowrap">← Home</button>
         </div>
       </div>
@@ -5928,8 +5929,10 @@ function renderMatrix() {
     // Apri automaticamente il pannello se ci sono conflitti
     warnBody.style.display = 'block';
     warnToggle.textContent = '▲ nascondi';
+    document.getElementById('btn-print-conflicts').style.display = 'inline-block';
   } else {
     warnPanel.style.display = 'none';
+    document.getElementById('btn-print-conflicts').style.display = 'none';
   }
 
   // ── 2. COSTRUZIONE GRAFO ────────────────────────────────────────
@@ -6216,7 +6219,58 @@ function exportMatrixPNG() {
   img.src = url;
 }
 
-// ─── DROPDOWN MENU ───────────────────────────────────────────────
+function printMatrixConflicts() {
+  const titleEl   = document.getElementById('matrix-warnings-title');
+  const listEl    = document.getElementById('matrix-warnings-list');
+  const settore   = document.getElementById('matrix-settore')?.value || 'tutti i settori';
+  const anno      = document.getElementById('matrix-anno')?.value    || 'tutti gli anni';
+  if (!listEl || !listEl.children.length) { showToast('Nessun conflitto da stampare'); return; }
+
+  const oggi = new Date().toLocaleDateString('it-IT', { day:'2-digit', month:'long', year:'numeric' });
+  const righe = Array.from(listEl.children).map(li => {
+    const icon = li.textContent.trim().startsWith('🔄') ? '🔄' : '⚡';
+    const testo = li.textContent.trim().replace(/^[🔄⚡]\s*/, '');
+    const colore = icon === '🔄' ? '#b07010' : '#c03020';
+    return `<tr>
+      <td style="padding:6px 10px;font-size:13px;color:${colore};border-bottom:1px solid #e0d8cc;vertical-align:top">${icon}</td>
+      <td style="padding:6px 10px;font-size:13px;color:#2a2520;border-bottom:1px solid #e0d8cc;line-height:1.6;font-family:'Courier New',monospace">${testo}</td>
+    </tr>`;
+  }).join('');
+
+  const html = `<!DOCTYPE html>
+<html lang="it"><head><meta charset="UTF-8">
+<title>Report Conflitti Matrix — SMP Scavo</title>
+<style>
+  body { font-family: Georgia, serif; background: #faf8f3; color: #2a2520; margin: 0; padding: 30px 40px; }
+  h1 { font-size: 20px; color: #8a5c1a; border-bottom: 2px solid #c9963a; padding-bottom: 8px; margin-bottom: 4px; }
+  .meta { font-size: 12px; color: #7a6f60; margin-bottom: 24px; font-family: 'Courier New', monospace; }
+  table { width: 100%; border-collapse: collapse; background: white; box-shadow: 0 1px 4px rgba(0,0,0,0.08); }
+  thead th { background: #2a2520; color: #c9963a; padding: 8px 10px; font-size: 12px; text-align: left; font-family: 'Courier New', monospace; letter-spacing: 0.06em; }
+  tr:hover td { background: #fdf5e8; }
+  .footer { margin-top: 20px; font-size: 11px; color: #aaa; font-family: 'Courier New', monospace; }
+  @media print { body { padding: 10px 20px; } }
+</style>
+</head><body>
+<h1>⚠ Report Conflitti Stratigrafici</h1>
+<div class="meta">
+  Sito: Area Archeologica SMP — Settore: <strong>${settore}</strong> — Anno: <strong>${anno}</strong><br>
+  Generato il ${oggi} · ${titleEl?.textContent || ''}
+</div>
+<table>
+  <thead><tr><th style="width:32px">Tipo</th><th>Descrizione conflitto</th></tr></thead>
+  <tbody>${righe}</tbody>
+</table>
+<div class="footer">SMP Scavo · Archivio Documentazione di Scavo · report generato automaticamente</div>
+</body></html>`;
+
+  const w = window.open('', '_blank', 'width=820,height=600');
+  w.document.write(html);
+  w.document.close();
+  w.focus();
+  w.print();
+}
+
+
 function toggleDropdown(id) {
   const dd = document.getElementById(id);
   if (!dd) return;
@@ -6260,9 +6314,9 @@ function showToast(msg) {
   <script>
     if ('serviceWorker' in navigator && !location.hostname.includes('claudeusercontent.com')) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./service-worker.js?v=45')
+        navigator.serviceWorker.register('./service-worker.js?v=46')
           .then(reg => {
-            console.log('SW registrato v45:', reg.scope);
+            console.log('SW registrato v46:', reg.scope);
             // Forza aggiornamento immediato se c'è una nuova versione
             reg.update();
           })
