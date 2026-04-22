@@ -1,4 +1,4 @@
-const CACHE_NAME = 'smp-scavo-v52';
+const CACHE_NAME = 'smp-scavo-v53';
 
 const STATIC_ASSETS = [
   './',

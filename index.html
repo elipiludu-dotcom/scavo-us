@@ -5,7 +5,7 @@
   <!-- PWA -->
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#C9963A">
-  <meta name="app-version" content="52">
+  <meta name="app-version" content="53">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="SMP Scavo">
@@ -1476,7 +1476,7 @@
         <div style="display:flex;gap:6px;margin-left:auto;align-items:center;flex-wrap:wrap">
           <span id="matrix-info" style="font-size:0.72rem;color:var(--muted);font-family:'Space Mono',monospace;white-space:nowrap"></span>
           <button class="btn btn-secondary" onclick="exportMatrixSVG()" style="font-size:0.72rem;padding:5px 10px;white-space:nowrap">⬇ SVG</button>
-          <button class="btn btn-secondary" onclick="exportMatrixPNG()" style="font-size:0.72rem;padding:5px 10px;white-space:nowrap">⬇ PNG</button>
+          <button class="btn btn-secondary" onclick="exportMatrixPDF()" style="font-size:0.72rem;padding:5px 10px;white-space:nowrap">⬇ PDF</button>
           <button class="btn btn-secondary" onclick="printMatrixConflicts()" id="btn-print-conflicts" style="font-size:0.72rem;padding:5px 10px;white-space:nowrap;display:none">🖨 Report conflitti</button>
           <button class="btn btn-secondary" onclick="showView('list')" style="font-size:0.72rem;padding:5px 10px;white-space:nowrap">← Home</button>
         </div>
@@ -6526,97 +6526,88 @@ function exportMatrixSVG() {
   showToast('✓ SVG esportato');
 }
 
-function exportMatrixPNG() {
+function exportMatrixPDF() {
   const svg = document.getElementById('matrix-svg');
   if (!svg || !svg.innerHTML.trim()) { showToast('⚠ Genera prima il matrix'); return; }
   const settore = document.getElementById('matrix-settore')?.value || 'tutti';
   const anno    = document.getElementById('matrix-anno')?.value    || 'tutti';
 
-  const svgW = parseFloat(svg.getAttribute('width'))  || 800;
-  const svgH = parseFloat(svg.getAttribute('height')) || 600;
+  showToast('⏳ Generazione PDF…');
 
-  // A4 portrait 150dpi = 1240×1754, landscape = 1754×1240
-  // A3 portrait 150dpi = 1754×2480, landscape = 2480×1754
-  // Usiamo portrait perché il matrix è tipicamente più alto che largo
-  const MARGIN = 80;
-
-  // Scegli A3 se il grafo è grande, A4 altrimenti
-  let pageW, pageH, fmt;
-  if (svgW > 600 || svgH > 900) {
-    pageW = 2480; pageH = 3508; fmt = 'A3';  // A3 portrait 300dpi equiv
-  } else {
-    pageW = 1748; pageH = 2480; fmt = 'A4';  // A4 portrait
+  // Carica svg2pdf.js se non ancora caricato, poi jsPDF
+  function loadSvg2pdf() {
+    return new Promise((resolve, reject) => {
+      if (window.svg2pdf) { resolve(); return; }
+      const s = document.createElement('script');
+      s.src = 'https://cdnjs.cloudflare.com/ajax/libs/svg2pdf.js/2.2.3/svg2pdf.umd.min.js';
+      s.onload = resolve;
+      s.onerror = reject;
+      document.head.appendChild(s);
+    });
   }
 
-  // Scala il grafo per riempire la pagina con margini
-  const scaleX = (pageW - MARGIN * 2) / svgW;
-  const scaleY = (pageH - MARGIN * 2 - 60) / svgH; // 60 per footer
-  const scale  = Math.min(scaleX, scaleY);
+  Promise.all([loadJsPDF(), loadSvg2pdf()]).then(async () => {
+    try {
+      const { jsPDF } = window.jspdf;
+      const svgW = parseFloat(svg.getAttribute('width'))  || 800;
+      const svgH = parseFloat(svg.getAttribute('height')) || 600;
 
-  const drawW = Math.round(svgW * scale);
-  const drawH = Math.round(svgH * scale);
-  // Centra orizzontalmente
-  const offsetX = Math.round((pageW - drawW) / 2);
+      // Scegli orientamento e formato in base alle proporzioni
+      const isLandscape = svgW > svgH;
+      const fmt   = (svgW > 600 || svgH > 800) ? 'a3' : 'a4';
+      const ori   = isLandscape ? 'landscape' : 'portrait';
 
-  // Crea SVG con sfondo bianco e colori adatti alla stampa
-  const svgClone = svg.cloneNode(true);
-  svgClone.setAttribute('width', svgW);
-  svgClone.setAttribute('height', svgH);
+      const doc = new jsPDF({ orientation: ori, unit: 'mm', format: fmt });
+      const pageW = doc.internal.pageSize.getWidth();
+      const pageH = doc.internal.pageSize.getHeight();
+      const MARGIN = 10; // mm
 
-  // Cambia solo il rettangolo di sfondo (rgba dark) → bianco
-  // e adatta i colori scuri del tema per la stampa
-  let svgStr = new XMLSerializer().serializeToString(svgClone);
-  // Sfondo SVG → bianco
-  svgStr = svgStr.replace(/fill="rgba\(30,27,18[^"]*\)"/g, 'fill="rgba(255,255,255,0.92)"');
-  svgStr = svgStr.replace(/fill="#2e2b26"/g, 'fill="#ffffff"');
-  svgStr = svgStr.replace(/fill="#1e1b12"/g, 'fill="#ffffff"');
-  svgStr = svgStr.replace(/fill="#252219"/g, 'fill="#f5f2ec"');
-  // Colori testo/tratti: versioni scure per stampa
-  svgStr = svgStr.replace(/#C9963A/g, '#8B5E10');
-  svgStr = svgStr.replace(/#c9963a/g, '#8B5E10');
-  svgStr = svgStr.replace(/#ede5d8/g, '#1a1200');
-  svgStr = svgStr.replace(/#8a7f70/g, '#555555');
-  svgStr = svgStr.replace(/#d94f30/g, '#b03010');
-  svgStr = svgStr.replace(/#4a4540/g, '#cccccc');
+      // Scala per far stare il grafo nella pagina con margini
+      const scaleX = (pageW - MARGIN * 2) / svgW;
+      const scaleY = (pageH - MARGIN * 2 - 8) / svgH; // 8mm footer
+      const scale  = Math.min(scaleX, scaleY);
+      const drawW  = svgW * scale;
+      const drawH  = svgH * scale;
+      const offX   = (pageW - drawW) / 2;
 
-  const blob = new Blob([svgStr], { type: 'image/svg+xml;charset=utf-8' });
-  const url  = URL.createObjectURL(blob);
-  const img  = new Image();
+      // Clona SVG e adatta i colori per stampa su bianco
+      const clone = svg.cloneNode(true);
+      clone.setAttribute('width',  svgW);
+      clone.setAttribute('height', svgH);
+      // Sfondo SVG → bianco
+      const bgRect = clone.querySelector('rect');
+      if (bgRect) bgRect.setAttribute('fill', '#ffffff');
+      // Colori testo/tratti per stampa
+      let svgStr = new XMLSerializer().serializeToString(clone);
+      svgStr = svgStr
+        .replace(/#2e2b26/g, '#ffffff').replace(/#1e1b12/g, '#ffffff')
+        .replace(/rgba\(30,27,18[^)]*\)/g, 'rgba(255,255,255,0.9)')
+        .replace(/#C9963A/g, '#8B5E10').replace(/#c9963a/g, '#8B5E10')
+        .replace(/#ede5d8/g, '#111111').replace(/#8a7f70/g, '#555555')
+        .replace(/#d94f30/g, '#b03010').replace(/#4a4540/g, '#cccccc');
 
-  img.onload = () => {
-    const canvas = document.createElement('canvas');
-    canvas.width  = pageW;
-    canvas.height = pageH;
-    const ctx = canvas.getContext('2d');
+      // Reinserisce come elemento DOM per svg2pdf
+      const parser = new DOMParser();
+      const svgDoc = parser.parseFromString(svgStr, 'image/svg+xml');
+      const svgEl  = svgDoc.documentElement;
 
-    // Sfondo bianco pieno
-    ctx.fillStyle = '#ffffff';
-    ctx.fillRect(0, 0, pageW, pageH);
+      await svg2pdf(svgEl, doc, { x: offX, y: MARGIN, width: drawW, height: drawH });
 
-    // Disegna il grafo scalato e centrato
-    ctx.drawImage(img, offsetX, MARGIN, drawW, drawH);
+      // Footer
+      const oggi = new Date().toLocaleDateString('it-IT', { day:'2-digit', month:'long', year:'numeric' });
+      doc.setFontSize(7);
+      doc.setTextColor(140, 130, 120);
+      doc.text('Area Archeologica SMP — Peccioli (PI)', MARGIN, pageH - 4);
+      doc.text(`Matrix Stratigrafica · Settore: ${settore} · Anno: ${anno}`, pageW / 2, pageH - 4, { align: 'center' });
+      doc.text(oggi, pageW - MARGIN, pageH - 4, { align: 'right' });
 
-    // Footer
-    const oggi  = new Date().toLocaleDateString('it-IT', { day:'2-digit', month:'long', year:'numeric' });
-    const footY = pageH - 30;
-    ctx.fillStyle = '#888888';
-    ctx.font = '22px monospace';
-    ctx.textAlign = 'left';
-    ctx.fillText('Area Archeologica SMP — Peccioli (PI)', MARGIN, footY);
-    ctx.textAlign = 'center';
-    ctx.fillText(`Matrix Stratigrafica · Settore: ${settore} · Anno: ${anno}`, pageW / 2, footY);
-    ctx.textAlign = 'right';
-    ctx.fillText(oggi, pageW - MARGIN, footY);
-
-    URL.revokeObjectURL(url);
-    const a = document.createElement('a');
-    a.download = `matrix_${settore}_${anno}.png`;
-    a.href = canvas.toDataURL('image/png');
-    a.click();
-    showToast(`✓ PNG esportato (${fmt} portrait, sfondo bianco)`);
-  };
-  img.onerror = () => { showToast('⚠ Errore esportazione PNG'); URL.revokeObjectURL(url); };
-  img.src = url;
+      doc.save(`matrix_${settore}_${anno}.pdf`);
+      showToast(`✓ PDF esportato (${fmt.toUpperCase()} ${ori === 'landscape' ? 'landscape' : 'portrait'})`);
+    } catch (err) {
+      console.error('PDF export error:', err);
+      showToast('⚠ Errore generazione PDF');
+    }
+  }).catch(() => showToast('⚠ Impossibile caricare libreria PDF'));
 }
 
 function printMatrixConflicts() {
@@ -6714,9 +6705,9 @@ function showToast(msg) {
   <script>
     if ('serviceWorker' in navigator && !location.hostname.includes('claudeusercontent.com')) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./service-worker.js?v=52')
+        navigator.serviceWorker.register('./service-worker.js?v=53')
           .then(reg => {
-            console.log('SW registrato v52:', reg.scope);
+            console.log('SW registrato v53:', reg.scope);
             // Forza aggiornamento immediato se c'è una nuova versione
             reg.update();
           })
