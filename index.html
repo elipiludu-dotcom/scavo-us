@@ -5,7 +5,7 @@
   <!-- PWA -->
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#C9963A">
-  <meta name="app-version" content="54">
+  <meta name="app-version" content="55">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="SMP Scavo">
@@ -6535,12 +6535,15 @@ function exportMatrixPDF() {
   const svgW = parseFloat(svg.getAttribute('width'))  || 800;
   const svgH = parseFloat(svg.getAttribute('height')) || 600;
   const oggi  = new Date().toLocaleDateString('it-IT', { day:'2-digit', month:'long', year:'numeric' });
+  const isLandscape = svgW > svgH * 1.1;
+  const pageSize = (svgW > 500 || svgH > 700) ? 'A3' : 'A4';
 
-  // Adatta i colori per stampa su bianco
+  // Adatta colori per stampa su bianco
   const clone = svg.cloneNode(true);
-  clone.setAttribute('width',  '100%');
-  clone.setAttribute('height', 'auto');
-  clone.style.maxWidth = '100%';
+  clone.removeAttribute('style');
+  clone.setAttribute('width',  svgW);
+  clone.setAttribute('height', svgH);
+  clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
   let svgStr = new XMLSerializer().serializeToString(clone);
   svgStr = svgStr
     .replace(/fill="#2e2b26"/g,  'fill="#ffffff"')
@@ -6549,74 +6552,75 @@ function exportMatrixPDF() {
     .replace(/rgba\(30,27,18[^)]*\)/g, 'rgba(255,255,255,0.92)')
     .replace(/#C9963A/g, '#8B5E10').replace(/#c9963a/g, '#8B5E10')
     .replace(/#ede5d8/g, '#111111').replace(/#8a7f70/g, '#555555')
-    .replace(/#d94f30/g, '#b03010').replace(/#4a4540/g, '#bbbbbb')
+    .replace(/#d94f30/g, '#b03010').replace(/#4a4540/g, '#cccccc')
     .replace(/#7aaddd/g, '#3a7ab0').replace(/#4a90d9/g, '#2060a0');
 
-  const isLandscape = svgW > svgH * 1.2;
+  const FOOTER_H = 8; // mm
 
   const html = `<!DOCTYPE html>
 <html lang="it">
 <head>
-  <meta charset="UTF-8">
-  <title>Matrix Stratigrafica — ${settore} — ${anno}</title>
-  <style>
-    @page {
-      size: ${isLandscape ? 'A3 landscape' : 'A3 portrait'};
-      margin: 10mm 12mm 14mm 12mm;
-    }
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body {
-      font-family: 'Courier New', monospace;
-      background: white;
-      color: #333;
-    }
-    .wrap {
-      width: 100%;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-    }
-    .svg-wrap {
-      width: 100%;
-      display: flex;
-      justify-content: center;
-    }
-    .svg-wrap svg {
-      width: 100%;
-      height: auto;
-    }
-    .footer {
-      width: 100%;
-      display: flex;
-      justify-content: space-between;
-      font-size: 7pt;
-      color: #888;
-      margin-top: 4mm;
-      padding-top: 2mm;
-      border-top: 0.3px solid #ccc;
-    }
-    @media print {
-      html, body { width: 100%; }
-    }
-  </style>
+<meta charset="UTF-8">
+<title>Matrix — ${settore} — ${anno}</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  @page {
+    size: ${pageSize} ${isLandscape ? 'landscape' : 'portrait'};
+    margin: 8mm;
+  }
+  html, body {
+    width: 100%;
+    height: 100%;
+    background: white;
+  }
+  body {
+    display: flex;
+    flex-direction: column;
+    height: calc(100vh - 16mm);
+    font-family: 'Courier New', monospace;
+  }
+  .svg-container {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+  }
+  .svg-container svg {
+    width: 100%;
+    height: 100%;
+    display: block;
+  }
+  .footer {
+    flex-shrink: 0;
+    height: ${FOOTER_H}mm;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    font-size: 6.5pt;
+    color: #888;
+    border-top: 0.3px solid #ddd;
+    padding-top: 1.5mm;
+    margin-top: 2mm;
+  }
+</style>
 </head>
 <body>
-  <div class="wrap">
-    <div class="svg-wrap">${svgStr}</div>
-    <div class="footer">
-      <span>Area Archeologica SMP — Peccioli (PI)</span>
-      <span>Matrix Stratigrafica &nbsp;·&nbsp; Settore: ${settore} &nbsp;·&nbsp; Anno: ${anno}</span>
-      <span>${oggi}</span>
-    </div>
+  <div class="svg-container">${svgStr}</div>
+  <div class="footer">
+    <span>Area Archeologica SMP — Peccioli (PI)</span>
+    <span>Matrix Stratigrafica &nbsp;·&nbsp; Settore: ${settore} &nbsp;·&nbsp; Anno: ${anno}</span>
+    <span>${oggi}</span>
   </div>
   <script>
-    window.onload = () => { window.print(); };
+    window.addEventListener('load', () => setTimeout(() => window.print(), 300));
   <\/script>
 </body>
 </html>`;
 
   const w = window.open('', '_blank');
   if (!w) { showToast('⚠ Popup bloccato — consenti i popup per questo sito'); return; }
+  w.document.open();
   w.document.write(html);
   w.document.close();
 }
@@ -6716,9 +6720,9 @@ function showToast(msg) {
   <script>
     if ('serviceWorker' in navigator && !location.hostname.includes('claudeusercontent.com')) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./service-worker.js?v=54')
+        navigator.serviceWorker.register('./service-worker.js?v=55')
           .then(reg => {
-            console.log('SW registrato v54:', reg.scope);
+            console.log('SW registrato v55:', reg.scope);
             // Forza aggiornamento immediato se c'è una nuova versione
             reg.update();
           })
