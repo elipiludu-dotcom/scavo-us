@@ -5,7 +5,7 @@
   <!-- PWA -->
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#C9963A">
-  <meta name="app-version" content="59">
+  <meta name="app-version" content="60">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="SMP Scavo">
@@ -203,6 +203,7 @@
   .content { max-width: 800px; margin: 0 auto; padding: 0 0 80px; }
   .view { display: none; }
   .view.active { display: block; }
+  #view-matrix.active { display: flex; flex-direction: column; height: calc(100dvh - 52px); overflow: hidden; }
 
   /* LIST VIEW */
   .list-toolbar { padding: 16px 16px 8px; display: flex; gap: 10px; align-items: center; }
@@ -1461,7 +1462,7 @@
     </div>
 
     <!-- MATRIX DI HARRIS -->
-    <div id="view-matrix" class="view" style="display:flex;flex-direction:column;height:calc(100dvh - 52px);max-height:calc(100dvh - 52px);overflow:hidden">
+    <div id="view-matrix" class="view">
       <!-- Toolbar -->
       <div style="flex-shrink:0;display:flex;align-items:center;gap:8px;padding:8px 12px;border-bottom:1px solid var(--border);flex-wrap:wrap">
         <h2 style="margin:0;font-family:'Patrick Hand',cursive;color:var(--earth);font-size:1.1rem;white-space:nowrap">📊 Matrix</h2>
@@ -6725,9 +6726,9 @@ function showToast(msg) {
   <script>
     if ('serviceWorker' in navigator && !location.hostname.includes('claudeusercontent.com')) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./service-worker.js?v=59')
+        navigator.serviceWorker.register('./service-worker.js?v=60')
           .then(reg => {
-            console.log('SW registrato v59:', reg.scope);
+            console.log('SW registrato v60:', reg.scope);
             // Forza aggiornamento immediato se c'è una nuova versione
             reg.update();
           })
