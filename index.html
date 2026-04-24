@@ -5,7 +5,7 @@
   <!-- PWA -->
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#C9963A">
-  <meta name="app-version" content="63">
+  <meta name="app-version" content="64">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="SMP Scavo">
@@ -2353,9 +2353,10 @@ function addRapporto(prefill = {}) {
       <option value="tagliato_da" ${prefill.tipo==='tagliato_da'?'selected':''}>Tagliato da</option>
       <option value="riempie" ${prefill.tipo==='riempie'?'selected':''}>Riempie</option>
       <option value="riempito_da" ${prefill.tipo==='riempito_da'?'selected':''}>Riempito da</option>
+      <option value="gli_si_appoggia" ${prefill.tipo==='gli_si_appoggia'?'selected':''}>Gli si appoggia</option>
+      <option value="si_appoggia_a" ${prefill.tipo==='si_appoggia_a'?'selected':''}>Si appoggia a</option>
     </select>
-    <input type="text" id="${id}_us" placeholder="N° US" value="${prefill.us||''}" style="max-width:80px">
-    <input type="text" id="${id}_note" placeholder="Note" value="${prefill.note||''}">
+    <input type="text" id="${id}_us" placeholder="N° US" value="${prefill.us||''}" style="flex:1;min-width:0">
     <button class="btn-rm" onclick="document.getElementById('${id}').remove()">×</button>`;
   document.getElementById('rapportiList').appendChild(div);
 }
@@ -2364,7 +2365,6 @@ function getRapporti() {
   return Array.from(document.querySelectorAll('#rapportiList > [id^="rap_"]')).map(div => ({
     tipo: div.querySelector('[id$="_tipo"]').value,
     us: div.querySelector('[id$="_us"]').value,
-    note: div.querySelector('[id$="_note"]').value,
   })).filter(r => r.us);
 }
 
@@ -6735,9 +6735,9 @@ function showToast(msg) {
   <script>
     if ('serviceWorker' in navigator && !location.hostname.includes('claudeusercontent.com')) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./service-worker.js?v=63')
+        navigator.serviceWorker.register('./service-worker.js?v=64')
           .then(reg => {
-            console.log('SW registrato v63:', reg.scope);
+            console.log('SW registrato v64:', reg.scope);
             // Forza aggiornamento immediato se c'è una nuova versione
             reg.update();
           })
