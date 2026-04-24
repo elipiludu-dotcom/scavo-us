@@ -5,7 +5,7 @@
   <!-- PWA -->
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#C9963A">
-  <meta name="app-version" content="62">
+  <meta name="app-version" content="63">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="SMP Scavo">
@@ -1507,17 +1507,11 @@
       <div id="matrix-container" style="width:100%;height:calc(100dvh - 270px);min-height:280px;overflow:hidden;background:var(--parchment-light);cursor:grab;position:relative;user-select:none">
         <svg id="matrix-svg" style="display:block;position:absolute;top:0;left:0;transform-origin:0 0"></svg>
       </div>
-      <!-- Bottone PDF: visibile solo su mobile -->
+      <!-- Bottone PDF: visibile solo su mobile, gestito da JS -->
       <div id="matrix-mobile-btn" style="display:none;width:100%;padding:40px 20px;flex-direction:column;align-items:center;justify-content:center;gap:16px;background:var(--parchment-light)">
         <div style="font-family:'Space Mono',monospace;font-size:0.72rem;color:var(--muted);text-align:center">Il grafico è ottimizzato per la visualizzazione su desktop.<br>Su mobile puoi aprirlo come PDF.</div>
         <button onclick="exportMatrixPDF()" style="padding:14px 28px;background:var(--earth);color:#1e1b12;border:none;border-radius:4px;font-family:'Patrick Hand',cursive;font-size:1.1rem;cursor:pointer;font-weight:bold">📄 Visualizza il grafico qui</button>
       </div>
-      <style>
-        @media (max-width: 768px) {
-          #matrix-container { display: none !important; }
-          #matrix-mobile-btn { display: flex !important; }
-        }
-      </style>
     </div>
 
     <!-- DIARIO DI SCAVO -->
@@ -6025,6 +6019,18 @@ function renderMatrix() {
   });
 
   document.getElementById('matrix-info').textContent = `${sel.length} US`;
+
+  // Rilevamento mobile: su schermi piccoli mostra bottone PDF, nasconde SVG
+  const isMobile = window.innerWidth <= 768 || /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+  const mobileBtn = document.getElementById('matrix-mobile-btn');
+  const mxContainer = document.getElementById('matrix-container');
+  if (isMobile) {
+    if (mxContainer) mxContainer.style.display = 'none';
+    if (mobileBtn)  { mobileBtn.style.display = 'flex'; }
+  } else {
+    if (mxContainer) mxContainer.style.display = '';
+    if (mobileBtn)   mobileBtn.style.display = 'none';
+  }
   const svg = document.getElementById('matrix-svg');
   svg.innerHTML = '';
   if (!sel.length) return;
@@ -6562,7 +6568,7 @@ function exportMatrixPDF() {
   clone.removeAttribute('width');
   clone.removeAttribute('height');
 
-  // Adatta colori per sfondo bianco e sostituisce font con equivalenti di sistema
+  // Adatta colori per sfondo bianco
   let svgStr = new XMLSerializer().serializeToString(clone);
   svgStr = svgStr
     .replace(/fill="#2e2b26"/g,  'fill="#ffffff"')
@@ -6572,15 +6578,13 @@ function exportMatrixPDF() {
     .replace(/#C9963A/g, '#8B5E10').replace(/#c9963a/g, '#8B5E10')
     .replace(/#ede5d8/g, '#111111').replace(/#8a7f70/g, '#555555')
     .replace(/#d94f30/g, '#b03010').replace(/#4a4540/g, '#cccccc')
-    .replace(/#7aaddd/g, '#3a7ab0').replace(/#4a90d9/g, '#2060a0')
-    // Font: Patrick Hand → Georgia (leggibile e disponibile ovunque)
-    .replace(/Patrick Hand, cursive/g, 'Georgia, serif')
-    .replace(/Patrick Hand/g, 'Georgia');
+    .replace(/#7aaddd/g, '#3a7ab0').replace(/#4a90d9/g, '#2060a0');
 
   const html = `<!DOCTYPE html>
 <html lang="it"><head>
 <meta charset="UTF-8">
 <title>Matrix — ${settore} — ${anno}</title>
+<link href="https://fonts.googleapis.com/css2?family=Patrick+Hand&family=Space+Mono&display=swap" rel="stylesheet">
 <style>
   * { margin:0; padding:0; box-sizing:border-box; }
   @page {
@@ -6625,7 +6629,7 @@ function exportMatrixPDF() {
     <span>${oggi}</span>
   </div>
   <script>
-    window.addEventListener('load', () => setTimeout(() => window.print(), 400));
+    window.addEventListener('load', () => setTimeout(() => window.print(), 1200));
   <\/script>
 </body></html>`;
 
@@ -6731,9 +6735,9 @@ function showToast(msg) {
   <script>
     if ('serviceWorker' in navigator && !location.hostname.includes('claudeusercontent.com')) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./service-worker.js?v=62')
+        navigator.serviceWorker.register('./service-worker.js?v=63')
           .then(reg => {
-            console.log('SW registrato v62:', reg.scope);
+            console.log('SW registrato v63:', reg.scope);
             // Forza aggiornamento immediato se c'è una nuova versione
             reg.update();
           })
