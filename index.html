@@ -5,7 +5,7 @@
   <!-- PWA -->
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#C9963A">
-  <meta name="app-version" content="60">
+  <meta name="app-version" content="61">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="SMP Scavo">
@@ -203,7 +203,6 @@
   .content { max-width: 800px; margin: 0 auto; padding: 0 0 80px; }
   .view { display: none; }
   .view.active { display: block; }
-  #view-matrix.active { display: flex; flex-direction: column; height: calc(100dvh - 52px); overflow: hidden; }
 
   /* LIST VIEW */
   .list-toolbar { padding: 16px 16px 8px; display: flex; gap: 10px; align-items: center; }
@@ -1464,45 +1463,47 @@
     <!-- MATRIX DI HARRIS -->
     <div id="view-matrix" class="view">
       <!-- Toolbar -->
-      <div style="flex-shrink:0;display:flex;align-items:center;gap:8px;padding:8px 12px;border-bottom:1px solid var(--border);flex-wrap:wrap">
-        <h2 style="margin:0;font-family:'Patrick Hand',cursive;color:var(--earth);font-size:1.1rem;white-space:nowrap">📊 Matrix</h2>
+      <div style="display:flex;align-items:center;gap:10px;padding:10px 16px;border-bottom:1px solid var(--border);flex-wrap:wrap">
+        <h2 style="margin:0;font-family:'Patrick Hand',cursive;color:var(--earth);font-size:1.2rem;white-space:nowrap">📊 Matrix</h2>
         <select id="matrix-settore" onchange="renderMatrix()"
-          style="padding:5px 8px;background:var(--parchment-light);border:1px solid var(--border);border-radius:3px;color:var(--ink);font-size:0.75rem;font-family:'Space Mono',monospace">
+          style="padding:6px 10px;background:var(--parchment-light);border:1px solid var(--border);border-radius:3px;color:var(--ink);font-size:0.8rem;font-family:'Space Mono',monospace">
           <option value="">— tutti i settori —</option>
         </select>
         <select id="matrix-anno" onchange="renderMatrix()"
-          style="padding:5px 8px;background:var(--parchment-light);border:1px solid var(--border);border-radius:3px;color:var(--ink);font-size:0.75rem;font-family:'Space Mono',monospace">
+          style="padding:6px 10px;background:var(--parchment-light);border:1px solid var(--border);border-radius:3px;color:var(--ink);font-size:0.8rem;font-family:'Space Mono',monospace">
           <option value="">— tutti gli anni —</option>
         </select>
-        <div style="display:flex;gap:5px;margin-left:auto;align-items:center;flex-wrap:wrap">
-          <span id="matrix-info" style="font-size:0.68rem;color:var(--muted);font-family:'Space Mono',monospace;white-space:nowrap"></span>
-          <button class="btn btn-secondary" onclick="exportMatrixSVG()" style="font-size:0.68rem;padding:4px 8px;white-space:nowrap">⬇ SVG</button>
-          <button class="btn btn-secondary" onclick="exportMatrixPDF()" style="font-size:0.68rem;padding:4px 8px;white-space:nowrap">⬇ PDF</button>
-          <button class="btn btn-secondary" onclick="printMatrixConflicts()" id="btn-print-conflicts" style="font-size:0.68rem;padding:4px 8px;white-space:nowrap;display:none">🖨 Conflitti</button>
-          <button class="btn btn-secondary" onclick="showView('list')" style="font-size:0.68rem;padding:4px 8px;white-space:nowrap">← Home</button>
+        <div style="display:flex;gap:6px;margin-left:auto;align-items:center;flex-wrap:wrap">
+          <span id="matrix-info" style="font-size:0.72rem;color:var(--muted);font-family:'Space Mono',monospace;white-space:nowrap"></span>
+          <button class="btn btn-secondary" onclick="exportMatrixSVG()" style="font-size:0.72rem;padding:5px 10px;white-space:nowrap">⬇ SVG</button>
+          <button class="btn btn-secondary" onclick="exportMatrixPDF()" style="font-size:0.72rem;padding:5px 10px;white-space:nowrap">⬇ PDF</button>
+          <button class="btn btn-secondary" onclick="printMatrixConflicts()" id="btn-print-conflicts" style="font-size:0.72rem;padding:5px 10px;white-space:nowrap;display:none">🖨 Report conflitti</button>
+          <button class="btn btn-secondary" onclick="showView('list')" style="font-size:0.72rem;padding:5px 10px;white-space:nowrap">← Home</button>
         </div>
       </div>
       <!-- Pannello warning conflitti -->
-      <div id="matrix-warnings" style="flex-shrink:0;display:none;background:#2a1a1a;border-bottom:2px solid var(--accent);padding:8px 12px">
+      <div id="matrix-warnings" style="display:none;background:#2a1a1a;border-bottom:2px solid var(--accent);padding:10px 16px">
         <div style="display:flex;align-items:center;gap:8px;cursor:pointer" onclick="toggleMatrixWarnings()">
           <span style="color:var(--accent);font-size:1rem">⚠</span>
-          <span id="matrix-warnings-title" style="font-family:'Space Mono',monospace;font-size:0.68rem;color:var(--accent);font-weight:700;flex:1"></span>
-          <span id="matrix-warnings-toggle" style="font-family:'Space Mono',monospace;font-size:0.62rem;color:var(--muted)">▼ mostra</span>
+          <span id="matrix-warnings-title" style="font-family:'Space Mono',monospace;font-size:0.72rem;color:var(--accent);font-weight:700;flex:1"></span>
+          <span id="matrix-warnings-toggle" style="font-family:'Space Mono',monospace;font-size:0.65rem;color:var(--muted)">▼ mostra</span>
         </div>
-        <div id="matrix-warnings-body" style="display:none;margin-top:8px">
-          <ul id="matrix-warnings-list" style="list-style:none;padding:0;margin:0;display:flex;flex-direction:column;gap:4px"></ul>
-          <p style="margin-top:6px;font-family:'Space Mono',monospace;font-size:0.6rem;color:var(--muted)">I nodi in rosso corrispondono alle US coinvolte. Correggi i rapporti nelle relative schede.</p>
+        <div id="matrix-warnings-body" style="display:none;margin-top:10px;display:none">
+          <ul id="matrix-warnings-list" style="list-style:none;padding:0;margin:0;display:flex;flex-direction:column;gap:5px"></ul>
+          <p style="margin-top:8px;font-family:'Space Mono',monospace;font-size:0.62rem;color:var(--muted)">I nodi evidenziati in rosso nella matrix corrispondono alle US coinvolte. Correggi i rapporti stratigrafici nelle relative schede.</p>
         </div>
       </div>
       <!-- Controlli zoom -->
-      <div style="flex-shrink:0;display:flex;align-items:center;gap:6px;padding:5px 12px;background:var(--parchment-light);border-bottom:1px solid var(--border)">
-        <button onclick="matrixZoom(1.25)"  style="width:28px;height:28px;border:1px solid var(--border);background:var(--parchment);color:var(--ink);border-radius:3px;cursor:pointer;font-size:1rem;display:flex;align-items:center;justify-content:center">+</button>
-        <button onclick="matrixZoom(0.8)"   style="width:28px;height:28px;border:1px solid var(--border);background:var(--parchment);color:var(--ink);border-radius:3px;cursor:pointer;font-size:1rem;display:flex;align-items:center;justify-content:center">−</button>
+      <div style="display:flex;align-items:center;gap:6px;padding:6px 14px;background:var(--parchment-light);border-bottom:1px solid var(--border)">
+        <span style="font-family:'Space Mono',monospace;font-size:0.6rem;color:var(--muted);margin-right:4px;text-transform:uppercase;letter-spacing:0.08em">Zoom</span>
+        <button onclick="matrixZoom(1.25)"  style="width:28px;height:28px;border:1px solid var(--border);background:var(--parchment);color:var(--ink);border-radius:3px;cursor:pointer;font-size:1rem;line-height:1;display:flex;align-items:center;justify-content:center">+</button>
+        <button onclick="matrixZoom(0.8)"   style="width:28px;height:28px;border:1px solid var(--border);background:var(--parchment);color:var(--ink);border-radius:3px;cursor:pointer;font-size:1rem;line-height:1;display:flex;align-items:center;justify-content:center">−</button>
         <button onclick="matrixZoomReset()" style="padding:0 10px;height:28px;border:1px solid var(--border);background:var(--parchment);color:var(--muted);border-radius:3px;cursor:pointer;font-family:'Space Mono',monospace;font-size:0.62rem;white-space:nowrap">↺ Reset</button>
-        <span id="matrix-zoom-label" style="font-family:'Space Mono',monospace;font-size:0.62rem;color:var(--muted);min-width:36px">100%</span>
+        <span id="matrix-zoom-label" style="font-family:'Space Mono',monospace;font-size:0.62rem;color:var(--muted);min-width:38px">100%</span>
+        <span style="font-family:'Space Mono',monospace;font-size:0.6rem;color:var(--muted);margin-left:6px;opacity:0.6">🖱 rotella = zoom · drag = sposta</span>
       </div>
-      <!-- SVG container: flex:1 prende tutto lo spazio rimanente -->
-      <div id="matrix-container" style="flex:1;min-height:0;overflow:hidden;background:var(--parchment-light);cursor:grab;position:relative;user-select:none;-webkit-user-select:none">
+      <!-- SVG container pan/zoom -->
+      <div id="matrix-container" style="width:100%;height:calc(100dvh - 270px);min-height:280px;overflow:hidden;background:var(--parchment-light);cursor:grab;position:relative;user-select:none">
         <svg id="matrix-svg" style="display:block;position:absolute;top:0;left:0;transform-origin:0 0"></svg>
       </div>
     </div>
@@ -3508,8 +3509,7 @@ async function importFromExcel(input) {
         addRap('copre',           r['copre']);
         addRap('taglia',          r['taglia']);
         addRap('riempie',         r['riempie']);
-        // NB: 'sopra' e 'sotto' NON sono rapporti — sono riepiloghi per l'output PDF
-        // vengono salvati come campi dedicati post_riepilogo / ant_riepilogo
+        // NB: 'sopra' e 'sotto' NON sono rapporti — salvati come campi dedicati
 
         // — Stato conservazione —
         let stato_cons = '';
@@ -4103,8 +4103,6 @@ function drawICCDpage(doc, s) {
   // POSTERIORE A — solo numeri US, colonna sinistra della sequenza fisica
   const tipiPost = ['gli_si_appoggia','coperto_da','tagliato_da','riempito_da'];
   const tipiAnt  = ['si_appoggia_a','copre','taglia','riempie'];
-  // Usa i campi riepilogo dall'importazione Excel se presenti,
-  // altrimenti calcola dai rapporti (per schede inserite manualmente)
   const postNums = s.post_riepilogo
     ? s.post_riepilogo
     : rapporti.filter(r=>tipiPost.includes(r.tipo)).map(r=>r.us).filter(Boolean).join(', ');
@@ -5924,16 +5922,13 @@ function matrixZoomReset() {
   const container = document.getElementById('matrix-container');
   const svg = document.getElementById('matrix-svg');
   if (!container || !svg) return;
-  const svgW = parseFloat(svg.getAttribute('width'))  || 800;
-  const svgH = parseFloat(svg.getAttribute('height')) || 600;
-  // Su iOS Safari clientWidth/clientHeight possono essere 0 al primo render
-  const contW = container.clientWidth  || window.innerWidth;
-  const contH = container.clientHeight || Math.max(window.innerHeight - 270, 280);
-  if (!contW || !svgW) return;
-  const scaleX = contW / svgW;
-  const scaleY = contH / svgH;
-  _mx.scale = Math.min(1, scaleX, scaleY) * 0.92;
-  _mx.tx = (contW - svgW * _mx.scale) / 2;
+  // Scala per far entrare il grafo nel viewport
+  const svgW = parseFloat(svg.getAttribute('width'))  || container.clientWidth;
+  const svgH = parseFloat(svg.getAttribute('height')) || container.clientHeight;
+  const scaleX = container.clientWidth  / svgW;
+  const scaleY = container.clientHeight / svgH;
+  _mx.scale = Math.min(1, scaleX, scaleY) * 0.95;
+  _mx.tx = (container.clientWidth  - svgW * _mx.scale) / 2;
   _mx.ty = 12;
   _mxApply();
 }
@@ -6231,12 +6226,7 @@ function renderMatrix() {
   _mx.scale = 1; _mx.tx = 0; _mx.ty = 0;
   _mxApply();
   _mxInitEvents();
-  // Doppio rAF + timeout: garantisce che il layout sia completato su iOS
-  requestAnimationFrame(() => requestAnimationFrame(() => {
-    matrixZoomReset();
-    // Fallback per iOS Safari che a volte ritarda il layout
-    setTimeout(() => matrixZoomReset(), 300);
-  }));
+  requestAnimationFrame(() => matrixZoomReset());
 
   // Sfondo
   const bg = svg.appendChild(document.createElementNS(ns, 'rect'));
@@ -6726,9 +6716,9 @@ function showToast(msg) {
   <script>
     if ('serviceWorker' in navigator && !location.hostname.includes('claudeusercontent.com')) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./service-worker.js?v=60')
+        navigator.serviceWorker.register('./service-worker.js?v=61')
           .then(reg => {
-            console.log('SW registrato v60:', reg.scope);
+            console.log('SW registrato v61:', reg.scope);
             // Forza aggiornamento immediato se c'è una nuova versione
             reg.update();
           })
