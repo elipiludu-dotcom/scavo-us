@@ -5,7 +5,7 @@
   <!-- PWA -->
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#C9963A">
-  <meta name="app-version" content="61">
+  <meta name="app-version" content="62">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="SMP Scavo">
@@ -1503,9 +1503,21 @@
         <span style="font-family:'Space Mono',monospace;font-size:0.6rem;color:var(--muted);margin-left:6px;opacity:0.6">🖱 rotella = zoom · drag = sposta</span>
       </div>
       <!-- SVG container pan/zoom -->
+      <!-- Container SVG: visibile solo su desktop -->
       <div id="matrix-container" style="width:100%;height:calc(100dvh - 270px);min-height:280px;overflow:hidden;background:var(--parchment-light);cursor:grab;position:relative;user-select:none">
         <svg id="matrix-svg" style="display:block;position:absolute;top:0;left:0;transform-origin:0 0"></svg>
       </div>
+      <!-- Bottone PDF: visibile solo su mobile -->
+      <div id="matrix-mobile-btn" style="display:none;width:100%;padding:40px 20px;flex-direction:column;align-items:center;justify-content:center;gap:16px;background:var(--parchment-light)">
+        <div style="font-family:'Space Mono',monospace;font-size:0.72rem;color:var(--muted);text-align:center">Il grafico è ottimizzato per la visualizzazione su desktop.<br>Su mobile puoi aprirlo come PDF.</div>
+        <button onclick="exportMatrixPDF()" style="padding:14px 28px;background:var(--earth);color:#1e1b12;border:none;border-radius:4px;font-family:'Patrick Hand',cursive;font-size:1.1rem;cursor:pointer;font-weight:bold">📄 Visualizza il grafico qui</button>
+      </div>
+      <style>
+        @media (max-width: 768px) {
+          #matrix-container { display: none !important; }
+          #matrix-mobile-btn { display: flex !important; }
+        }
+      </style>
     </div>
 
     <!-- DIARIO DI SCAVO -->
@@ -6550,7 +6562,7 @@ function exportMatrixPDF() {
   clone.removeAttribute('width');
   clone.removeAttribute('height');
 
-  // Adatta colori per sfondo bianco
+  // Adatta colori per sfondo bianco e sostituisce font con equivalenti di sistema
   let svgStr = new XMLSerializer().serializeToString(clone);
   svgStr = svgStr
     .replace(/fill="#2e2b26"/g,  'fill="#ffffff"')
@@ -6560,7 +6572,10 @@ function exportMatrixPDF() {
     .replace(/#C9963A/g, '#8B5E10').replace(/#c9963a/g, '#8B5E10')
     .replace(/#ede5d8/g, '#111111').replace(/#8a7f70/g, '#555555')
     .replace(/#d94f30/g, '#b03010').replace(/#4a4540/g, '#cccccc')
-    .replace(/#7aaddd/g, '#3a7ab0').replace(/#4a90d9/g, '#2060a0');
+    .replace(/#7aaddd/g, '#3a7ab0').replace(/#4a90d9/g, '#2060a0')
+    // Font: Patrick Hand → Georgia (leggibile e disponibile ovunque)
+    .replace(/Patrick Hand, cursive/g, 'Georgia, serif')
+    .replace(/Patrick Hand/g, 'Georgia');
 
   const html = `<!DOCTYPE html>
 <html lang="it"><head>
@@ -6716,9 +6731,9 @@ function showToast(msg) {
   <script>
     if ('serviceWorker' in navigator && !location.hostname.includes('claudeusercontent.com')) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./service-worker.js?v=61')
+        navigator.serviceWorker.register('./service-worker.js?v=62')
           .then(reg => {
-            console.log('SW registrato v61:', reg.scope);
+            console.log('SW registrato v62:', reg.scope);
             // Forza aggiornamento immediato se c'è una nuova versione
             reg.update();
           })
