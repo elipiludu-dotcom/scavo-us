@@ -5,7 +5,7 @@
   <!-- PWA -->
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#C9963A">
-  <meta name="app-version" content="57">
+  <meta name="app-version" content="58">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="SMP Scavo">
@@ -5925,13 +5925,16 @@ function matrixZoomReset() {
   const container = document.getElementById('matrix-container');
   const svg = document.getElementById('matrix-svg');
   if (!container || !svg) return;
-  // Scala per far entrare il grafo nel viewport
-  const svgW = parseFloat(svg.getAttribute('width'))  || container.clientWidth;
-  const svgH = parseFloat(svg.getAttribute('height')) || container.clientHeight;
-  const scaleX = container.clientWidth  / svgW;
-  const scaleY = container.clientHeight / svgH;
-  _mx.scale = Math.min(1, scaleX, scaleY) * 0.95;
-  _mx.tx = (container.clientWidth  - svgW * _mx.scale) / 2;
+  const svgW = parseFloat(svg.getAttribute('width'))  || 800;
+  const svgH = parseFloat(svg.getAttribute('height')) || 600;
+  // Su iOS Safari clientWidth/clientHeight possono essere 0 al primo render
+  const contW = container.clientWidth  || window.innerWidth;
+  const contH = container.clientHeight || Math.max(window.innerHeight - 270, 280);
+  if (!contW || !svgW) return;
+  const scaleX = contW / svgW;
+  const scaleY = contH / svgH;
+  _mx.scale = Math.min(1, scaleX, scaleY) * 0.92;
+  _mx.tx = (contW - svgW * _mx.scale) / 2;
   _mx.ty = 12;
   _mxApply();
 }
@@ -6229,7 +6232,12 @@ function renderMatrix() {
   _mx.scale = 1; _mx.tx = 0; _mx.ty = 0;
   _mxApply();
   _mxInitEvents();
-  requestAnimationFrame(() => matrixZoomReset());
+  // Doppio rAF + timeout: garantisce che il layout sia completato su iOS
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    matrixZoomReset();
+    // Fallback per iOS Safari che a volte ritarda il layout
+    setTimeout(() => matrixZoomReset(), 300);
+  }));
 
   // Sfondo
   const bg = svg.appendChild(document.createElementNS(ns, 'rect'));
@@ -6719,9 +6727,9 @@ function showToast(msg) {
   <script>
     if ('serviceWorker' in navigator && !location.hostname.includes('claudeusercontent.com')) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./service-worker.js?v=57')
+        navigator.serviceWorker.register('./service-worker.js?v=58')
           .then(reg => {
-            console.log('SW registrato v57:', reg.scope);
+            console.log('SW registrato v58:', reg.scope);
             // Forza aggiornamento immediato se c'è una nuova versione
             reg.update();
           })
