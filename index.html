@@ -5,7 +5,7 @@
   <!-- PWA -->
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#C9963A">
-  <meta name="app-version" content="56">
+  <meta name="app-version" content="57">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="SMP Scavo">
@@ -3509,10 +3509,8 @@ async function importFromExcel(input) {
         addRap('copre',           r['copre']);
         addRap('taglia',          r['taglia']);
         addRap('riempie',         r['riempie']);
-        // POSTERIORE (sopra) / ANTERIORE (sotto) → come rapporti stratigraifci virtuali
-        // vengono salvati nel campo speciale per la sequenza stratigrafica
-        addRap('posteriore',      r['sopra']);
-        addRap('anteriore',       r['sotto']);
+        // NB: 'sopra' e 'sotto' NON sono rapporti — sono riepiloghi per l'output PDF
+        // vengono salvati come campi dedicati post_riepilogo / ant_riepilogo
 
         // — Stato conservazione —
         let stato_cons = '';
@@ -3559,6 +3557,8 @@ async function importFromExcel(input) {
           descrizione:               cleanVal(r['descrizione']),
           osservazioni:              cleanVal(r['osservazioni']),
           rapporti,
+          post_riepilogo:            cleanVal(r['sopra']),
+          ant_riepilogo:             cleanVal(r['sotto']),
           reperti:                   [],
           foto_digitali:             boolVal(r['Digitali']),
           foto_3d:                   boolVal(r['3D/Laser Scanner']),
@@ -4102,10 +4102,16 @@ function drawICCDpage(doc, s) {
   doc.text(ssTxt, ssX + ssLabelW/2 + 1.5, y + rapH/2 + doc.getTextWidth(ssTxt)/2, { angle: 90 });
 
   // POSTERIORE A — solo numeri US, colonna sinistra della sequenza fisica
-  const tipiPost = ['uguale_a','gli_si_appoggia','coperto_da','tagliato_da','riempito_da'];
-  const tipiAnt  = ['si_lega_a','si_appoggia_a','copre','taglia','riempie'];
-  const postNums = rapporti.filter(r=>tipiPost.includes(r.tipo)).map(r=>r.us).filter(Boolean).join(', ');
-  const antNums  = rapporti.filter(r=>tipiAnt.includes(r.tipo)).map(r=>r.us).filter(Boolean).join(', ');
+  const tipiPost = ['gli_si_appoggia','coperto_da','tagliato_da','riempito_da'];
+  const tipiAnt  = ['si_appoggia_a','copre','taglia','riempie'];
+  // Usa i campi riepilogo dall'importazione Excel se presenti,
+  // altrimenti calcola dai rapporti (per schede inserite manualmente)
+  const postNums = s.post_riepilogo
+    ? s.post_riepilogo
+    : rapporti.filter(r=>tipiPost.includes(r.tipo)).map(r=>r.us).filter(Boolean).join(', ');
+  const antNums  = s.ant_riepilogo
+    ? s.ant_riepilogo
+    : rapporti.filter(r=>tipiAnt.includes(r.tipo)).map(r=>r.us).filter(Boolean).join(', ');
 
   const ssContentX = ssX + ssLabelW;
   const ssHalf = rapH / 2;
@@ -6713,9 +6719,9 @@ function showToast(msg) {
   <script>
     if ('serviceWorker' in navigator && !location.hostname.includes('claudeusercontent.com')) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./service-worker.js?v=56')
+        navigator.serviceWorker.register('./service-worker.js?v=57')
           .then(reg => {
-            console.log('SW registrato v56:', reg.scope);
+            console.log('SW registrato v57:', reg.scope);
             // Forza aggiornamento immediato se c'è una nuova versione
             reg.update();
           })
