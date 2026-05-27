@@ -1,56 +1,91 @@
-const CACHE_NAME = 'smp-scavo-v63';
+// ─── SMP Scavo — Service Worker v65 ─────────────────────────────────────────
+// Strategia: Cache-first per asset statici, network-first per Google APIs.
+// Aggiorna CACHE_NAME ad ogni nuova versione dell'app.
 
-const STATIC_ASSETS = [
+const CACHE_NAME = 'smp-scavo-v65';
+
+// Asset locali da cachare subito all'install
+const PRECACHE_ASSETS = [
   './',
   './index.html',
   './manifest.json',
-  './icon-192.png',
-  './icon-512.png',
+  './icon-apple.png',
 ];
 
+// Pattern per cui usare sempre la rete (Google APIs, Drive, Sheets, Auth, CDNs)
+const NETWORK_ONLY_PATTERNS = [
+  /accounts\.google\.com/,
+  /googleapis\.com/,
+  /docs\.google\.com/,
+  /sheets\.googleapis\.com/,
+  /drive\.googleapis\.com/,
+  /cloudflare\.com/,
+  /cdnjs\.cloudflare\.com/,
+  /unpkg\.com/,
+  /jsdelivr\.net/,
+  /fonts\.googleapis\.com/,
+  /fonts\.gstatic\.com/,
+];
+
+// ─── INSTALL ─────────────────────────────────────────────────────────────────
 self.addEventListener('install', event => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then(cache => cache.addAll(STATIC_ASSETS))
+    caches.open(CACHE_NAME)
+      .then(cache => cache.addAll(PRECACHE_ASSETS))
+      .then(() => self.skipWaiting())  // attiva subito senza aspettare reload
   );
-  self.skipWaiting();
 });
 
+// ─── ACTIVATE ────────────────────────────────────────────────────────────────
 self.addEventListener('activate', event => {
   event.waitUntil(
     caches.keys().then(keys =>
-      Promise.all(keys.filter(k => k !== CACHE_NAME).map(k => caches.delete(k)))
-    )
+      Promise.all(
+        keys
+          .filter(key => key !== CACHE_NAME)
+          .map(key => caches.delete(key))   // elimina versioni vecchie
+      )
+    ).then(() => self.clients.claim())      // prende controllo immediato
   );
-  self.clients.claim();
 });
 
+// ─── FETCH ───────────────────────────────────────────────────────────────────
 self.addEventListener('fetch', event => {
-  // Lascia passare senza cache: API Google, tile OSM, CDN esterni
-  if (event.request.url.includes('googleapis.com') ||
-      event.request.url.includes('accounts.google.com') ||
-      event.request.url.includes('gstatic.com') ||
-      event.request.url.includes('tile.openstreetmap.org') ||
-      event.request.url.includes('unpkg.com') ||
-      event.request.url.includes('cdnjs.cloudflare.com') ||
-      event.request.url.includes('fonts.googleapis.com') ||
-      event.request.url.includes('fonts.gstatic.com')) {
+  const { request } = event;
+  const url = new URL(request.url);
+
+  // Solo richieste GET
+  if (request.method !== 'GET') return;
+
+  // Network-only per API esterne (Google, CDN…)
+  if (NETWORK_ONLY_PATTERNS.some(pattern => pattern.test(request.url))) {
+    event.respondWith(fetch(request));
     return;
   }
 
+  // Cache-first per tutto il resto (app shell, icone, manifest…)
   event.respondWith(
-    caches.match(event.request).then(cached => {
+    caches.match(request).then(cached => {
       if (cached) return cached;
-      return fetch(event.request).then(response => {
-        if (response && response.status === 200 && response.type === 'basic') {
+
+      // Non in cache: scarica e salva
+      return fetch(request).then(response => {
+        // Cacha solo risposte valide della stessa origine
+        if (
+          response.ok &&
+          response.type === 'basic' &&
+          url.origin === self.location.origin
+        ) {
           const clone = response.clone();
-          caches.open(CACHE_NAME).then(cache => cache.put(event.request, clone));
+          caches.open(CACHE_NAME).then(cache => cache.put(request, clone));
         }
         return response;
+      }).catch(() => {
+        // Offline fallback: restituisce la shell
+        if (request.destination === 'document') {
+          return caches.match('./index.html');
+        }
       });
-    }).catch(() => {
-      if (event.request.mode === 'navigate') {
-        return caches.match('./index.html');
-      }
     })
   );
 });

@@ -5,7 +5,7 @@
   <!-- PWA -->
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#C9963A">
-  <meta name="app-version" content="64">
+  <meta name="app-version" content="65">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="SMP Scavo">
@@ -57,6 +57,70 @@
       repeating-linear-gradient(0deg, transparent, transparent 28px, rgba(255,255,255,0.025) 28px, rgba(255,255,255,0.025) 29px),
       repeating-linear-gradient(90deg, transparent, transparent 28px, rgba(255,255,255,0.015) 28px, rgba(255,255,255,0.015) 29px);
   }
+
+  /* ── SUN MODE ────────────────────────────────────────────────── */
+  body.sun-mode {
+    --sand: #f5f0e8;
+    --sand-dark: #ede8de;
+    --earth: #8B5E10;
+    --earth-dark: #6e4a0c;
+    --terra: #9a6535;
+    --ink: #1a1714;
+    --parchment: #ede8de;
+    --parchment-light: #f5f0e8;
+    --accent: #c03010;
+    --green-field: #2d7a4a;
+    --muted: #6a5f50;
+    --border: #c8bfae;
+    --shadow: rgba(0,0,0,0.18);
+    background-image: none;
+    background-color: var(--sand);
+  }
+  body.sun-mode .app-header { background: #e8e1d4; box-shadow: 0 1px 0 rgba(139,94,16,0.2); }
+  body.sun-mode .nav-tabs { background: #e8e1d4; }
+  body.sun-mode .nav-dropdown-menu { background: #ddd8ce; }
+  body.sun-mode .confirm-box { background: #ede8de; }
+  body.sun-mode .us-modal { background: var(--parchment-light); }
+  body.sun-mode .us-modal-header { background: var(--parchment); }
+  body.sun-mode .us-modal-field .us-modal-value { background: rgba(0,0,0,0.04); }
+  body.sun-mode .field-group select option { background: #f5f0e8; }
+  body.sun-mode .rapporto-row select option { background: #f5f0e8; }
+  body.sun-mode .toast { background: #e8e1d4; color: var(--earth); border-color: rgba(139,94,16,0.35); }
+  body.sun-mode .loading-overlay { background: rgba(245,240,232,0.93); }
+  body.sun-mode input[type="date"] { color-scheme: light; }
+  body.sun-mode .search-box { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%236a5f50' stroke-width='2'%3E%3Ccircle cx='11' cy='11' r='8'/%3E%3Cpath d='m21 21-4.35-4.35'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: 12px center; }
+  body.sun-mode select { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%236a5f50' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E"); }
+  /* Testo più grande nei form in sun mode — più facile leggere al sole */
+  body.sun-mode .field-group input,
+  body.sun-mode .field-group select,
+  body.sun-mode .field-group textarea,
+  body.sun-mode .rapporto-row input,
+  body.sun-mode .rapporto-row select {
+    font-size: 0.96rem;
+  }
+  body.sun-mode .field-group label {
+    font-size: 0.7rem;
+    color: #5a4f42;
+  }
+
+  /* Pulsante sole nell'header */
+  .btn-sun {
+    background: none;
+    border: 1px solid rgba(201,150,58,0.3);
+    border-radius: 3px;
+    color: var(--muted);
+    font-size: 1rem;
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.15s;
+    line-height: 1;
+  }
+  .btn-sun:hover { border-color: var(--earth); color: var(--earth); background: rgba(201,150,58,0.08); }
+  body.sun-mode .btn-sun { background: rgba(139,94,16,0.12); border-color: rgba(139,94,16,0.4); color: #8B5E10; }
 
   /* HEADER */
   .app-header {
@@ -850,6 +914,7 @@
     <span class="header-title-short">SMP Scavo</span>
   </h1>
   <div class="header-right">
+    <button class="btn-sun" id="btnSunMode" onclick="toggleSunMode()" title="Modalità sole / campo"></button>
     <div class="sync-status" id="syncStatus">
       <span class="sync-dot" id="syncDot"></span>
       <span id="syncLabel">–</span>
@@ -1832,6 +1897,7 @@ let repertiCount = 0;
 
 // ─── GOOGLE IDENTITY ─────────────────────────────────────────────
 window.onload = async () => {
+  initSunMode();
   // Prima controlla se stiamo tornando da un redirect OAuth (iOS PWA)
   checkRedirectToken();
   if (accessToken) return; // già loggato via redirect
@@ -6719,6 +6785,25 @@ document.addEventListener('click', e => {
   }
 });
 
+// ─── SUN MODE ─────────────────────────────────────────────────
+function toggleSunMode() {
+  const active = document.body.classList.toggle('sun-mode');
+  localStorage.setItem('smp_sun_mode', active ? '1' : '0');
+  updateSunBtn(active);
+  showToast(active ? '☀ Modalità sole attivata' : '🌑 Tema scuro ripristinato');
+}
+function updateSunBtn(active) {
+  const btn = document.getElementById('btnSunMode');
+  if (!btn) return;
+  btn.textContent = active ? '🌑' : '☀';
+  btn.title = active ? 'Disattiva modalità sole' : 'Attiva modalità sole (campo)';
+}
+function initSunMode() {
+  const saved = localStorage.getItem('smp_sun_mode');
+  const active = saved === '1';
+  if (active) document.body.classList.add('sun-mode');
+  updateSunBtn(active);
+}
 // ─── SYNC STATUS ─────────────────────────────────────────────────
 function setSyncStatus(state, label) {
   document.getElementById('syncDot').className = 'sync-dot ' + state;
@@ -6735,9 +6820,9 @@ function showToast(msg) {
   <script>
     if ('serviceWorker' in navigator && !location.hostname.includes('claudeusercontent.com')) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./service-worker.js?v=64')
+        navigator.serviceWorker.register('./service-worker.js?v=65')
           .then(reg => {
-            console.log('SW registrato v64:', reg.scope);
+            console.log('SW registrato v65:', reg.scope);
             // Forza aggiornamento immediato se c'è una nuova versione
             reg.update();
           })
