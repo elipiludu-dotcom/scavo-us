@@ -5,7 +5,7 @@
   <!-- PWA -->
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#C9963A">
-  <meta name="app-version" content="69">
+  <meta name="app-version" content="70">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="SMP Scavo">
@@ -2593,6 +2593,74 @@ function showConflictDialog(titolo, messaggio, onOverwrite) {
   document.body.appendChild(overlay);
 }
 
+// ─── ANNO DIALOG — selezione anno per export PDF ─────────────────
+// Restituisce una Promise: 'tutti', '2024', ecc. oppure null se annullato
+function showAnnoDialog(dataset, annoField) {
+  return new Promise(resolve => {
+    const existing = document.getElementById('annoDialogOverlay');
+    if (existing) existing.remove();
+
+    // Raccoglie anni unici presenti nei dati
+    const anni = [...new Set(
+      dataset.map(r => String(r[annoField] || '')).filter(a => a && a !== 'undefined')
+    )].sort((a, b) => b.localeCompare(a)); // più recente prima
+
+    const overlay = document.createElement('div');
+    overlay.id = 'annoDialogOverlay';
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px';
+
+    const box = document.createElement('div');
+    box.style.cssText = 'background:var(--parchment);border:1px solid var(--border);border-radius:6px;max-width:320px;width:100%;padding:24px 20px;box-shadow:0 8px 32px rgba(0,0,0,0.3)';
+
+    const t = document.createElement('div');
+    t.style.cssText = 'font-family:"Space Mono",monospace;font-size:0.85rem;color:var(--earth);font-weight:700;margin-bottom:14px';
+    t.textContent = 'Seleziona anno di scavo';
+    box.appendChild(t);
+
+    // Pulsante "Tutti gli anni"
+    const btnTutti = document.createElement('button');
+    btnTutti.className = 'btn btn-secondary';
+    btnTutti.style.cssText = 'width:100%;margin-bottom:8px;text-align:left';
+    btnTutti.textContent = '📋 Tutti gli anni';
+    btnTutti.onclick = () => { overlay.remove(); resolve('tutti'); };
+    box.appendChild(btnTutti);
+
+    // Pulsante per ogni anno
+    anni.forEach(anno => {
+      const btn = document.createElement('button');
+      btn.className = 'btn btn-primary';
+      btn.style.cssText = 'width:100%;margin-bottom:8px;text-align:left';
+      btn.textContent = '📅 ' + anno;
+      btn.onclick = () => { overlay.remove(); resolve(anno); };
+      box.appendChild(btn);
+    });
+
+    if (!anni.length) {
+      const nota = document.createElement('div');
+      nota.style.cssText = 'font-size:0.8rem;color:var(--muted);margin-bottom:12px';
+      nota.textContent = 'Nessun anno trovato nei dati.';
+      box.appendChild(nota);
+    }
+
+    // Separatore + Annulla
+    const sep = document.createElement('div');
+    sep.style.cssText = 'border-top:1px solid var(--border);margin:10px 0 12px';
+    box.appendChild(sep);
+
+    const btnAnnulla = document.createElement('button');
+    btnAnnulla.className = 'btn btn-secondary';
+    btnAnnulla.style.cssText = 'width:100%';
+    btnAnnulla.textContent = 'Annulla';
+    btnAnnulla.onclick = () => { overlay.remove(); resolve(null); };
+    box.appendChild(btnAnnulla);
+
+    overlay.appendChild(box);
+    // Click fuori chiude
+    overlay.addEventListener('click', e => { if (e.target === overlay) { overlay.remove(); resolve(null); } });
+    document.body.appendChild(overlay);
+  });
+}
+
 // ─── SAVE / DELETE ────────────────────────────────────────────────
 async function saveScheda() {
   if (duplicate) { showToast('⚠ US ' + numero + ' già presente'); return; }
@@ -4030,12 +4098,18 @@ async function exportPDFSingola() {
 
 async function exportPDFTutte() {
   if (!schede.length) { showToast('Nessuna scheda da esportare'); return; }
-  showToast('Generazione PDF…');
+  const anno = await showAnnoDialog(schede, 'anno');
+  if (anno === null) return; // annullato
   await loadJsPDF();
-  const sorted = [...schede].sort((a,b)=>a.numero-b.numero);
-  const doc = buildICCDpdf(sorted);
-  doc.save('SchedeUS_complete_' + new Date().toISOString().split('T')[0] + '.pdf');
-  showToast('✓ PDF generato (' + sorted.length + ' schede)');
+  const filtered = anno === 'tutti'
+    ? [...schede].sort((a,b) => a.numero - b.numero)
+    : [...schede].filter(s => String(s.anno) === anno).sort((a,b) => a.numero - b.numero);
+  if (!filtered.length) { showToast('⚠ Nessuna scheda per l\'anno ' + anno); return; }
+  showToast('Generazione PDF…');
+  const doc = buildICCDpdf(filtered);
+  const suffix = anno === 'tutti' ? 'complete' : anno;
+  doc.save('SchedeUS_' + suffix + '_' + new Date().toISOString().split('T')[0] + '.pdf');
+  showToast('✓ PDF generato (' + filtered.length + ' schede)');
 }
 
 function buildICCDpdf(schedeList) {
@@ -4936,13 +5010,20 @@ function exportTombaPDF(tombaId) {
 }
 
 // Esporta PDF tutte le tombe
-function exportTombePDFTutte() {
+async function exportTombePDFTutte() {
   if (!tombe.length) { showToast('⚠ Nessuna tomba da esportare'); return; }
-  const sorted = [...tombe].sort((a,b) => a.numero - b.numero);
-  loadJsPDF().then(() => {
-    const doc = buildTombaPDF(sorted);
-    doc.save('Tombe_tutte.pdf');
-  });
+  const anno = await showAnnoDialog(tombe, 'anno');
+  if (anno === null) return;
+  await loadJsPDF();
+  const filtered = anno === 'tutti'
+    ? [...tombe].sort((a,b) => a.numero - b.numero)
+    : [...tombe].filter(t => String(t.anno) === anno).sort((a,b) => a.numero - b.numero);
+  if (!filtered.length) { showToast('⚠ Nessuna tomba per l\'anno ' + anno); return; }
+  showToast('Generazione PDF…');
+  const doc = buildTombaPDF(filtered);
+  const suffix = anno === 'tutti' ? 'tutte' : anno;
+  doc.save('Tombe_' + suffix + '_' + new Date().toISOString().split('T')[0] + '.pdf');
+  showToast('✓ PDF generato (' + filtered.length + ' tombe)');
 }
 
 // ─── ELENCO US — griglia A4 orizzontale ──────────────────────────
@@ -7292,9 +7373,9 @@ function showToast(msg) {
   <script>
     if ('serviceWorker' in navigator && !location.hostname.includes('claudeusercontent.com')) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./service-worker.js?v=69')
+        navigator.serviceWorker.register('./service-worker.js?v=70')
           .then(reg => {
-            console.log('SW registrato v69:', reg.scope);
+            console.log('SW registrato v70:', reg.scope);
             // Forza aggiornamento immediato se c'è una nuova versione
             reg.update();
           })
