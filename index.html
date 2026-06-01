@@ -5,7 +5,7 @@
   <!-- PWA -->
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#C9963A">
-  <meta name="app-version" content="77">
+  <meta name="app-version" content="79">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="SMP Scavo">
@@ -1604,16 +1604,6 @@
       <!-- Container SVG: visibile solo su desktop -->
       <div id="matrix-container" style="width:100%;height:calc(100dvh - 270px);min-height:280px;overflow:hidden;background:var(--parchment-light);cursor:grab;position:relative;user-select:none">
         <svg id="matrix-svg" style="display:block;position:absolute;top:0;left:0;transform-origin:0 0"></svg>
-        <!-- Legenda fissa in alto a sinistra, fuori dall'SVG così non segue pan/zoom -->
-        <div id="matrix-legend" style="position:absolute;top:10px;left:10px;z-index:10;background:rgba(30,27,18,0.88);border:1px solid #4a4540;border-radius:4px;padding:8px 10px;font-family:'Space Mono',monospace;font-size:8px;color:#ede5d8;pointer-events:none;line-height:1.8">
-          <div style="color:#8a7f70;font-size:7px;letter-spacing:0.08em;margin-bottom:4px">LEGENDA</div>
-          <div style="display:flex;align-items:center;gap:6px"><svg width="20" height="2" style="flex-shrink:0"><line x1="0" y1="1" x2="20" y2="1" stroke="#C9963A" stroke-width="1.5"/></svg> copre / taglia / riempie</div>
-          <div style="display:flex;align-items:center;gap:6px"><svg width="20" height="2" style="flex-shrink:0"><line x1="0" y1="1" x2="20" y2="1" stroke="#7aaddd" stroke-width="1.5" stroke-dasharray="3 4"/></svg> si lega / si appoggia</div>
-          <div style="display:flex;align-items:center;gap:6px"><svg width="20" height="11" style="flex-shrink:0"><rect x="0" y="0" width="20" height="11" rx="2" fill="#1e1b12" stroke="#C9963A" stroke-width="1.2"/></svg> US stratigrafica</div>
-          <div style="display:flex;align-items:center;gap:6px"><svg width="20" height="11" style="flex-shrink:0"><rect x="0" y="0" width="20" height="11" rx="2" fill="#C9963A" stroke="#8B6520" stroke-width="1.2"/></svg> USN (negativa)</div>
-          <div style="display:flex;align-items:center;gap:6px"><svg width="20" height="11" style="flex-shrink:0"><rect x="0" y="0" width="20" height="11" rx="2" fill="none" stroke="#4a90d9" stroke-width="1.2" stroke-dasharray="3 2"/></svg> = uguale_a</div>
-          <div style="display:flex;align-items:center;gap:6px"><svg width="20" height="11" style="flex-shrink:0"><rect x="0" y="0" width="20" height="11" rx="2" fill="#3a1010" stroke="#d94f30" stroke-width="1.2"/></svg> ⚠ conflitto</div>
-        </div>
       </div>
       <!-- Bottone PDF: visibile solo su mobile, gestito da JS -->
       <div id="matrix-mobile-btn" style="display:none;width:100%;padding:40px 20px;flex-direction:column;align-items:center;justify-content:center;gap:16px;background:var(--parchment-light)">
@@ -6693,9 +6683,9 @@ function renderMatrix() {
         <span style="margin-right:6px">${c.type === 'cycle' ? '🔄' : '⚡'}</span>${c.msg}
       </li>`
     ).join('');
-    // Apri automaticamente il pannello se ci sono conflitti
-    warnBody.style.display = 'block';
-    warnToggle.textContent = '▲ nascondi';
+    // Chiuso di default — l'utente lo apre se serve
+    warnBody.style.display = 'none';
+    warnToggle.textContent = '▼ mostra';
     document.getElementById('btn-print-conflicts').style.display = 'inline-block';
   } else {
     warnPanel.style.display = 'none';
@@ -6872,7 +6862,8 @@ function renderMatrix() {
   const allX = Object.values(positions).map(p => p.x);
   const allY = Object.values(positions).map(p => p.y);
   const svgW = Math.max(...allX) + NW / 2 + PAD;
-  const svgH = Math.max(...allY) + NH / 2 + PAD;
+  const LEG_BOTTOM_H = 28; // spazio extra in fondo per la legenda orizzontale
+  const svgH = Math.max(...allY) + NH / 2 + PAD + LEG_BOTTOM_H;
 
   svg.setAttribute('width',  svgW + PAD);
   svg.setAttribute('height', svgH + PAD);
@@ -6891,7 +6882,58 @@ function renderMatrix() {
   const gRoot = svg.appendChild(document.createElementNS(ns, 'g'));
   gRoot.setAttribute('transform', `translate(${PAD},${PAD})`);
 
-  // ── LEGENDA: gestita come elemento HTML fisso sopra il container (vedi HTML) ──
+  // ── LEGENDA ORIZZONTALE in fondo all'SVG ─────────────────────────
+  // Y di partenza: subito sotto l'ultimo nodo
+  const legY = Math.max(...allY) + NH / 2 + 10;
+  const legItems = [
+    { type: 'line',  color: '#C9963A', dash: '',    label: 'copre / taglia / riempie' },
+    { type: 'line',  color: '#7aaddd', dash: '3 4', label: 'si lega / si appoggia' },
+    { type: 'rect',  fill: '#1e1b12', stroke: '#C9963A', label: 'US stratigrafica' },
+    { type: 'rect',  fill: '#C9963A', stroke: '#8B6520', label: 'USN (negativa)' },
+    { type: 'dbox',  fill: 'none',    stroke: '#4a90d9', label: '= uguale_a' },
+    { type: 'rect',  fill: '#3a1010', stroke: '#d94f30', label: '⚠ conflitto' },
+  ];
+  const ITEM_W = 150; // larghezza per voce
+  const legTotalW = legItems.length * ITEM_W;
+  const legStartX = Math.max(0, (svgW - legTotalW) / 2); // centrata
+
+  // Titolo
+  const legTitleEl = gRoot.appendChild(document.createElementNS(ns, 'text'));
+  legTitleEl.setAttribute('x', legStartX);
+  legTitleEl.setAttribute('y', legY - 2);
+  legTitleEl.setAttribute('fill', '#8a7f70');
+  legTitleEl.setAttribute('font-family', 'Space Mono, monospace');
+  legTitleEl.setAttribute('font-size', '7');
+  legTitleEl.setAttribute('letter-spacing', '0.08em');
+  legTitleEl.textContent = 'LEGENDA';
+
+  legItems.forEach((item, i) => {
+    const x = legStartX + i * ITEM_W;
+    const iconY = legY + 10;
+
+    if (item.type === 'line') {
+      const l = gRoot.appendChild(document.createElementNS(ns, 'line'));
+      l.setAttribute('x1', x); l.setAttribute('y1', iconY);
+      l.setAttribute('x2', x + 20); l.setAttribute('y2', iconY);
+      l.setAttribute('stroke', item.color); l.setAttribute('stroke-width', '1.5');
+      if (item.dash) l.setAttribute('stroke-dasharray', item.dash);
+    } else {
+      const r = gRoot.appendChild(document.createElementNS(ns, 'rect'));
+      r.setAttribute('x', x); r.setAttribute('y', iconY - 5);
+      r.setAttribute('width', 20); r.setAttribute('height', 11);
+      r.setAttribute('rx', '2');
+      r.setAttribute('fill', item.fill); r.setAttribute('stroke', item.stroke);
+      r.setAttribute('stroke-width', '1.2');
+      if (item.type === 'dbox') r.setAttribute('stroke-dasharray', '3 2');
+    }
+
+    const t = gRoot.appendChild(document.createElementNS(ns, 'text'));
+    t.setAttribute('x', x + 24); t.setAttribute('y', iconY + 4);
+    t.setAttribute('fill', '#ede5d8');
+    t.setAttribute('font-family', 'Space Mono, monospace');
+    t.setAttribute('font-size', '8');
+    t.textContent = item.label;
+  });
 
   // ── 8. ARCHI STRATIGRAFICI (ortogonali con porte dedicate) ──────
   // Per ogni nodo calcola quante connessioni escono (basso) ed entrano (alto)
@@ -7360,9 +7402,9 @@ function showToast(msg) {
   <script>
     if ('serviceWorker' in navigator && !location.hostname.includes('claudeusercontent.com')) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./service-worker.js?v=77')
+        navigator.serviceWorker.register('./service-worker.js?v=79')
           .then(reg => {
-            console.log('SW registrato v77:', reg.scope);
+            console.log('SW registrato v79:', reg.scope);
             // Forza aggiornamento immediato se c'è una nuova versione
             reg.update();
           })
