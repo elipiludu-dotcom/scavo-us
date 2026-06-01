@@ -5,7 +5,7 @@
   <!-- PWA -->
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#C9963A">
-  <meta name="app-version" content="68">
+  <meta name="app-version" content="69">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="SMP Scavo">
@@ -1009,6 +1009,27 @@
         </div>
         <div class="nav-dropdown-item" onclick="exportElencoTombe()">
           <span class="nav-icon">📋</span> Elenco Tombe
+        </div>
+      </div>
+    </div>
+
+
+    <!-- RISORSE dropdown -->
+    <div class="nav-dropdown" id="dd-risorse">
+      <div class="nav-tab" onclick="toggleDropdown('dd-risorse')">📂 Risorse</div>
+      <div class="nav-dropdown-menu">
+        <div class="nav-dropdown-item" onclick="exportModuloElencoUS()">
+          <span class="nav-icon">📋</span> Modulo Elenco US (vuoto)
+        </div>
+        <div class="nav-dropdown-item" onclick="exportModuloElencoTombe()">
+          <span class="nav-icon">📋</span> Modulo Elenco Tombe (vuoto)
+        </div>
+        <div class="nav-dropdown-sep"></div>
+        <div class="nav-dropdown-item" onclick="exportModuloSchedaUS()">
+          <span class="nav-icon">📄</span> Modulo Scheda US (vuoto)
+        </div>
+        <div class="nav-dropdown-item" onclick="exportModuloSchedaTomba()">
+          <span class="nav-icon">📄</span> Modulo Scheda Tomba (vuoto)
         </div>
       </div>
     </div>
@@ -4931,7 +4952,7 @@ async function exportElencoUS() {
   await loadJsPDF();
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
-  const sorted = [...schede].sort((a, b) => a.numero - b.numero);
+  const sorted = [...schede].sort((a, b) => Math.abs(a.numero) - Math.abs(b.numero));
 
   const pageW = 297, pageH = 210;
   const marginL = 10, marginT = 18, marginR = 10;
@@ -4941,7 +4962,7 @@ async function exportElencoUS() {
   const today = new Date().toLocaleDateString('it-IT');
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(11);
-  doc.text('ELENCO UNITÀ STRATIGRAFICHE — S.M.P. Peccioli', marginL, 12);
+  doc.text('ELENCO UNITÀ STRATIGRAFICHE — SMP Peccioli', marginL, 12);
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(8);
   doc.text('Generato il ' + today, pageW - marginR, 12, { align: 'right' });
@@ -4973,7 +4994,7 @@ async function exportElencoUS() {
       doc.addPage();
       doc.setFont('helvetica', 'bold');
       doc.setFontSize(11);
-      doc.text('ELENCO UNITÀ STRATIGRAFICHE — S.M.P. Peccioli', marginL, 12);
+      doc.text('ELENCO UNITÀ STRATIGRAFICHE — SMP Peccioli', marginL, 12);
       doc.setFont('helvetica', 'normal');
       doc.setFontSize(8);
       doc.text('Generato il ' + today, pageW - marginR, 12, { align: 'right' });
@@ -5032,7 +5053,7 @@ async function exportElencoTombe() {
   await loadJsPDF();
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
-  const sorted = [...tombe].sort((a, b) => a.numero - b.numero);
+  const sorted = [...tombe].sort((a, b) => Math.abs(a.numero) - Math.abs(b.numero));
 
   const pageW = 210, pageH = 297;
   const marginL = 10, marginT = 18, marginR = 10;
@@ -5041,7 +5062,7 @@ async function exportElencoTombe() {
   const today = new Date().toLocaleDateString('it-IT');
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(11);
-  doc.text('ELENCO TOMBE — S.M.P. Peccioli', marginL, 12);
+  doc.text('ELENCO TOMBE — SMP Peccioli', marginL, 12);
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(8);
   doc.text('Generato il ' + today, pageW - marginR, 12, { align: 'right' });
@@ -5071,7 +5092,7 @@ async function exportElencoTombe() {
       doc.addPage();
       doc.setFont('helvetica', 'bold');
       doc.setFontSize(11);
-      doc.text('ELENCO TOMBE — S.M.P. Peccioli', marginL, 12);
+      doc.text('ELENCO TOMBE — SMP Peccioli', marginL, 12);
       doc.setFont('helvetica', 'normal');
       doc.setFontSize(8);
       doc.text('Generato il ' + today, pageW - marginR, 12, { align: 'right' });
@@ -5116,6 +5137,126 @@ async function exportElencoTombe() {
 
   doc.save('ElencoTombe_' + new Date().toISOString().split('T')[0] + '.pdf');
   showToast('✓ Elenco Tombe generato (' + sorted.length + ' tombe)');
+}
+
+// ─── RISORSE — MODULI VUOTI ──────────────────────────────────────
+
+async function exportModuloElencoUS() {
+  showToast('Generazione modulo…');
+  await loadJsPDF();
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+  const pageW = 297, pageH = 210;
+  const marginL = 10, marginT = 18, marginR = 10;
+  const usableW = pageW - marginL - marginR;
+  const today = new Date().toLocaleDateString('it-IT');
+  const rowH = 8, headerH = 9;
+  const colNum = 20, colDef = usableW - colNum;
+  const nRighe = Math.floor((pageH - marginT - headerH - 14) / rowH);
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(11);
+  doc.text('ELENCO UNITÀ STRATIGRAFICHE — SMP Peccioli', marginL, 12);
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8);
+  doc.text('Data compilazione: ___________________', pageW - marginR, 12, { align: 'right' });
+
+  // Header tabella
+  doc.setFillColor(60, 40, 20);
+  doc.rect(marginL, marginT, usableW, headerH, 'F');
+  doc.setTextColor(255, 255, 255);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(8);
+  doc.text('N° US', marginL + colNum / 2, marginT + 6, { align: 'center' });
+  doc.text('DEFINIZIONE', marginL + colNum + colDef / 2, marginT + 6, { align: 'center' });
+  doc.setTextColor(0, 0, 0);
+
+  let y = marginT + headerH;
+  for (let i = 0; i < nRighe; i++) {
+    if (i % 2 === 0) { doc.setFillColor(245, 240, 232); doc.rect(marginL, y, usableW, rowH, 'F'); }
+    doc.setDrawColor(200, 190, 175);
+    doc.setLineWidth(0.2);
+    doc.rect(marginL, y, colNum, rowH);
+    doc.rect(marginL + colNum, y, colDef, rowH);
+    y += rowH;
+  }
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(7);
+  doc.setTextColor(150, 140, 120);
+  doc.text('Scavo Santa Mustiola — Peccioli (PI)', marginL, pageH - 5);
+  doc.text('1 di 1', pageW / 2, pageH - 5, { align: 'center' });
+
+  doc.save('Modulo_ElencoUS.pdf');
+  showToast('✓ Modulo Elenco US generato');
+}
+
+async function exportModuloElencoTombe() {
+  showToast('Generazione modulo…');
+  await loadJsPDF();
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+  const pageW = 210, pageH = 297;
+  const marginL = 10, marginT = 18, marginR = 10;
+  const usableW = pageW - marginL - marginR;
+  const rowH = 8, headerH = 9;
+  const colNum = 25, colUS = usableW - colNum;
+  const nRighe = Math.floor((pageH - marginT - headerH - 14) / rowH);
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(11);
+  doc.text('ELENCO TOMBE — SMP Peccioli', marginL, 12);
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8);
+  doc.text('Data compilazione: ___________________', pageW - marginR, 12, { align: 'right' });
+
+  doc.setFillColor(60, 40, 20);
+  doc.rect(marginL, marginT, usableW, headerH, 'F');
+  doc.setTextColor(255, 255, 255);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(8);
+  doc.text('N° TOMBA', marginL + colNum / 2, marginT + 6, { align: 'center' });
+  doc.text('US COLLEGATE', marginL + colNum + colUS / 2, marginT + 6, { align: 'center' });
+  doc.setTextColor(0, 0, 0);
+
+  let y = marginT + headerH;
+  for (let i = 0; i < nRighe; i++) {
+    if (i % 2 === 0) { doc.setFillColor(245, 240, 232); doc.rect(marginL, y, usableW, rowH, 'F'); }
+    doc.setDrawColor(200, 190, 175);
+    doc.setLineWidth(0.2);
+    doc.rect(marginL, y, colNum, rowH);
+    doc.rect(marginL + colNum, y, colUS, rowH);
+    y += rowH;
+  }
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(7);
+  doc.setTextColor(150, 140, 120);
+  doc.text('Scavo Santa Mustiola — Peccioli (PI)', marginL, pageH - 5);
+  doc.text('1 di 1', pageW / 2, pageH - 5, { align: 'center' });
+
+  doc.save('Modulo_ElencoTombe.pdf');
+  showToast('✓ Modulo Elenco Tombe generato');
+}
+
+async function exportModuloSchedaUS() {
+  showToast('Generazione modulo…');
+  await loadJsPDF();
+  // Scheda fittizia con tutti i campi vuoti
+  const vuota = {};
+  const doc = buildICCDpdf([vuota]);
+  doc.save('Modulo_SchedaUS.pdf');
+  showToast('✓ Modulo Scheda US generato');
+}
+
+async function exportModuloSchedaTomba() {
+  showToast('Generazione modulo…');
+  await loadJsPDF();
+  // Tomba fittizia con tutti i campi vuoti
+  const vuota = {};
+  const doc = buildTombaPDF([vuota]);
+  doc.save('Modulo_SchedaTomba.pdf');
+  showToast('✓ Modulo Scheda Tomba generato');
 }
 
 // ─── MAPPA LEAFLET ───────────────────────────────────────────────
@@ -7151,9 +7292,9 @@ function showToast(msg) {
   <script>
     if ('serviceWorker' in navigator && !location.hostname.includes('claudeusercontent.com')) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./service-worker.js?v=68')
+        navigator.serviceWorker.register('./service-worker.js?v=69')
           .then(reg => {
-            console.log('SW registrato v68:', reg.scope);
+            console.log('SW registrato v69:', reg.scope);
             // Forza aggiornamento immediato se c'è una nuova versione
             reg.update();
           })
