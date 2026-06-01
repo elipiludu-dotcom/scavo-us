@@ -5,7 +5,7 @@
   <!-- PWA -->
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#C9963A">
-  <meta name="app-version" content="66">
+  <meta name="app-version" content="68">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="SMP Scavo">
@@ -997,12 +997,18 @@
         <div class="nav-dropdown-item" onclick="exportPDFTutte()">
           <span class="nav-icon">📄</span> Stampa tutte le Schede US
         </div>
+        <div class="nav-dropdown-item" onclick="exportElencoUS()">
+          <span class="nav-icon">📋</span> Elenco US
+        </div>
         <div class="nav-dropdown-sep"></div>
         <div class="nav-dropdown-item" onclick="apriSelezionePDF('tomba')">
           <span class="nav-icon">📄</span> Stampa Scheda Tomba singola
         </div>
         <div class="nav-dropdown-item" onclick="exportTombePDFTutte()">
           <span class="nav-icon">📄</span> Stampa tutte le Schede Tombe
+        </div>
+        <div class="nav-dropdown-item" onclick="exportElencoTombe()">
+          <span class="nav-icon">📋</span> Elenco Tombe
         </div>
       </div>
     </div>
@@ -1891,7 +1897,8 @@ const HEADERS = ['id','numero','anno','area','saggio','tipo','pos_neg','data','d
   'colore','consistenza','composizione','umidita','inclusi_geo','inclusi_org','inclusi_art','quota_max','quota_min',
   'spessore','descrizione','osservazioni','rapporti','reperti','foto_digitali','foto_3d','foto_drone','disegni','note_doc',
   'interpretazione','datazione','fase','affidabilita','note_interp',
-  'stato_conservazione','stato_conservazione_note','responsabile_scientifico','responsabile_rielaborazione','data_rielaborazione','modo_formazione'];
+  'stato_conservazione','stato_conservazione_note','responsabile_scientifico','responsabile_rielaborazione','data_rielaborazione','modo_formazione',
+  '_last_modified'];
 
 let accessToken = null;
 let schede = [];
@@ -1900,6 +1907,7 @@ let editingId = null;
 let editingTombaId = null;
 let rapportiCount = 0;
 let repertiCount = 0;
+let _loadedLastModified = null; // ottimistic locking: timestamp al momento dell'apertura scheda
 
 // ─── GOOGLE IDENTITY ─────────────────────────────────────────────
 window.onload = async () => {
@@ -2119,21 +2127,51 @@ function schedaToRow(s) {
 }
 
 // Salva/aggiorna una singola scheda cercando la sua riga nel foglio.
-// Se esiste aggiorna solo quella riga; se non esiste la aggiunge in append.
+// — Nuova scheda: verifica che il numero US non esista già (anti-duplicato concorrente)
+// — Scheda esistente: ottimistic lock — controlla che _last_modified non sia cambiato
 async function saveSchedaToSheets(scheda) {
   await ensureHeaders();
-  // Legge tutte le righe per trovare quella con lo stesso id
-  const data = await sheetsGet(`${SHEET_NAME}!A2:A10000`);
-  const idRows = (data.values || []);
-  const rowIndex = idRows.findIndex(r => r[0] === scheda.id);
-  const row = schedaToRow(scheda);
-  if (rowIndex >= 0) {
-    // Riga trovata: aggiorna in place (riga sheet = rowIndex + 2, +1 header +1 base-1)
-    const sheetRow = rowIndex + 2;
-    await sheetsUpdate(`${SHEET_NAME}!A${sheetRow}`, [row]);
+
+  // Legge id + numero + _last_modified di tutte le righe
+  const lmIdx = HEADERS.indexOf('_last_modified') + 1; // colonna 1-based
+  const colLetter = String.fromCharCode(64 + lmIdx);   // es. 'A'=1 → 'AQ' per colonna 43
+  // Per fogli con molte colonne usiamo la notazione A1 con lettera doppia se necessario
+  function colToLetter(n) {
+    let s = '';
+    while (n > 0) { n--; s = String.fromCharCode(65 + (n % 26)) + s; n = Math.floor(n / 26); }
+    return s;
+  }
+  const lmCol = colToLetter(lmIdx);
+  const data = await sheetsGet(`${SHEET_NAME}!A2:${lmCol}10000`);
+  const rows = data.values || [];
+
+  const idColIdx   = HEADERS.indexOf('id');
+  const numColIdx  = HEADERS.indexOf('numero');
+
+  if (!scheda.id || editingId === null) {
+    // ── NUOVA SCHEDA: anti-duplicato concorrente ──────────────────
+    const esisteSulFoglio = rows.some(r => String(r[numColIdx]) === String(scheda.numero));
+    if (esisteSulFoglio) {
+      throw { type: 'DUPLICATE', numero: scheda.numero };
+    }
+    await sheetsAppend([schedaToRow(scheda)]);
+
   } else {
-    // Nuova scheda: append
-    await sheetsAppend([row]);
+    // ── SCHEDA ESISTENTE: ottimistic lock ─────────────────────────
+    const rowIndex = rows.findIndex(r => r[idColIdx] === scheda.id);
+    if (rowIndex < 0) {
+      // Non trovata sul foglio (eliminata da qualcun altro?) → append come nuova
+      await sheetsAppend([schedaToRow(scheda)]);
+      return;
+    }
+    const sheetRow = rowIndex + 2;
+    const lmSulFoglio = rows[rowIndex][lmIdx - 1] || null;
+
+    if (_loadedLastModified && lmSulFoglio && lmSulFoglio !== _loadedLastModified) {
+      // Qualcun altro ha modificato questa scheda dopo che l'abbiamo aperta
+      throw { type: 'CONFLICT', numero: scheda.numero, modified: lmSulFoglio };
+    }
+    await sheetsUpdate(`${SHEET_NAME}!A${sheetRow}`, [schedaToRow(scheda)]);
   }
 }
 
@@ -2375,6 +2413,7 @@ function resetForm() {
   document.getElementById('btnDelete').style.display = 'none';
   const _bmu2 = document.getElementById('btnMappaUS'); if(_bmu2) _bmu2.style.display = 'none';
   editingId = null;
+  _loadedLastModified = null;
   updateStatoStyle();
 }
 
@@ -2382,6 +2421,7 @@ function openEdit(id) {
   const s = schede.find(x => x.id === id);
   if (!s) return;
   editingId = id;
+  _loadedLastModified = s._last_modified || null; // salva timestamp per ottimistic lock
   window._editOrigin = document.querySelector('.view.active')?.id || 'view-list';
   document.getElementById('formTitle').textContent = 'Scheda US ' + s.numero;
   document.getElementById('btnDelete').style.display = 'block';
@@ -2479,15 +2519,66 @@ function getReperti() {
   }));
 }
 
+// ─── CONFLICT DIALOG ──────────────────────────────────────────────
+// onOverwrite: callback se l'utente sceglie di sovrascrivere. null = solo pulsante Annulla.
+function showConflictDialog(titolo, messaggio, onOverwrite) {
+  const existing = document.getElementById('conflictDialogOverlay');
+  if (existing) existing.remove();
+
+  const overlay = document.createElement('div');
+  overlay.id = 'conflictDialogOverlay';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px';
+
+  const box = document.createElement('div');
+  box.style.cssText = 'background:var(--parchment);border:1px solid var(--border);border-radius:6px;max-width:380px;width:100%;padding:24px 20px;box-shadow:0 8px 32px rgba(0,0,0,0.3)';
+
+  const t = document.createElement('div');
+  t.style.cssText = 'font-family:"Space Mono",monospace;font-size:0.85rem;color:var(--earth);font-weight:700;margin-bottom:12px';
+  t.textContent = titolo;
+
+  const m = document.createElement('div');
+  m.style.cssText = 'font-size:0.82rem;color:var(--ink);line-height:1.5;margin-bottom:20px;white-space:pre-line';
+  m.textContent = messaggio;
+
+  const btns = document.createElement('div');
+  btns.style.cssText = 'display:flex;gap:10px;justify-content:flex-end';
+
+  const btnAnnulla = document.createElement('button');
+  btnAnnulla.className = 'btn btn-secondary';
+  btnAnnulla.textContent = onOverwrite ? 'Ricarica e annulla' : 'Chiudi';
+  btnAnnulla.onclick = () => {
+    overlay.remove();
+    if (onOverwrite) {
+      syncData(false).then(() => {
+        if (editingId) openEdit(editingId);
+      });
+    }
+  };
+  btns.appendChild(btnAnnulla);
+
+  if (onOverwrite) {
+    const btnForza = document.createElement('button');
+    btnForza.className = 'btn btn-primary';
+    btnForza.textContent = 'Sovrascrivi';
+    btnForza.style.cssText = 'background:var(--accent);border-color:var(--accent)';
+    btnForza.onclick = () => { overlay.remove(); onOverwrite(); };
+    btns.appendChild(btnForza);
+  }
+
+  box.appendChild(t);
+  box.appendChild(m);
+  box.appendChild(btns);
+  overlay.appendChild(box);
+  document.body.appendChild(overlay);
+}
+
 // ─── SAVE / DELETE ────────────────────────────────────────────────
 async function saveScheda() {
-  const numero = parseInt(document.getElementById('f_numero').value);
-  if (!numero) { showToast('⚠ Inserisci il numero US'); return; }
-  const duplicate = schede.find(s => s.numero === numero && s.id !== editingId);
   if (duplicate) { showToast('⚠ US ' + numero + ' già presente'); return; }
 
   setSyncStatus('syncing', 'Salvataggio…');
 
+  const now = new Date().toISOString();
   const scheda = {
     id: editingId || Date.now().toString(36) + Math.random().toString(36).slice(2),
     numero,
@@ -2532,6 +2623,7 @@ async function saveScheda() {
     responsabile_rielaborazione: document.getElementById('f_responsabile_scientifico').value,
     data_rielaborazione: document.getElementById('f_data_rielaborazione').value,
     anno: document.getElementById('f_anno').value,
+    _last_modified: now,
   };
 
   if (editingId) schede = schede.map(s => s.id === editingId ? scheda : s);
@@ -2539,15 +2631,54 @@ async function saveScheda() {
 
   try {
     await saveSchedaToSheets(scheda);
+    _loadedLastModified = now; // aggiorna il lock locale dopo salvataggio ok
     setSyncStatus('ok', 'Sincronizzato');
     showToast('☁ US ' + numero + ' salvata sul cloud');
     editingId = null;
+    _loadedLastModified = null;
     const origin = (window._editOrigin || 'view-list').replace('view-', '');
     showView(origin);
+
   } catch (e) {
-    setSyncStatus('error', 'Errore salvataggio');
-    showToast('⚠ Errore durante il salvataggio');
-    console.error(e);
+    if (e && e.type === 'DUPLICATE') {
+      // Numero US già presente sul foglio (scrittura concorrente)
+      setSyncStatus('error', 'Conflitto');
+      showConflictDialog(
+        '⚠ US ' + e.numero + ' già presente sul foglio',
+        'Un\'altra persona ha appena creato questa US. Scegli un numero diverso oppure ricarica i dati.',
+        null // solo un pulsante: annulla
+      );
+    } else if (e && e.type === 'CONFLICT') {
+      // Ottimistic lock: la scheda è stata modificata da qualcun altro
+      setSyncStatus('error', 'Conflitto');
+      const modTime = e.modified ? new Date(e.modified).toLocaleTimeString('it-IT') : '—';
+      showConflictDialog(
+        '⚠ Conflitto su US ' + e.numero,
+        'Questa scheda è stata modificata da qualcun altro alle ' + modTime + '.\nVuoi sovrascrivere le loro modifiche o ricaricare la scheda?',
+        async () => {
+          // Forza sovrascrittura: azzera il lock e risalva
+          _loadedLastModified = null;
+          try {
+            await saveSchedaToSheets(scheda);
+            _loadedLastModified = now;
+            setSyncStatus('ok', 'Sincronizzato');
+            showToast('☁ US ' + numero + ' sovrascritta');
+            editingId = null;
+            _loadedLastModified = null;
+            const origin = (window._editOrigin || 'view-list').replace('view-', '');
+            showView(origin);
+          } catch(e2) {
+            setSyncStatus('error', 'Errore salvataggio');
+            showToast('⚠ Errore durante il salvataggio');
+            console.error(e2);
+          }
+        }
+      );
+    } else {
+      setSyncStatus('error', 'Errore salvataggio');
+      showToast('⚠ Errore durante il salvataggio');
+      console.error(e);
+    }
   }
 }
 
@@ -4793,6 +4924,200 @@ function exportTombePDFTutte() {
   });
 }
 
+// ─── ELENCO US — griglia A4 orizzontale ──────────────────────────
+async function exportElencoUS() {
+  if (!schede.length) { showToast('⚠ Nessuna scheda da esportare'); return; }
+  showToast('Generazione Elenco US…');
+  await loadJsPDF();
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+  const sorted = [...schede].sort((a, b) => a.numero - b.numero);
+
+  const pageW = 297, pageH = 210;
+  const marginL = 10, marginT = 18, marginR = 10;
+  const usableW = pageW - marginL - marginR;
+
+  // Intestazione
+  const today = new Date().toLocaleDateString('it-IT');
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(11);
+  doc.text('ELENCO UNITÀ STRATIGRAFICHE — S.M.P. Peccioli', marginL, 12);
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8);
+  doc.text('Generato il ' + today, pageW - marginR, 12, { align: 'right' });
+
+  // Colonne: N° US (20mm) + Definizione (resto)
+  const colNum  = 20;
+  const colDef  = usableW - colNum;
+  const rowH    = 8;
+  const headerH = 9;
+
+  function drawTableHeader(y) {
+    doc.setFillColor(60, 40, 20);
+    doc.rect(marginL, y, usableW, headerH, 'F');
+    doc.setTextColor(255, 255, 255);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(8);
+    doc.text('N° US', marginL + colNum / 2, y + 6, { align: 'center' });
+    doc.text('DEFINIZIONE', marginL + colNum + colDef / 2, y + 6, { align: 'center' });
+    doc.setTextColor(0, 0, 0);
+  }
+
+  let y = marginT;
+  drawTableHeader(y);
+  y += headerH;
+
+  sorted.forEach((s, i) => {
+    // Nuova pagina se necessario
+    if (y + rowH > pageH - 10) {
+      doc.addPage();
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(11);
+      doc.text('ELENCO UNITÀ STRATIGRAFICHE — S.M.P. Peccioli', marginL, 12);
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(8);
+      doc.text('Generato il ' + today, pageW - marginR, 12, { align: 'right' });
+      y = marginT;
+      drawTableHeader(y);
+      y += headerH;
+    }
+
+    // Riga alternata
+    if (i % 2 === 0) {
+      doc.setFillColor(245, 240, 232);
+      doc.rect(marginL, y, usableW, rowH, 'F');
+    }
+
+    // Bordi riga
+    doc.setDrawColor(200, 190, 175);
+    doc.setLineWidth(0.2);
+    doc.rect(marginL, y, colNum, rowH);
+    doc.rect(marginL + colNum, y, colDef, rowH);
+
+    // Testo
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(8);
+    doc.setTextColor(80, 45, 10);
+    doc.text(String(s.numero), marginL + colNum / 2, y + 5.5, { align: 'center' });
+
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(30, 20, 10);
+    const def = s.definizione || s.tipo || '—';
+    // Tronca se troppo lunga
+    const defTrunc = doc.splitTextToSize(def, colDef - 4)[0];
+    doc.text(defTrunc, marginL + colNum + 3, y + 5.5);
+
+    y += rowH;
+  });
+
+  // Piè di pagina
+  const totalPages = doc.internal.getNumberOfPages();
+  for (let p = 1; p <= totalPages; p++) {
+    doc.setPage(p);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(7);
+    doc.setTextColor(150, 140, 120);
+    doc.text('Pagina ' + p + ' di ' + totalPages, pageW / 2, pageH - 5, { align: 'center' });
+    doc.text('Scavo Santa Mustiola — Peccioli (PI)', marginL, pageH - 5);
+  }
+
+  doc.save('ElencoUS_' + new Date().toISOString().split('T')[0] + '.pdf');
+  showToast('✓ Elenco US generato (' + sorted.length + ' schede)');
+}
+
+// ─── ELENCO TOMBE — griglia A4 verticale ─────────────────────────
+async function exportElencoTombe() {
+  if (!tombe.length) { showToast('⚠ Nessuna tomba da esportare'); return; }
+  showToast('Generazione Elenco Tombe…');
+  await loadJsPDF();
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+  const sorted = [...tombe].sort((a, b) => a.numero - b.numero);
+
+  const pageW = 210, pageH = 297;
+  const marginL = 10, marginT = 18, marginR = 10;
+  const usableW = pageW - marginL - marginR;
+
+  const today = new Date().toLocaleDateString('it-IT');
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(11);
+  doc.text('ELENCO TOMBE — S.M.P. Peccioli', marginL, 12);
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8);
+  doc.text('Generato il ' + today, pageW - marginR, 12, { align: 'right' });
+
+  const colNum = 25;
+  const colUS  = usableW - colNum;
+  const rowH   = 8;
+  const headerH = 9;
+
+  function drawTableHeaderTombe(y) {
+    doc.setFillColor(60, 40, 20);
+    doc.rect(marginL, y, usableW, headerH, 'F');
+    doc.setTextColor(255, 255, 255);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(8);
+    doc.text('N° TOMBA', marginL + colNum / 2, y + 6, { align: 'center' });
+    doc.text('US COLLEGATE', marginL + colNum + colUS / 2, y + 6, { align: 'center' });
+    doc.setTextColor(0, 0, 0);
+  }
+
+  let y = marginT;
+  drawTableHeaderTombe(y);
+  y += headerH;
+
+  sorted.forEach((t, i) => {
+    if (y + rowH > pageH - 12) {
+      doc.addPage();
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(11);
+      doc.text('ELENCO TOMBE — S.M.P. Peccioli', marginL, 12);
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(8);
+      doc.text('Generato il ' + today, pageW - marginR, 12, { align: 'right' });
+      y = marginT;
+      drawTableHeaderTombe(y);
+      y += headerH;
+    }
+
+    if (i % 2 === 0) {
+      doc.setFillColor(245, 240, 232);
+      doc.rect(marginL, y, usableW, rowH, 'F');
+    }
+
+    doc.setDrawColor(200, 190, 175);
+    doc.setLineWidth(0.2);
+    doc.rect(marginL, y, colNum, rowH);
+    doc.rect(marginL + colNum, y, colUS, rowH);
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(8);
+    doc.setTextColor(80, 45, 10);
+    doc.text(String(t.numero), marginL + colNum / 2, y + 5.5, { align: 'center' });
+
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(30, 20, 10);
+    const us = t.us_collegate || '—';
+    const usTrunc = doc.splitTextToSize(us, colUS - 4)[0];
+    doc.text(usTrunc, marginL + colNum + 3, y + 5.5);
+
+    y += rowH;
+  });
+
+  const totalPages = doc.internal.getNumberOfPages();
+  for (let p = 1; p <= totalPages; p++) {
+    doc.setPage(p);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(7);
+    doc.setTextColor(150, 140, 120);
+    doc.text('Pagina ' + p + ' di ' + totalPages, pageW / 2, pageH - 5, { align: 'center' });
+    doc.text('Scavo Santa Mustiola — Peccioli (PI)', marginL, pageH - 5);
+  }
+
+  doc.save('ElencoTombe_' + new Date().toISOString().split('T')[0] + '.pdf');
+  showToast('✓ Elenco Tombe generato (' + sorted.length + ' tombe)');
+}
+
 // ─── MAPPA LEAFLET ───────────────────────────────────────────────
 let _mappaMap = null;
 let _mappaLayers = { polygon: null, point: null, line: null, other: null };
@@ -6826,9 +7151,9 @@ function showToast(msg) {
   <script>
     if ('serviceWorker' in navigator && !location.hostname.includes('claudeusercontent.com')) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./service-worker.js?v=66')
+        navigator.serviceWorker.register('./service-worker.js?v=68')
           .then(reg => {
-            console.log('SW registrato v66:', reg.scope);
+            console.log('SW registrato v68:', reg.scope);
             // Forza aggiornamento immediato se c'è una nuova versione
             reg.update();
           })
