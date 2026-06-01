@@ -5,7 +5,7 @@
   <!-- PWA -->
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#C9963A">
-  <meta name="app-version" content="70">
+  <meta name="app-version" content="71">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="SMP Scavo">
@@ -2150,13 +2150,11 @@ function schedaToRow(s) {
 // Salva/aggiorna una singola scheda cercando la sua riga nel foglio.
 // — Nuova scheda: verifica che il numero US non esista già (anti-duplicato concorrente)
 // — Scheda esistente: ottimistic lock — controlla che _last_modified non sia cambiato
-async function saveSchedaToSheets(scheda) {
+async function saveSchedaToSheets(scheda, isNew = false) {
   await ensureHeaders();
 
   // Legge id + numero + _last_modified di tutte le righe
   const lmIdx = HEADERS.indexOf('_last_modified') + 1; // colonna 1-based
-  const colLetter = String.fromCharCode(64 + lmIdx);   // es. 'A'=1 → 'AQ' per colonna 43
-  // Per fogli con molte colonne usiamo la notazione A1 con lettera doppia se necessario
   function colToLetter(n) {
     let s = '';
     while (n > 0) { n--; s = String.fromCharCode(65 + (n % 26)) + s; n = Math.floor(n / 26); }
@@ -2169,7 +2167,7 @@ async function saveSchedaToSheets(scheda) {
   const idColIdx   = HEADERS.indexOf('id');
   const numColIdx  = HEADERS.indexOf('numero');
 
-  if (!scheda.id || editingId === null) {
+  if (isNew) {
     // ── NUOVA SCHEDA: anti-duplicato concorrente ──────────────────
     const esisteSulFoglio = rows.some(r => String(r[numColIdx]) === String(scheda.numero));
     if (esisteSulFoglio) {
@@ -2715,11 +2713,13 @@ async function saveScheda() {
     _last_modified: now,
   };
 
+  const isNew = !editingId;
+
   if (editingId) schede = schede.map(s => s.id === editingId ? scheda : s);
   else schede.push(scheda);
 
   try {
-    await saveSchedaToSheets(scheda);
+    await saveSchedaToSheets(scheda, isNew);
     _loadedLastModified = now; // aggiorna il lock locale dopo salvataggio ok
     setSyncStatus('ok', 'Sincronizzato');
     showToast('☁ US ' + numero + ' salvata sul cloud');
@@ -2748,7 +2748,7 @@ async function saveScheda() {
           // Forza sovrascrittura: azzera il lock e risalva
           _loadedLastModified = null;
           try {
-            await saveSchedaToSheets(scheda);
+            await saveSchedaToSheets(scheda, false); // sempre false: è una scheda esistente
             _loadedLastModified = now;
             setSyncStatus('ok', 'Sincronizzato');
             showToast('☁ US ' + numero + ' sovrascritta');
@@ -7373,9 +7373,9 @@ function showToast(msg) {
   <script>
     if ('serviceWorker' in navigator && !location.hostname.includes('claudeusercontent.com')) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./service-worker.js?v=70')
+        navigator.serviceWorker.register('./service-worker.js?v=71')
           .then(reg => {
-            console.log('SW registrato v70:', reg.scope);
+            console.log('SW registrato v71:', reg.scope);
             // Forza aggiornamento immediato se c'è una nuova versione
             reg.update();
           })
