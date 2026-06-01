@@ -5,7 +5,7 @@
   <!-- PWA -->
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#C9963A">
-  <meta name="app-version" content="79">
+  <meta name="app-version" content="81">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="SMP Scavo">
@@ -6051,10 +6051,26 @@ async function deleteDiario() {
 }
 
 // PDF diario
-function exportDiarioPDF() {
+async function exportDiarioPDF() {
   const d = diari.find(x => x.id === editingDiarioId);
   if (!d) return;
-  loadJsPDF().then(() => {
+
+  // Assicura che le foto da Drive siano caricate prima di generare il PDF
+  const b64_1_el = document.getElementById('d_foto1_b64');
+  const b64_2_el = document.getElementById('d_foto2_b64');
+  const attese = [];
+  if (d.foto1_drive_id && (!b64_1_el?.value || !b64_1_el.value.startsWith('data:'))) {
+    attese.push(caricaAnteprimaFotoDrive(d.foto1_drive_id, 'foto1-preview', 'd_foto1_b64'));
+  }
+  if (d.foto2_drive_id && (!b64_2_el?.value || !b64_2_el.value.startsWith('data:'))) {
+    attese.push(caricaAnteprimaFotoDrive(d.foto2_drive_id, 'foto2-preview', 'd_foto2_b64'));
+  }
+  if (attese.length) {
+    showToast('Caricamento foto dal Drive…');
+    await Promise.all(attese);
+  }
+
+  await loadJsPDF();
     const { jsPDF } = window.jspdf;
     const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
     const W=210, H=297, ML=12, MR=12, MT=12, IW=210-24;
@@ -6219,7 +6235,6 @@ function exportDiarioPDF() {
       } catch(e) { console.warn('Foto2 PDF:', e.message); }
     }
     doc.save(`Diario_Sett${d.settore||'X'}_${d.data||'senza_data'}.pdf`);
-  });
 }
 
 async function ensureSheetExists(sheetName, headers) {
@@ -7221,31 +7236,6 @@ function exportMatrixPDF() {
     height: 100%;
     display: block;
   }
-  #matrix-print-legend {
-    position: absolute;
-    top: 8px;
-    left: 8px;
-    background: rgba(255,255,255,0.92);
-    border: 1px solid #bbb;
-    border-radius: 4px;
-    padding: 6px 9px;
-    font-family: 'Courier New', monospace;
-    font-size: 7pt;
-    color: #111;
-    line-height: 1.9;
-    pointer-events: none;
-  }
-  #matrix-print-legend .leg-title {
-    font-size: 6pt;
-    color: #666;
-    letter-spacing: 0.08em;
-    margin-bottom: 3px;
-  }
-  #matrix-print-legend .leg-row {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-  }
   #footer {
     flex-shrink: 0;
     display: flex;
@@ -7261,15 +7251,6 @@ function exportMatrixPDF() {
 </head><body>
   <div id="svg-wrap">
     ${svgStr}
-    <div id="matrix-print-legend">
-      <div class="leg-title">LEGENDA</div>
-      <div class="leg-row"><svg width="20" height="3"><line x1="0" y1="1.5" x2="20" y2="1.5" stroke="#8B5E10" stroke-width="1.5"/></svg> copre / taglia / riempie</div>
-      <div class="leg-row"><svg width="20" height="3"><line x1="0" y1="1.5" x2="20" y2="1.5" stroke="#3a7ab0" stroke-width="1.5" stroke-dasharray="3 4"/></svg> si lega / si appoggia</div>
-      <div class="leg-row"><svg width="20" height="11"><rect x="0" y="0" width="20" height="11" rx="2" fill="#ffffff" stroke="#8B5E10" stroke-width="1.2"/></svg> US stratigrafica</div>
-      <div class="leg-row"><svg width="20" height="11"><rect x="0" y="0" width="20" height="11" rx="2" fill="#8B5E10" stroke="#6e4a0c" stroke-width="1.2"/></svg> USN (negativa)</div>
-      <div class="leg-row"><svg width="20" height="11"><rect x="0" y="0" width="20" height="11" rx="2" fill="none" stroke="#2060a0" stroke-width="1.2" stroke-dasharray="3 2"/></svg> = uguale_a</div>
-      <div class="leg-row"><svg width="20" height="11"><rect x="0" y="0" width="20" height="11" rx="2" fill="#fff0ee" stroke="#b03010" stroke-width="1.2"/></svg> ⚠ conflitto</div>
-    </div>
   </div>
   <div id="footer">
     <span>Area Archeologica SMP — Peccioli (PI)</span>
@@ -7402,9 +7383,9 @@ function showToast(msg) {
   <script>
     if ('serviceWorker' in navigator && !location.hostname.includes('claudeusercontent.com')) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./service-worker.js?v=79')
+        navigator.serviceWorker.register('./service-worker.js?v=81')
           .then(reg => {
-            console.log('SW registrato v79:', reg.scope);
+            console.log('SW registrato v81:', reg.scope);
             // Forza aggiornamento immediato se c'è una nuova versione
             reg.update();
           })
