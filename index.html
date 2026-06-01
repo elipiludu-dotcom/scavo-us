@@ -5,7 +5,7 @@
   <!-- PWA -->
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#C9963A">
-  <meta name="app-version" content="74">
+  <meta name="app-version" content="75">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="SMP Scavo">
@@ -6881,7 +6881,7 @@ function renderMatrix() {
   const gRoot = svg.appendChild(document.createElementNS(ns, 'g'));
   gRoot.setAttribute('transform', `translate(${PAD},${PAD})`);
 
-  // ── LEGENDA (in alto a sinistra, verticale, dentro l'SVG) ────────
+  // ── LEGENDA (fuori da gRoot — posizione fissa in alto a sinistra, non segue pan/zoom) ──
   const LEG_X = 10, LEG_Y = 10, LEG_LH = 18, LEG_PAD = 8;
   const legendItems = [
     { type: 'line',  color: '#C9963A', dash: '',    label: 'copre / taglia / riempie' },
@@ -6894,7 +6894,8 @@ function renderMatrix() {
   const legH = legendItems.length * LEG_LH + LEG_PAD * 2;
   const legW = 168;
 
-  const legG = gRoot.appendChild(document.createElementNS(ns, 'g'));
+  // Appende legG direttamente a svg (non a gRoot) — rimane fissa durante pan/zoom
+  const legG = svg.appendChild(document.createElementNS(ns, 'g'));
   legG.setAttribute('transform', `translate(${LEG_X},${LEG_Y})`);
 
   // Sfondo legenda
@@ -7154,6 +7155,9 @@ function renderMatrix() {
       tTipo.textContent = s.tipo.substring(0, 11);
     }
   });
+
+  // Ri-appende la legenda in cima all'SVG (ultimo elemento = sopra tutto)
+  svg.appendChild(legG);
 }
 
 // ─── MATRIX EXPORT ───────────────────────────────────────────────
@@ -7381,9 +7385,9 @@ function showToast(msg) {
   <script>
     if ('serviceWorker' in navigator && !location.hostname.includes('claudeusercontent.com')) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./service-worker.js?v=74')
+        navigator.serviceWorker.register('./service-worker.js?v=75')
           .then(reg => {
-            console.log('SW registrato v74:', reg.scope);
+            console.log('SW registrato v75:', reg.scope);
             // Forza aggiornamento immediato se c'è una nuova versione
             reg.update();
           })
