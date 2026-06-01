@@ -5,7 +5,7 @@
   <!-- PWA -->
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#C9963A">
-  <meta name="app-version" content="75">
+  <meta name="app-version" content="77">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="SMP Scavo">
@@ -1604,6 +1604,16 @@
       <!-- Container SVG: visibile solo su desktop -->
       <div id="matrix-container" style="width:100%;height:calc(100dvh - 270px);min-height:280px;overflow:hidden;background:var(--parchment-light);cursor:grab;position:relative;user-select:none">
         <svg id="matrix-svg" style="display:block;position:absolute;top:0;left:0;transform-origin:0 0"></svg>
+        <!-- Legenda fissa in alto a sinistra, fuori dall'SVG così non segue pan/zoom -->
+        <div id="matrix-legend" style="position:absolute;top:10px;left:10px;z-index:10;background:rgba(30,27,18,0.88);border:1px solid #4a4540;border-radius:4px;padding:8px 10px;font-family:'Space Mono',monospace;font-size:8px;color:#ede5d8;pointer-events:none;line-height:1.8">
+          <div style="color:#8a7f70;font-size:7px;letter-spacing:0.08em;margin-bottom:4px">LEGENDA</div>
+          <div style="display:flex;align-items:center;gap:6px"><svg width="20" height="2" style="flex-shrink:0"><line x1="0" y1="1" x2="20" y2="1" stroke="#C9963A" stroke-width="1.5"/></svg> copre / taglia / riempie</div>
+          <div style="display:flex;align-items:center;gap:6px"><svg width="20" height="2" style="flex-shrink:0"><line x1="0" y1="1" x2="20" y2="1" stroke="#7aaddd" stroke-width="1.5" stroke-dasharray="3 4"/></svg> si lega / si appoggia</div>
+          <div style="display:flex;align-items:center;gap:6px"><svg width="20" height="11" style="flex-shrink:0"><rect x="0" y="0" width="20" height="11" rx="2" fill="#1e1b12" stroke="#C9963A" stroke-width="1.2"/></svg> US stratigrafica</div>
+          <div style="display:flex;align-items:center;gap:6px"><svg width="20" height="11" style="flex-shrink:0"><rect x="0" y="0" width="20" height="11" rx="2" fill="#C9963A" stroke="#8B6520" stroke-width="1.2"/></svg> USN (negativa)</div>
+          <div style="display:flex;align-items:center;gap:6px"><svg width="20" height="11" style="flex-shrink:0"><rect x="0" y="0" width="20" height="11" rx="2" fill="none" stroke="#4a90d9" stroke-width="1.2" stroke-dasharray="3 2"/></svg> = uguale_a</div>
+          <div style="display:flex;align-items:center;gap:6px"><svg width="20" height="11" style="flex-shrink:0"><rect x="0" y="0" width="20" height="11" rx="2" fill="#3a1010" stroke="#d94f30" stroke-width="1.2"/></svg> ⚠ conflitto</div>
+        </div>
       </div>
       <!-- Bottone PDF: visibile solo su mobile, gestito da JS -->
       <div id="matrix-mobile-btn" style="display:none;width:100%;padding:40px 20px;flex-direction:column;align-items:center;justify-content:center;gap:16px;background:var(--parchment-light)">
@@ -6881,76 +6891,7 @@ function renderMatrix() {
   const gRoot = svg.appendChild(document.createElementNS(ns, 'g'));
   gRoot.setAttribute('transform', `translate(${PAD},${PAD})`);
 
-  // ── LEGENDA (fuori da gRoot — posizione fissa in alto a sinistra, non segue pan/zoom) ──
-  const LEG_X = 10, LEG_Y = 10, LEG_LH = 18, LEG_PAD = 8;
-  const legendItems = [
-    { type: 'line',  color: '#C9963A', dash: '',    label: 'copre / taglia / riempie' },
-    { type: 'line',  color: '#7aaddd', dash: '3 4', label: 'si lega / si appoggia' },
-    { type: 'rect',  color: '#C9963A', fill: '#1e1b12', label: 'US stratigrafica' },
-    { type: 'rect',  color: '#C9963A', fill: '#C9963A', label: 'USN (negativa)' },
-    { type: 'dbox',  color: '#4a90d9', fill: 'none',   label: '= uguale_a' },
-    { type: 'rect',  color: '#d94f30', fill: '#3a1010', label: '⚠ conflitto' },
-  ];
-  const legH = legendItems.length * LEG_LH + LEG_PAD * 2;
-  const legW = 168;
-
-  // Appende legG direttamente a svg (non a gRoot) — rimane fissa durante pan/zoom
-  const legG = svg.appendChild(document.createElementNS(ns, 'g'));
-  legG.setAttribute('transform', `translate(${LEG_X},${LEG_Y})`);
-
-  // Sfondo legenda
-  const legBg = legG.appendChild(document.createElementNS(ns, 'rect'));
-  legBg.setAttribute('width', legW); legBg.setAttribute('height', legH);
-  legBg.setAttribute('rx', '4');
-  legBg.setAttribute('fill', 'rgba(30,27,18,0.82)');
-  legBg.setAttribute('stroke', '#4a4540');
-  legBg.setAttribute('stroke-width', '1');
-
-  // Titolo
-  const legTitle = legG.appendChild(document.createElementNS(ns, 'text'));
-  legTitle.setAttribute('x', LEG_PAD); legTitle.setAttribute('y', LEG_PAD + 9);
-  legTitle.setAttribute('fill', '#8a7f70');
-  legTitle.setAttribute('font-family', 'Space Mono, monospace');
-  legTitle.setAttribute('font-size', '7');
-  legTitle.setAttribute('letter-spacing', '0.08em');
-  legTitle.textContent = 'LEGENDA';
-
-  legendItems.forEach((item, i) => {
-    const y = LEG_PAD + 18 + i * LEG_LH;
-    const iconX = LEG_PAD + 2;
-    const iconY = y + 5;
-    const textX = LEG_PAD + 28;
-
-    if (item.type === 'line') {
-      const l = legG.appendChild(document.createElementNS(ns, 'line'));
-      l.setAttribute('x1', iconX); l.setAttribute('y1', iconY);
-      l.setAttribute('x2', iconX + 20); l.setAttribute('y2', iconY);
-      l.setAttribute('stroke', item.color); l.setAttribute('stroke-width', '1.5');
-      if (item.dash) l.setAttribute('stroke-dasharray', item.dash);
-    } else if (item.type === 'rect') {
-      const r = legG.appendChild(document.createElementNS(ns, 'rect'));
-      r.setAttribute('x', iconX); r.setAttribute('y', iconY - 5);
-      r.setAttribute('width', 20); r.setAttribute('height', 11);
-      r.setAttribute('rx', '2');
-      r.setAttribute('fill', item.fill); r.setAttribute('stroke', item.color);
-      r.setAttribute('stroke-width', '1.2');
-    } else if (item.type === 'dbox') {
-      const r = legG.appendChild(document.createElementNS(ns, 'rect'));
-      r.setAttribute('x', iconX); r.setAttribute('y', iconY - 5);
-      r.setAttribute('width', 20); r.setAttribute('height', 11);
-      r.setAttribute('rx', '2');
-      r.setAttribute('fill', 'none'); r.setAttribute('stroke', item.color);
-      r.setAttribute('stroke-width', '1.2');
-      r.setAttribute('stroke-dasharray', '3 2');
-    }
-
-    const t = legG.appendChild(document.createElementNS(ns, 'text'));
-    t.setAttribute('x', textX); t.setAttribute('y', iconY + 4);
-    t.setAttribute('fill', '#ede5d8');
-    t.setAttribute('font-family', 'Space Mono, monospace');
-    t.setAttribute('font-size', '8');
-    t.textContent = item.label;
-  });
+  // ── LEGENDA: gestita come elemento HTML fisso sopra il container (vedi HTML) ──
 
   // ── 8. ARCHI STRATIGRAFICI (ortogonali con porte dedicate) ──────
   // Per ogni nodo calcola quante connessioni escono (basso) ed entrano (alto)
@@ -7155,9 +7096,6 @@ function renderMatrix() {
       tTipo.textContent = s.tipo.substring(0, 11);
     }
   });
-
-  // Ri-appende la legenda in cima all'SVG (ultimo elemento = sopra tutto)
-  svg.appendChild(legG);
 }
 
 // ─── MATRIX EXPORT ───────────────────────────────────────────────
@@ -7234,11 +7172,37 @@ function exportMatrixPDF() {
     min-height: 0;
     width: 100%;
     overflow: hidden;
+    position: relative;
   }
   #svg-wrap svg {
     width: 100%;
     height: 100%;
     display: block;
+  }
+  #matrix-print-legend {
+    position: absolute;
+    top: 8px;
+    left: 8px;
+    background: rgba(255,255,255,0.92);
+    border: 1px solid #bbb;
+    border-radius: 4px;
+    padding: 6px 9px;
+    font-family: 'Courier New', monospace;
+    font-size: 7pt;
+    color: #111;
+    line-height: 1.9;
+    pointer-events: none;
+  }
+  #matrix-print-legend .leg-title {
+    font-size: 6pt;
+    color: #666;
+    letter-spacing: 0.08em;
+    margin-bottom: 3px;
+  }
+  #matrix-print-legend .leg-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
   }
   #footer {
     flex-shrink: 0;
@@ -7253,7 +7217,18 @@ function exportMatrixPDF() {
   }
 </style>
 </head><body>
-  <div id="svg-wrap">${svgStr}</div>
+  <div id="svg-wrap">
+    ${svgStr}
+    <div id="matrix-print-legend">
+      <div class="leg-title">LEGENDA</div>
+      <div class="leg-row"><svg width="20" height="3"><line x1="0" y1="1.5" x2="20" y2="1.5" stroke="#8B5E10" stroke-width="1.5"/></svg> copre / taglia / riempie</div>
+      <div class="leg-row"><svg width="20" height="3"><line x1="0" y1="1.5" x2="20" y2="1.5" stroke="#3a7ab0" stroke-width="1.5" stroke-dasharray="3 4"/></svg> si lega / si appoggia</div>
+      <div class="leg-row"><svg width="20" height="11"><rect x="0" y="0" width="20" height="11" rx="2" fill="#ffffff" stroke="#8B5E10" stroke-width="1.2"/></svg> US stratigrafica</div>
+      <div class="leg-row"><svg width="20" height="11"><rect x="0" y="0" width="20" height="11" rx="2" fill="#8B5E10" stroke="#6e4a0c" stroke-width="1.2"/></svg> USN (negativa)</div>
+      <div class="leg-row"><svg width="20" height="11"><rect x="0" y="0" width="20" height="11" rx="2" fill="none" stroke="#2060a0" stroke-width="1.2" stroke-dasharray="3 2"/></svg> = uguale_a</div>
+      <div class="leg-row"><svg width="20" height="11"><rect x="0" y="0" width="20" height="11" rx="2" fill="#fff0ee" stroke="#b03010" stroke-width="1.2"/></svg> ⚠ conflitto</div>
+    </div>
+  </div>
   <div id="footer">
     <span>Area Archeologica SMP — Peccioli (PI)</span>
     <span>Matrix Stratigrafica &nbsp;·&nbsp; Settore: ${settore} &nbsp;·&nbsp; Anno: ${anno}</span>
@@ -7385,9 +7360,9 @@ function showToast(msg) {
   <script>
     if ('serviceWorker' in navigator && !location.hostname.includes('claudeusercontent.com')) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./service-worker.js?v=75')
+        navigator.serviceWorker.register('./service-worker.js?v=77')
           .then(reg => {
-            console.log('SW registrato v75:', reg.scope);
+            console.log('SW registrato v77:', reg.scope);
             // Forza aggiornamento immediato se c'è una nuova versione
             reg.update();
           })
