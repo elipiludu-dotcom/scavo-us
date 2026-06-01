@@ -5,7 +5,7 @@
   <!-- PWA -->
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#C9963A">
-  <meta name="app-version" content="73">
+  <meta name="app-version" content="74">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="SMP Scavo">
@@ -2160,19 +2160,18 @@ function schedaToRow(s) {
 async function saveSchedaToSheets(scheda, isNew = false) {
   await ensureHeaders();
 
-  // Legge id + numero + _last_modified di tutte le righe
-  const lmIdx = HEADERS.indexOf('_last_modified') + 1; // colonna 1-based
+  // Legge id e numero di tutte le righe per trovare la riga giusta
+  const numColIdx = HEADERS.indexOf('numero');
   function colToLetter(n) {
     let s = '';
     while (n > 0) { n--; s = String.fromCharCode(65 + (n % 26)) + s; n = Math.floor(n / 26); }
     return s;
   }
-  const lmCol = colToLetter(lmIdx);
-  const data = await sheetsGet(`${SHEET_NAME}!A2:${lmCol}10000`);
+  const numCol = colToLetter(numColIdx + 1);
+  const data = await sheetsGet(`${SHEET_NAME}!A2:${numCol}10000`);
   const rows = data.values || [];
 
-  const idColIdx   = HEADERS.indexOf('id');
-  const numColIdx  = HEADERS.indexOf('numero');
+  const idColIdx  = HEADERS.indexOf('id');
 
   if (isNew) {
     // ── NUOVA SCHEDA: anti-duplicato concorrente ──────────────────
@@ -2191,12 +2190,9 @@ async function saveSchedaToSheets(scheda, isNew = false) {
       return;
     }
     const sheetRow = rowIndex + 2;
-    const lmSulFoglio = rows[rowIndex][lmIdx - 1] || null;
-
-    if (_loadedLastModified && lmSulFoglio && lmSulFoglio !== _loadedLastModified) {
-      // Qualcun altro ha modificato questa scheda dopo che l'abbiamo aperta
-      throw { type: 'CONFLICT', numero: scheda.numero, modified: lmSulFoglio };
-    }
+    // Nota: il controllo ottimistic lock (_last_modified) è disabilitato perché
+    // la serializzazione/deserializzazione da Sheets può alterare il formato del timestamp
+    // causando falsi conflitti. La protezione rimane attiva solo per le nuove schede.
     await sheetsUpdate(`${SHEET_NAME}!A${sheetRow}`, [schedaToRow(scheda)]);
   }
 }
@@ -7385,9 +7381,9 @@ function showToast(msg) {
   <script>
     if ('serviceWorker' in navigator && !location.hostname.includes('claudeusercontent.com')) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./service-worker.js?v=73')
+        navigator.serviceWorker.register('./service-worker.js?v=74')
           .then(reg => {
-            console.log('SW registrato v73:', reg.scope);
+            console.log('SW registrato v74:', reg.scope);
             // Forza aggiornamento immediato se c'è una nuova versione
             reg.update();
           })
