@@ -5,7 +5,7 @@
   <!-- PWA -->
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#C9963A">
-  <meta name="app-version" content="71">
+  <meta name="app-version" content="73">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="SMP Scavo">
@@ -2113,6 +2113,13 @@ async function loadFromSheets(showMsg = false) {
         // Parse boolean fields
         ['foto_digitali','foto_3d','foto_drone'].forEach(k => { obj[k] = obj[k] === 'true'; });
         obj.numero = parseInt(obj.numero) || 0;
+        // Arrotonda quote e spessore a 2 decimali
+        ['quota_max','quota_min','spessore'].forEach(k => {
+          if (obj[k] !== '' && obj[k] !== undefined) {
+            const n = parseFloat(obj[k]);
+            if (!isNaN(n)) obj[k] = Math.round(n * 100) / 100;
+          }
+        });
         // Sanitize: rimuovi artefatti JSON (es. "[]") dai campi testo
         if (obj.fase && obj.fase.trim() === '[]') obj.fase = '';
         if (obj.fase && obj.fase.trim().startsWith('[')) obj.fase = '';
@@ -2661,9 +2668,14 @@ function showAnnoDialog(dataset, annoField) {
 
 // ─── SAVE / DELETE ────────────────────────────────────────────────
 async function saveScheda() {
+  const numero = parseInt(document.getElementById('f_numero').value);
+  if (!numero) { showToast('⚠ Inserisci il numero US'); return; }
+  const duplicate = schede.find(s => s.numero === numero && s.id !== editingId);
   if (duplicate) { showToast('⚠ US ' + numero + ' già presente'); return; }
 
   setSyncStatus('syncing', 'Salvataggio…');
+
+  const roundQ = v => { const n = parseFloat(v); return isNaN(n) ? '' : String(Math.round(n * 100) / 100); };
 
   const now = new Date().toISOString();
   const scheda = {
@@ -2686,9 +2698,9 @@ async function saveScheda() {
     inclusi_geo: document.getElementById('f_inclusi_geo').value,
     inclusi_org: document.getElementById('f_inclusi_org').value,
     inclusi_art: document.getElementById('f_inclusi_art').value,
-    quota_max: document.getElementById('f_quota_max').value,
-    quota_min: document.getElementById('f_quota_min').value,
-    spessore: document.getElementById('f_spessore').value,
+    quota_max: roundQ(document.getElementById('f_quota_max').value),
+    quota_min: roundQ(document.getElementById('f_quota_min').value),
+    spessore:   roundQ(document.getElementById('f_spessore').value),
     descrizione: document.getElementById('f_descrizione').value,
     osservazioni: document.getElementById('f_osservazioni').value,
     rapporti: getRapporti(),
@@ -7373,9 +7385,9 @@ function showToast(msg) {
   <script>
     if ('serviceWorker' in navigator && !location.hostname.includes('claudeusercontent.com')) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./service-worker.js?v=71')
+        navigator.serviceWorker.register('./service-worker.js?v=73')
           .then(reg => {
-            console.log('SW registrato v71:', reg.scope);
+            console.log('SW registrato v73:', reg.scope);
             // Forza aggiornamento immediato se c'è una nuova versione
             reg.update();
           })
