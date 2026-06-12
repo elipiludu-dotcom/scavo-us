@@ -5,7 +5,7 @@
   <!-- PWA -->
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#C9963A">
-  <meta name="app-version" content="84">
+  <meta name="app-version" content="85">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="SMP Scavo">
@@ -583,6 +583,24 @@
     height: 1px;
     background: linear-gradient(90deg, transparent, var(--border), transparent);
     margin: 4px 0;
+  }
+  .stats-section {
+    grid-column: 1 / -1;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-family: 'Space Mono', monospace;
+    font-size: 0.62rem;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    margin-top: 10px;
+  }
+  .stats-section::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: linear-gradient(90deg, var(--border), transparent);
   }
   .stat-box-link {
     cursor: pointer;
@@ -2374,7 +2392,7 @@ function renderList(q = '', filtri = {}) {
     if (filtri.area   && s.area   !== filtri.area)   return false;
     if (filtri.saggio && s.saggio !== filtri.saggio) return false;
     if (filtri.tipo   && s.tipo   !== filtri.tipo)   return false;
-    if (filtri.stato  && s.stato  !== filtri.stato)  return false;
+    if (filtri.stato  && (s.stato||'').toLowerCase() !== filtri.stato.toLowerCase()) return false;
     return true;
   }).sort((a,b) => Math.abs(b.numero) - Math.abs(a.numero));
 
@@ -2403,24 +2421,16 @@ function renderList(q = '', filtri = {}) {
 
 function renderStats() {
   const total = schede.length;
-  const complete = schede.filter(s => s.stato === 'completa').length;
-  const parziali = schede.filter(s => s.stato === 'parziale').length;
-  const tipi = [...new Set(schede.map(s=>s.tipo).filter(Boolean))].length;
+  const statoDi = s => (s.stato || '').toLowerCase();
+  const complete = schede.filter(s => statoDi(s) === 'completa').length;
+  const parziali = schede.filter(s => statoDi(s) === 'parziale').length;
   const totalTombe = tombe.length;
   document.getElementById('statsGrid').innerHTML = `
+    <div class="stats-section">🏺 Unità Stratigrafiche</div>
     <div class="stat-box stat-box-link stat-box-action" onclick="showView('new')" title="Nuova scheda US">
       <span class="stat-action-icon">+</span>
       <span class="stat-label">Nuova Scheda US</span>
     </div>
-    <div class="stat-box stat-box-link stat-box-action" onclick="openNewTomba()" title="Nuova tomba">
-      <span class="stat-action-icon">+</span>
-      <span class="stat-label">Nuova Tomba</span>
-    </div>
-    <div class="stat-box stat-box-link stat-box-action" onclick="nuovaDiarioScheda()" title="Nuovo diario">
-      <span class="stat-action-icon">+</span>
-      <span class="stat-label">Nuovo Diario</span>
-    </div>
-    <div class="stats-divider"></div>
     <div class="stat-box stat-box-link" onclick="showView('schede')" title="Vedi tutte le schede US">
       <span class="stat-num">${total}</span>
       <span class="stat-label">Schede US</span>
@@ -2436,10 +2446,20 @@ function renderStats() {
       <span class="stat-label">Complete</span>
       <span class="stat-arrow">→</span>
     </div>
+    <div class="stats-section">⚱ Tombe</div>
+    <div class="stat-box stat-box-link stat-box-action" onclick="openNewTomba()" title="Nuova tomba">
+      <span class="stat-action-icon">+</span>
+      <span class="stat-label">Nuova Tomba</span>
+    </div>
     <div class="stat-box stat-box-link" onclick="showView('tombe')" title="Vedi tutte le tombe">
       <span class="stat-num">${totalTombe}</span>
       <span class="stat-label">Tombe</span>
       <span class="stat-arrow">→</span>
+    </div>
+    <div class="stats-section">📓 Diario di scavo</div>
+    <div class="stat-box stat-box-link stat-box-action" onclick="nuovaDiarioScheda()" title="Nuovo diario">
+      <span class="stat-action-icon">+</span>
+      <span class="stat-label">Nuovo Diario</span>
     </div>
     <div class="stat-box stat-box-link" onclick="showView('diario')" title="Vedi tutti i diari">
       <span class="stat-num">${diari.length}</span>
@@ -7563,9 +7583,9 @@ function showToast(msg) {
   <script>
     if ('serviceWorker' in navigator && !location.hostname.includes('claudeusercontent.com')) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./service-worker.js?v=84')
+        navigator.serviceWorker.register('./service-worker.js?v=85')
           .then(reg => {
-            console.log('SW registrato v84:', reg.scope);
+            console.log('SW registrato v85:', reg.scope);
             // Forza aggiornamento immediato se c'è una nuova versione
             reg.update();
           })
