@@ -5,7 +5,7 @@
   <!-- PWA -->
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#C9963A">
-  <meta name="app-version" content="83">
+  <meta name="app-version" content="84">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="SMP Scavo">
@@ -212,6 +212,8 @@
   .nav-tabs {
     display: flex;
     background: #252219;
+    overflow-x: auto;                    /* scorrimento orizzontale su schermi stretti */
+    -webkit-overflow-scrolling: touch;   /* scorrimento fluido iOS */
     scrollbar-width: none;
     border-bottom: 1px solid var(--border);
   }
@@ -1067,7 +1069,7 @@
     <div id="view-schede" class="view">
       <div class="list-toolbar" style="flex-wrap:wrap;gap:8px">
         <button class="btn btn-secondary" onclick="showView('list')" style="white-space:nowrap">← Home</button>
-        <input class="search-box" id="us-search" type="search" placeholder="Cerca numero US, tipo, descrizione…" oninput="renderListFiltri()" style="flex:1;min-width:160px">
+        <input class="search-box" id="us-search" type="search" placeholder="Cerca in tutti i campi (es. mosaico, carboni, US 102…)" oninput="renderListFiltri()" style="flex:1;min-width:160px">
         <button class="btn btn-secondary" onclick="toggleFiltriUS()" id="btn-filtri-us" style="white-space:nowrap">⚙ Filtri</button>
         <button class="btn btn-secondary" onclick="loadFromSheets(true)" title="Sincronizza">↻</button>
       </div>
@@ -2309,6 +2311,18 @@ function renderListFiltri() {
   renderList(q, { anno: fAnno, area: fArea, saggio: fSagg, tipo: fTipo, stato: fStato });
 }
 
+// Apre l'elenco schede già filtrato per stato (chiamata dalle statistiche in home)
+function filtraPerStato(stato) {
+  showView('schede');
+  resetFiltriUS();
+  const el = document.getElementById('f-stato');
+  if (el) el.value = stato;
+  // Mostra il pannello filtri così il filtro attivo è visibile e rimovibile
+  const panel = document.getElementById('filtri-us-panel');
+  if (panel && panel.style.display !== 'block') toggleFiltriUS();
+  renderListFiltri();
+}
+
 function toggleFiltriUS() {
   const panel = document.getElementById('filtri-us-panel');
   if (!panel) return;
@@ -2344,14 +2358,18 @@ function popolaSelectFiltriUS() {
 function renderList(q = '', filtri = {}) {
   const list = document.getElementById('usList');
   const term = q.toLowerCase();
+  // Ricerca globale: costruisce una stringa con tutti i campi testuali della scheda
+  const testoScheda = s => Object.entries(s)
+    .filter(([k]) => k !== 'id' && !k.startsWith('_'))
+    .map(([, v]) => {
+      if (v == null) return '';
+      if (Array.isArray(v) || typeof v === 'object') return JSON.stringify(v);
+      return String(v);
+    })
+    .join(' ')
+    .toLowerCase();
   const filtered = schede.filter(s => {
-    if (term && !(
-      String(s.numero).includes(term) ||
-      (s.area||'').toLowerCase().includes(term) ||
-      (s.descrizione||'').toLowerCase().includes(term) ||
-      (s.tipo||'').toLowerCase().includes(term) ||
-      (s.saggio||'').toLowerCase().includes(term)
-    )) return false;
+    if (term && !testoScheda(s).includes(term)) return false;
     if (filtri.anno   && s.anno   !== filtri.anno)   return false;
     if (filtri.area   && s.area   !== filtri.area)   return false;
     if (filtri.saggio && s.saggio !== filtri.saggio) return false;
@@ -2386,6 +2404,7 @@ function renderList(q = '', filtri = {}) {
 function renderStats() {
   const total = schede.length;
   const complete = schede.filter(s => s.stato === 'completa').length;
+  const parziali = schede.filter(s => s.stato === 'parziale').length;
   const tipi = [...new Set(schede.map(s=>s.tipo).filter(Boolean))].length;
   const totalTombe = tombe.length;
   document.getElementById('statsGrid').innerHTML = `
@@ -2405,6 +2424,16 @@ function renderStats() {
     <div class="stat-box stat-box-link" onclick="showView('schede')" title="Vedi tutte le schede US">
       <span class="stat-num">${total}</span>
       <span class="stat-label">Schede US</span>
+      <span class="stat-arrow">→</span>
+    </div>
+    <div class="stat-box stat-box-link" onclick="filtraPerStato('parziale')" title="Vedi le schede ancora da completare">
+      <span class="stat-num" style="color:var(--earth)">${parziali}</span>
+      <span class="stat-label">Parziali</span>
+      <span class="stat-arrow">→</span>
+    </div>
+    <div class="stat-box stat-box-link" onclick="filtraPerStato('completa')" title="Vedi le schede complete">
+      <span class="stat-num" style="color:#5dba85">${complete}</span>
+      <span class="stat-label">Complete</span>
       <span class="stat-arrow">→</span>
     </div>
     <div class="stat-box stat-box-link" onclick="showView('tombe')" title="Vedi tutte le tombe">
@@ -7534,9 +7563,9 @@ function showToast(msg) {
   <script>
     if ('serviceWorker' in navigator && !location.hostname.includes('claudeusercontent.com')) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./service-worker.js?v=83')
+        navigator.serviceWorker.register('./service-worker.js?v=84')
           .then(reg => {
-            console.log('SW registrato v83:', reg.scope);
+            console.log('SW registrato v84:', reg.scope);
             // Forza aggiornamento immediato se c'è una nuova versione
             reg.update();
           })
