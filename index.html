@@ -5,7 +5,7 @@
   <!-- PWA -->
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#C9963A">
-  <meta name="app-version" content="86">
+  <meta name="app-version" content="87">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="SMP Scavo">
@@ -133,6 +133,41 @@
   }
   .btn-sun:hover { border-color: var(--earth); color: var(--earth); background: rgba(201,150,58,0.08); }
   body.sun-mode .btn-sun { background: rgba(139,94,16,0.12); border-color: rgba(139,94,16,0.4); color: #8B5E10; }
+
+  /* ── FAB "Nuova US" — visibile solo su mobile, viste home/elenco ── */
+  #fabNuovaUS {
+    display: none;
+    position: fixed;
+    right: 16px;
+    bottom: calc(20px + env(safe-area-inset-bottom, 0px));
+    width: 58px;
+    height: 58px;
+    border-radius: 50%;
+    border: none;
+    background: var(--earth);
+    color: #1e1b12;
+    font-size: 2rem;
+    font-weight: 700;
+    line-height: 1;
+    cursor: pointer;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.45);
+    z-index: 1500;
+    align-items: center;
+    justify-content: center;
+    transition: transform 0.12s;
+  }
+  #fabNuovaUS:active { transform: scale(0.92); }
+  body.sun-mode #fabNuovaUS { background: var(--earth); color: #f5f0e8; }
+
+  @media (max-width: 600px) {
+    #fabNuovaUS.fab-visible { display: flex; }
+    /* Touch target a prova di campo (Apple HIG: min 44px) */
+    .btn { min-height: 44px; padding: 12px 18px; font-size: 0.92rem; }
+    .btn-sun { width: 42px; height: 42px; }
+    /* Zoom matrix: pulsanti più grandi (hanno stili inline, serve !important) */
+    #view-matrix button[onclick^="matrixZoom("] { width: 44px !important; height: 44px !important; font-size: 1.3rem !important; }
+    #view-matrix button[onclick="matrixZoomReset()"] { height: 44px !important; }
+  }
 
   /* HEADER */
   .app-header {
@@ -1067,6 +1102,9 @@
 
     <div class="nav-tab" onclick="signOut()" style="margin-left:auto">⎋ Esci</div>
   </div>
+
+  <!-- Pulsante flottante "Nuova US" (solo mobile, viste elenco/home) -->
+  <button id="fabNuovaUS" class="fab-visible" onclick="showView('new')" title="Nuova Scheda US" aria-label="Nuova Scheda US">+</button>
 
   <div class="content">
 
@@ -2276,6 +2314,9 @@ function showView(v) {
   document.querySelectorAll('.view').forEach(el => el.classList.remove('active'));
   document.querySelectorAll('.nav-tab').forEach(el => el.classList.remove('active'));
   document.getElementById('view-' + v).classList.add('active');
+  // FAB "Nuova US": visibile solo in home ed elenco schede
+  const _fab = document.getElementById('fabNuovaUS');
+  if (_fab) _fab.classList.toggle('fab-visible', v === 'list' || v === 'schede');
   const idx = {list:0,new:1,tombe:2,mappa:3,diario:3,export:4,import:5}[v];
   if (idx !== undefined) document.querySelectorAll('.nav-tab')[idx].classList.add('active');
   if (v === 'new' && editingId === null) resetForm();
@@ -2860,11 +2901,23 @@ function showAnnoDialog(dataset, annoField) {
 }
 
 // ─── SAVE / DELETE ────────────────────────────────────────────────
+// Blocco doppio salvataggio: disabilita i pulsanti Salva durante la scrittura
+function _bloccaSalva(selettore) {
+  const btns = [...document.querySelectorAll(selettore)];
+  const labels = btns.map(b => b.textContent);
+  btns.forEach(b => { b.disabled = true; b.textContent = '⏳ Salvataggio…'; b.style.opacity = '0.6'; });
+  return () => btns.forEach((b, i) => { b.disabled = false; b.textContent = labels[i]; b.style.opacity = ''; });
+}
+
 async function saveScheda() {
+  if (window._salvataggioUSInCorso) return;
   const numero = parseInt(document.getElementById('f_numero').value);
   if (!numero) { showToast('⚠ Inserisci il numero US'); return; }
   const duplicate = schede.find(s => s.numero === numero && s.id !== editingId);
   if (duplicate) { showToast('⚠ US ' + numero + ' già presente'); return; }
+
+  window._salvataggioUSInCorso = true;
+  const _sbloccaSalva = _bloccaSalva('button[onclick="saveScheda()"]');
 
   setSyncStatus('syncing', 'Salvataggio…');
 
@@ -2974,6 +3027,9 @@ async function saveScheda() {
       showToast('⚠ Errore durante il salvataggio');
       console.error(e);
     }
+  } finally {
+    window._salvataggioUSInCorso = false;
+    _sbloccaSalva();
   }
 }
 
@@ -3282,6 +3338,9 @@ async function saveTomba() {
   if (editingTombaId) tombe = tombe.map(t => t.id === editingTombaId ? tomba : t);
   else tombe.push(tomba);
 
+  if (window._salvataggioTombaInCorso) return;
+  window._salvataggioTombaInCorso = true;
+  const _sbloccaSalvaT = _bloccaSalva('button[onclick="saveTomba()"]');
   try {
     await saveTombaToSheets(tomba);
     setSyncStatus('ok', 'Sincronizzato');
@@ -3292,6 +3351,9 @@ async function saveTomba() {
     setSyncStatus('error', 'Errore salvataggio');
     showToast('⚠ Errore durante il salvataggio');
     console.error(e);
+  } finally {
+    window._salvataggioTombaInCorso = false;
+    _sbloccaSalvaT();
   }
 }
 
@@ -7528,6 +7590,7 @@ function toggleDropdown(id) {
   document.querySelectorAll('.nav-dropdown-menu.open').forEach(m => m.classList.remove('open'));
   if (!isOpen) {
     menu.classList.add('open');
+    window._ddOpenedAt = Date.now(); // per ignorare gli eventi scroll/resize immediati (iOS Safari)
     // Posiziona il menu (position:fixed) sotto il pulsante, senza uscire dallo schermo
     const tab = dd.querySelector('.nav-tab');
     const rect = (tab || dd).getBoundingClientRect();
@@ -7537,8 +7600,11 @@ function toggleDropdown(id) {
     menu.style.left = left + 'px';
   }
 }
-// Chiude i menu se la barra scorre o la finestra cambia (i menu fixed resterebbero fuori posto)
+// Chiude i menu se la barra scorre o la finestra cambia (i menu fixed resterebbero fuori posto).
+// Su iOS Safari il tocco stesso può generare scroll/resize (barra indirizzi che si muove):
+// gli eventi nei primi 400ms dopo l'apertura vengono ignorati.
 function _closeAllDropdowns() {
+  if (window._ddOpenedAt && Date.now() - window._ddOpenedAt < 400) return;
   document.querySelectorAll('.nav-dropdown-menu.open').forEach(m => m.classList.remove('open'));
 }
 document.addEventListener('DOMContentLoaded', () => {
@@ -7600,9 +7666,9 @@ function showToast(msg) {
   <script>
     if ('serviceWorker' in navigator && !location.hostname.includes('claudeusercontent.com')) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./service-worker.js?v=86')
+        navigator.serviceWorker.register('./service-worker.js?v=87')
           .then(reg => {
-            console.log('SW registrato v86:', reg.scope);
+            console.log('SW registrato v87:', reg.scope);
             // Forza aggiornamento immediato se c'è una nuova versione
             reg.update();
           })
