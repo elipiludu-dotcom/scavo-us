@@ -5,12 +5,12 @@
   <!-- PWA -->
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#C9963A">
-  <meta name="app-version" content="81">
+  <meta name="app-version" content="83">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="SMP Scavo">
   <link rel="apple-touch-icon" href="icon-apple.png">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover">
 <title>Archivio Documentazione di Scavo</title>
 <script>
   // Carica Google Identity Services in modo controllato
@@ -51,8 +51,14 @@
     font-family: 'DM Sans', sans-serif;
     background: var(--sand);
     color: var(--ink);
-    min-height: 100vh;
+    min-height: 100vh;  /* fallback browser vecchi */
+    min-height: 100dvh; /* iOS/Android: esclude barre browser dinamiche */
     overflow-x: hidden;
+    /* iPhone con notch (PWA fullscreen): non far finire i contenuti sotto notch/home indicator */
+    padding-top: env(safe-area-inset-top, 0);
+    padding-left: env(safe-area-inset-left, 0);
+    padding-right: env(safe-area-inset-right, 0);
+    padding-bottom: env(safe-area-inset-bottom, 0);
     background-image:
       repeating-linear-gradient(0deg, transparent, transparent 28px, rgba(255,255,255,0.025) 28px, rgba(255,255,255,0.025) 29px),
       repeating-linear-gradient(90deg, transparent, transparent 28px, rgba(255,255,255,0.015) 28px, rgba(255,255,255,0.015) 29px);
@@ -991,6 +997,13 @@
           <span class="nav-icon">📊</span> Matrix
         </div>
         <div class="nav-dropdown-sep"></div>
+        <div class="nav-dropdown-item" onclick="backupDati()">
+          <span class="nav-icon">💾</span> Crea backup dati
+        </div>
+        <div class="nav-dropdown-item" onclick="cambiaOperatore()">
+          <span class="nav-icon">👤</span> Operatore
+        </div>
+        <div class="nav-dropdown-sep"></div>
         <div class="nav-dropdown-item" onclick="apriSelezionePDF('us')">
           <span class="nav-icon">📄</span> Stampa Scheda US singola
         </div>
@@ -1105,11 +1118,13 @@
       <div class="form-header">
         <h2 id="formTitle">Nuova Scheda US</h2>
         <div class="form-actions">
+          <button class="btn btn-secondary" id="btnDuplica" style="display:none;white-space:nowrap" onclick="duplicaScheda()">⧉ Duplica</button>
           <button class="btn btn-secondary" id="btnMappaUS" style="display:none;white-space:nowrap" onclick="apriMappaPerUS()">🗺 Vedi su mappa</button>
           <button class="btn btn-secondary" onclick="showView(window._editOrigin?.replace('view-','') || 'schede')" style="white-space:nowrap">← Indietro</button>
           <button class="btn btn-success" onclick="saveScheda()">Salva</button>
         </div>
       </div>
+      <div id="lastModInfo" style="display:none;padding:4px 16px 0;font-size:0.72rem;color:var(--muted);font-family:'Space Mono',monospace"></div>
 
       <div class="form-section">
         <div class="section-title">1 · Identificazione</div>
@@ -1511,7 +1526,7 @@
 
     <!-- MAPPA -->
     <div id="view-mappa" class="view">
-      <div id="mappa-container" style="position:relative;width:100%;height:calc(100vh - 96px)">
+      <div id="mappa-container" style="position:relative;width:100%;height:calc(100vh - 96px);height:calc(100dvh - 96px)">
         <div id="leaflet-map" style="width:100%;height:100%"></div>
         <!-- Controllo layer -->
         <div id="mappa-layers" style="
@@ -1919,7 +1934,7 @@ const HEADERS = ['id','numero','anno','area','saggio','tipo','pos_neg','data','d
   'spessore','descrizione','osservazioni','rapporti','reperti','foto_digitali','foto_3d','foto_drone','disegni','note_doc',
   'interpretazione','datazione','fase','affidabilita','note_interp',
   'stato_conservazione','stato_conservazione_note','responsabile_scientifico','responsabile_rielaborazione','data_rielaborazione','modo_formazione',
-  '_last_modified'];
+  '_last_modified','_modified_by'];
 
 let accessToken = null;
 let schede = [];
@@ -2434,6 +2449,8 @@ function resetForm() {
   document.getElementById('formTitle').textContent = 'Nuova Scheda US';
   document.getElementById('btnDelete').style.display = 'none';
   const _bmu2 = document.getElementById('btnMappaUS'); if(_bmu2) _bmu2.style.display = 'none';
+  const _bdu2 = document.getElementById('btnDuplica'); if(_bdu2) _bdu2.style.display = 'none';
+  const _lmi2 = document.getElementById('lastModInfo'); if(_lmi2) _lmi2.style.display = 'none';
   editingId = null;
   _loadedLastModified = null;
   updateStatoStyle();
@@ -2449,6 +2466,20 @@ function openEdit(id) {
   document.getElementById('btnDelete').style.display = 'block';
   const _bmu = document.getElementById('btnMappaUS');
   if (_bmu) _bmu.style.display = 'inline-block';
+  const _bdu = document.getElementById('btnDuplica');
+  if (_bdu) _bdu.style.display = 'inline-block';
+  // Tracciabilità: mostra ultima modifica se disponibile
+  const _lmi = document.getElementById('lastModInfo');
+  if (_lmi) {
+    if (s._last_modified) {
+      const dt = new Date(s._last_modified);
+      const quando = isNaN(dt) ? s._last_modified : dt.toLocaleDateString('it-IT') + ' ' + dt.toLocaleTimeString('it-IT', {hour:'2-digit',minute:'2-digit'});
+      _lmi.textContent = 'Ultima modifica: ' + quando + (s._modified_by ? ' — ' + s._modified_by : '');
+      _lmi.style.display = 'block';
+    } else {
+      _lmi.style.display = 'none';
+    }
+  }
   const fields = ['numero','anno','area','saggio','tipo','data','definizione','criteri','responsabile','stato','colore','consistenza',
    'composizione','umidita','inclusi_geo','inclusi_org','inclusi_art','quota_max','quota_min','spessore','descrizione','osservazioni',
    'disegni','note_doc','interpretazione','datazione','fase','affidabilita','note_interp',
@@ -2539,6 +2570,125 @@ function getReperti() {
     qty: div.querySelector('[id$="_qty"]').value,
     desc: div.querySelector('[id$="_desc"]').value,
   }));
+}
+
+// ─── OPERATORE (tracciabilità modifiche) ─────────────────────────
+function getOperatore(askIfMissing = true) {
+  let o = localStorage.getItem('smp_operatore') || '';
+  if (!o && askIfMissing) {
+    o = (prompt('Nome operatore (per la tracciabilità delle modifiche):') || '').trim();
+    if (o) localStorage.setItem('smp_operatore', o);
+  }
+  return o;
+}
+function cambiaOperatore() {
+  const attuale = localStorage.getItem('smp_operatore') || '';
+  const o = (prompt('Nome operatore (per la tracciabilità delle modifiche):', attuale) || '').trim();
+  if (o) {
+    localStorage.setItem('smp_operatore', o);
+    showToast('👤 Operatore: ' + o);
+  }
+}
+
+// ─── BACKUP DATI ──────────────────────────────────────────────────
+// Crea un nuovo spreadsheet su Drive con una copia dei valori di tutti i fogli.
+// (Non si può usare Drive files.copy perché lo scope drive.file non copre il foglio originale)
+async function backupDati() {
+  const ok = await showConfirm({
+    icon: '💾', title: 'Crea backup dati?',
+    message: 'Verrà creato un nuovo foglio Google con una copia completa di tutti i dati (schede US, tombe, diari). Lo troverai nel tuo Drive.',
+    okLabel: 'Crea backup', okClass: 'btn-primary',
+    inputLabel: '', inputMatch: '',
+  });
+  if (!ok) return;
+
+  setSyncStatus('syncing', 'Backup in corso…');
+  showToast('💾 Backup in corso, attendi…');
+  try {
+    // 1. Elenco di tutti i fogli (tab) dello spreadsheet sorgente
+    const metaRes = await fetch(
+      `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}?fields=sheets.properties.title`,
+      { headers: { Authorization: 'Bearer ' + accessToken } }
+    );
+    if (!metaRes.ok) throw new Error('Lettura struttura foglio fallita (' + metaRes.status + ')');
+    const meta = await metaRes.json();
+    const titles = (meta.sheets || []).map(s => s.properties.title);
+    if (!titles.length) throw new Error('Nessun foglio trovato');
+
+    // 2. Legge i valori di ogni foglio
+    const allValues = {};
+    for (const t of titles) {
+      const r = await fetch(
+        `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(t)}`,
+        { headers: { Authorization: 'Bearer ' + accessToken } }
+      );
+      const d = await r.json();
+      allValues[t] = d.values || [];
+    }
+
+    // 3. Crea il nuovo spreadsheet di backup con gli stessi tab
+    const now = new Date();
+    const stamp = now.toISOString().slice(0, 10) + ' ' +
+      String(now.getHours()).padStart(2, '0') + '.' + String(now.getMinutes()).padStart(2, '0');
+    const createRes = await fetch('https://sheets.googleapis.com/v4/spreadsheets', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer ' + accessToken, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        properties: { title: `SMP Scavo — Backup ${stamp}` },
+        sheets: titles.map(t => ({ properties: { title: t } }))
+      })
+    });
+    if (!createRes.ok) throw new Error('Creazione foglio backup fallita (' + createRes.status + ')');
+    const created = await createRes.json();
+    const backupId = created.spreadsheetId;
+
+    // 4. Scrive i valori in ogni tab del backup
+    for (const t of titles) {
+      if (!allValues[t].length) continue;
+      const w = await fetch(
+        `https://sheets.googleapis.com/v4/spreadsheets/${backupId}/values/${encodeURIComponent(t)}!A1?valueInputOption=RAW`,
+        {
+          method: 'PUT',
+          headers: { Authorization: 'Bearer ' + accessToken, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ values: allValues[t] })
+        }
+      );
+      if (!w.ok) throw new Error(`Scrittura backup "${t}" fallita (` + w.status + ')');
+    }
+
+    setSyncStatus('ok', 'Sincronizzato');
+    showConflictDialog(
+      '✓ Backup completato',
+      `Creato "SMP Scavo — Backup ${stamp}" nel tuo Drive con ${titles.length} fogli.\nLo trovi su drive.google.com tra i file recenti.`,
+      null
+    );
+  } catch (e) {
+    console.error('Backup:', e);
+    setSyncStatus('error', 'Errore backup');
+    showToast('⚠ Backup fallito: ' + e.message);
+  }
+}
+
+// ─── DUPLICA SCHEDA ───────────────────────────────────────────────
+// Crea una nuova scheda precompilando i campi di contesto da quella aperta
+function duplicaScheda() {
+  const mantieni = {
+    f_area: document.getElementById('f_area').value,
+    f_saggio: document.getElementById('f_saggio').value,
+    f_anno: document.getElementById('f_anno').value,
+    f_data: document.getElementById('f_data').value,
+    f_responsabile: document.getElementById('f_responsabile').value,
+    f_responsabile_scientifico: document.getElementById('f_responsabile_scientifico').value,
+  };
+  resetForm();
+  Object.entries(mantieni).forEach(([id, v]) => {
+    const el = document.getElementById(id);
+    if (el) el.value = v;
+  });
+  document.getElementById('formTitle').textContent = 'Nuova Scheda US';
+  const numEl = document.getElementById('f_numero');
+  if (numEl) numEl.focus();
+  showToast('⧉ Nuova scheda — contesto copiato, inserisci il numero US');
 }
 
 // ─── CONFLICT DIALOG ──────────────────────────────────────────────
@@ -2719,6 +2869,7 @@ async function saveScheda() {
     data_rielaborazione: document.getElementById('f_data_rielaborazione').value,
     anno: document.getElementById('f_anno').value,
     _last_modified: now,
+    _modified_by: getOperatore(),
   };
 
   const isNew = !editingId;
@@ -7383,9 +7534,9 @@ function showToast(msg) {
   <script>
     if ('serviceWorker' in navigator && !location.hostname.includes('claudeusercontent.com')) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./service-worker.js?v=81')
+        navigator.serviceWorker.register('./service-worker.js?v=83')
           .then(reg => {
-            console.log('SW registrato v81:', reg.scope);
+            console.log('SW registrato v83:', reg.scope);
             // Forza aggiornamento immediato se c'è una nuova versione
             reg.update();
           })
