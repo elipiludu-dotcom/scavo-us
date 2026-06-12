@@ -1,8 +1,8 @@
-// ─── SMP Scavo — Service Worker v88 ─────────────────────────────────────────
+// ─── SMP Scavo — Service Worker v90 ─────────────────────────────────────────
 // Strategia: Cache-first per asset statici, network-first per Google APIs.
 // Aggiorna CACHE_NAME ad ogni nuova versione dell'app.
 
-const CACHE_NAME = 'smp-scavo-v88';
+const CACHE_NAME = 'smp-scavo-v90';
 
 // Asset locali da cachare subito all'install
 const PRECACHE_ASSETS = [

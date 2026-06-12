@@ -5,7 +5,7 @@
   <!-- PWA -->
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#C9963A">
-  <meta name="app-version" content="88">
+  <meta name="app-version" content="90">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="SMP Scavo">
@@ -412,8 +412,8 @@
   .us-card:hover { border-color: var(--earth); }
   .us-card:hover::before { background: var(--earth); }
   /* Righe alternate per scansione visiva veloce */
-  .us-card:nth-child(even) { background: rgba(255,255,255,0.025); }
-  body.sun-mode .us-card:nth-child(even) { background: rgba(139,94,16,0.05); }
+  .us-card:nth-child(even) { background: #353128; }
+  body.sun-mode .us-card:nth-child(even) { background: #e8e1d2; }
   .us-card-left { display: flex; align-items: center; gap: 16px; }
   .us-number {
     font-family: 'Patrick Hand', cursive;
@@ -1088,6 +1088,9 @@
         <div class="nav-dropdown-item" onclick="backupDati()">
           <span class="nav-icon">💾</span> Crea backup dati
         </div>
+        <div class="nav-dropdown-item" onclick="verificaRapporti()">
+          <span class="nav-icon">🔁</span> Verifica rapporti
+        </div>
         <div class="nav-dropdown-item" onclick="cambiaOperatore()">
           <span class="nav-icon">👤</span> Operatore
         </div>
@@ -1353,6 +1356,22 @@
                 <input type="checkbox" id="f_foto_drone" value="Drone/Asta"> Drone/Asta
               </label>
             </div>
+          </div>
+          <div class="field-group">
+            <label>Foto 1 (allegato)</label>
+            <div id="usfoto1-preview" style="margin-bottom:6px"></div>
+            <input type="file" id="f_foto1_file" accept="image/*" style="display:none" onchange="anteprima_foto(this,'usfoto1-preview','f_foto1_b64')">
+            <button class="btn btn-secondary" style="font-size:0.75rem" onclick="document.getElementById('f_foto1_file').click()">📷 Scegli immagine</button>
+            <input type="hidden" id="f_foto1_b64">
+            <input type="hidden" id="f_foto1_name">
+          </div>
+          <div class="field-group">
+            <label>Foto 2 (allegato)</label>
+            <div id="usfoto2-preview" style="margin-bottom:6px"></div>
+            <input type="file" id="f_foto2_file" accept="image/*" style="display:none" onchange="anteprima_foto(this,'usfoto2-preview','f_foto2_b64')">
+            <button class="btn btn-secondary" style="font-size:0.75rem" onclick="document.getElementById('f_foto2_file').click()">📷 Scegli immagine</button>
+            <input type="hidden" id="f_foto2_b64">
+            <input type="hidden" id="f_foto2_name">
           </div>
           <div class="field-group"><label>Disegni</label><input type="text" id="f_disegni" placeholder=""></div>
         </div>
@@ -2032,7 +2051,7 @@ const HEADERS = ['id','numero','anno','area','saggio','tipo','pos_neg','data','d
   'spessore','descrizione','osservazioni','rapporti','reperti','foto_digitali','foto_3d','foto_drone','disegni','note_doc',
   'interpretazione','datazione','fase','affidabilita','note_interp',
   'stato_conservazione','stato_conservazione_note','responsabile_scientifico','responsabile_rielaborazione','data_rielaborazione','modo_formazione',
-  '_last_modified','_modified_by'];
+  '_last_modified','_modified_by','foto1_drive_id','foto2_drive_id'];
 
 let accessToken = null;
 let schede = [];
@@ -2493,7 +2512,7 @@ function renderList(q = '', filtri = {}) {
         </div>
       </div>
       <div style="display:flex;align-items:center;gap:10px">
-        <span class="us-badge ${(s.stato||'').toLowerCase()}">${s.stato||'—'}</span>
+        ${s.stato ? '<span class="us-badge '+(s.stato||'').toLowerCase()+'">'+s.stato+'</span>' : ''}
         <button class="btn-edit-card" onclick="event.stopPropagation();openEdit('${s.id}')">✏ Modifica</button>
       </div>
     </div>
@@ -2581,6 +2600,9 @@ function resetForm() {
   const _bmu2 = document.getElementById('btnMappaUS'); if(_bmu2) _bmu2.style.display = 'none';
   const _bdu2 = document.getElementById('btnDuplica'); if(_bdu2) _bdu2.style.display = 'none';
   const _lmi2 = document.getElementById('lastModInfo'); if(_lmi2) _lmi2.style.display = 'none';
+  ['f_foto1_b64','f_foto1_name','f_foto2_b64','f_foto2_name'].forEach(i => { const el = document.getElementById(i); if (el) el.value = ''; });
+  ['f_foto1_file','f_foto2_file'].forEach(i => { const el = document.getElementById(i); if (el) el.value = ''; });
+  ['usfoto1-preview','usfoto2-preview'].forEach(i => { const el = document.getElementById(i); if (el) el.innerHTML = ''; });
   editingId = null;
   _loadedLastModified = null;
   updateStatoStyle();
@@ -2598,6 +2620,12 @@ function openEdit(id) {
   if (_bmu) _bmu.style.display = 'inline-block';
   const _bdu = document.getElementById('btnDuplica');
   if (_bdu) _bdu.style.display = 'inline-block';
+  // Foto allegate: pulisce e carica anteprime da Drive
+  ['f_foto1_b64','f_foto1_name','f_foto2_b64','f_foto2_name'].forEach(i => { const el = document.getElementById(i); if (el) el.value = ''; });
+  ['f_foto1_file','f_foto2_file'].forEach(i => { const el = document.getElementById(i); if (el) el.value = ''; });
+  ['usfoto1-preview','usfoto2-preview'].forEach(i => { const el = document.getElementById(i); if (el) el.innerHTML = ''; });
+  if (s.foto1_drive_id) caricaAnteprimaFotoDrive(s.foto1_drive_id, 'usfoto1-preview', 'f_foto1_b64');
+  if (s.foto2_drive_id) caricaAnteprimaFotoDrive(s.foto2_drive_id, 'usfoto2-preview', 'f_foto2_b64');
   // Tracciabilità: mostra ultima modifica se disponibile
   const _lmi = document.getElementById('lastModInfo');
   if (_lmi) {
@@ -2700,6 +2728,66 @@ function getReperti() {
     qty: div.querySelector('[id$="_qty"]').value,
     desc: div.querySelector('[id$="_desc"]').value,
   }));
+}
+
+// ─── RECIPROCITÀ RAPPORTI STRATIGRAFICI ───────────────────────────
+const RAPPORTI_INVERSI = {
+  copre: 'coperto_da',      coperto_da: 'copre',
+  taglia: 'tagliato_da',    tagliato_da: 'taglia',
+  riempie: 'riempito_da',   riempito_da: 'riempie',
+  si_appoggia_a: 'gli_si_appoggia', gli_si_appoggia: 'si_appoggia_a',
+  si_lega_a: 'si_lega_a',   uguale_a: 'uguale_a', // simmetriche
+};
+const RAPPORTI_LABEL = {
+  copre:'copre', coperto_da:'coperto da', taglia:'taglia', tagliato_da:'tagliato da',
+  riempie:'riempie', riempito_da:'riempito da', si_appoggia_a:'si appoggia a',
+  gli_si_appoggia:'gli si appoggia', si_lega_a:'si lega a', uguale_a:'uguale a',
+};
+
+// Parser sicuro dei rapporti (su Sheets sono salvati come stringa JSON)
+function _rapportiDi(s) {
+  if (Array.isArray(s.rapporti)) return s.rapporti;
+  try { return JSON.parse(s.rapporti || '[]') || []; } catch(e) { return []; }
+}
+
+// Verifica i rapporti di una scheda: restituisce un array di anomalie (stringhe)
+function verificaReciprocitaScheda(s) {
+  const anomalie = [];
+  _rapportiDi(s).forEach(r => {
+    if (!r.us || !r.tipo) return;
+    const numTarget = parseInt(r.us);
+    if (isNaN(numTarget)) return;
+    const target = schede.find(x => x.numero === numTarget);
+    const lbl = RAPPORTI_LABEL[r.tipo] || r.tipo;
+    if (!target) {
+      anomalie.push(`US ${s.numero} «${lbl} ${numTarget}» — ma US ${numTarget} non esiste in archivio`);
+      return;
+    }
+    const inverso = RAPPORTI_INVERSI[r.tipo];
+    if (!inverso) return;
+    const haInverso = _rapportiDi(target).some(rt =>
+      rt.tipo === inverso && parseInt(rt.us) === s.numero);
+    if (!haInverso) {
+      anomalie.push(`US ${s.numero} «${lbl} ${numTarget}» — ma US ${numTarget} non ha «${RAPPORTI_LABEL[inverso]} ${s.numero}»`);
+    }
+  });
+  return anomalie;
+}
+
+// Report completo (menu Strumenti)
+function verificaRapporti() {
+  if (!schede.length) { showToast('⚠ Nessuna scheda in archivio'); return; }
+  let tutte = [];
+  schede.forEach(s => { tutte = tutte.concat(verificaReciprocitaScheda(s)); });
+  if (!tutte.length) {
+    showConflictDialog('✓ Rapporti stratigrafici coerenti',
+      'Tutti i rapporti dichiarati hanno il loro reciproco. Nessuna anomalia su ' + schede.length + ' schede.', null);
+    return;
+  }
+  const MAX = 40;
+  let msg = tutte.slice(0, MAX).join('\n');
+  if (tutte.length > MAX) msg += `\n… e altre ${tutte.length - MAX} anomalie.`;
+  showConflictDialog(`⚠ ${tutte.length} rapporti senza reciproco`, msg, null);
 }
 
 // ─── OPERATORE (tracciabilità modifiche) ─────────────────────────
@@ -3012,7 +3100,22 @@ async function saveScheda() {
     anno: document.getElementById('f_anno').value,
     _last_modified: now,
     _modified_by: getOperatore(),
+    foto1_drive_id: (editingId && (schede.find(x => x.id === editingId) || {}).foto1_drive_id) || '',
+    foto2_drive_id: (editingId && (schede.find(x => x.id === editingId) || {}).foto2_drive_id) || '',
   };
+
+  // Upload foto nuove su Drive (se selezionate)
+  for (const n of [1, 2]) {
+    const b64 = document.getElementById('f_foto' + n + '_b64')?.value;
+    const nome = document.getElementById('f_foto' + n + '_name')?.value;
+    if (b64 && b64.startsWith('data:') && nome && !nome.startsWith('drive_')) {
+      showToast('📷 Caricamento foto ' + n + ' su Drive…');
+      try {
+        const fid = await uploadFotoToDrive(b64, 'US' + numero + '_' + nome, scheda.id);
+        if (fid) scheda['foto' + n + '_drive_id'] = fid;
+      } catch(e) { console.warn('Upload foto US:', e); showToast('⚠ Foto ' + n + ' non caricata'); }
+    }
+  }
 
   const isNew = !editingId;
 
@@ -3024,6 +3127,9 @@ async function saveScheda() {
     _loadedLastModified = now; // aggiorna il lock locale dopo salvataggio ok
     setSyncStatus('ok', 'Sincronizzato');
     showToast('☁ US ' + numero + ' salvata sul cloud');
+    // Verifica reciprocità (non bloccante)
+    const _anom = verificaReciprocitaScheda(scheda);
+    if (_anom.length) setTimeout(() => showToast('⚠ ' + _anom.length + ' rapport' + (_anom.length===1?'o':'i') + ' senza reciproco — vedi Strumenti → Verifica rapporti'), 2200);
     editingId = null;
     _loadedLastModified = null;
     const origin = (window._editOrigin || 'view-list').replace('view-', '');
@@ -4401,7 +4507,13 @@ async function exportPDFSingola() {
   if (!s) return;
   showToast('Generazione PDF…');
   await loadJsPDF();
-  const doc = buildICCDpdf([s]);
+  // Scarica le eventuali foto allegate da Drive
+  const fotoMap = {};
+  if (s.foto1_drive_id || s.foto2_drive_id) {
+    showToast('📷 Recupero foto dal Drive…');
+    fotoMap[s.id] = [await fotoB64DaDrive(s.foto1_drive_id), await fotoB64DaDrive(s.foto2_drive_id)];
+  }
+  const doc = buildICCDpdf([s], fotoMap);
   doc.save('SchedaUS_' + s.numero + '_' + new Date().toISOString().split('T')[0] + '.pdf');
   showToast('✓ PDF generato');
 }
@@ -4422,15 +4534,57 @@ async function exportPDFTutte() {
   showToast('✓ PDF generato (' + filtered.length + ' schede)');
 }
 
-function buildICCDpdf(schedeList) {
+function buildICCDpdf(schedeList, fotoMap = {}) {
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
 
   schedeList.forEach((s, idx) => {
     if (idx > 0) doc.addPage(); // pagina 1 della nuova scheda
     drawICCDpage(doc, s);       // disegna pag.1 + aggiunge pag.2 internamente
+    // Tavola fotografica (se foto disponibili per questa scheda)
+    const fotos = (fotoMap[s.id] || []).filter(Boolean);
+    if (fotos.length) {
+      doc.addPage();
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(11);
+      doc.setTextColor(0, 0, 0);
+      doc.text('TAVOLA FOTOGRAFICA — US ' + s.numero, 15, 16);
+      let fy = 24;
+      fotos.forEach((b64, i) => {
+        try {
+          const p = doc.getImageProperties(b64);
+          const ratio = p.width / p.height;
+          const maxW = 180, maxH = 120;
+          let w = maxW, h = w / ratio;
+          if (h > maxH) { h = maxH; w = h * ratio; }
+          doc.addImage(b64, 'JPEG', 15, fy, w, h);
+          doc.setFont('helvetica', 'normal');
+          doc.setFontSize(7);
+          doc.setTextColor(100, 100, 100);
+          doc.text('Foto ' + (i + 1), 15, fy + h + 4);
+          fy += h + 12;
+        } catch(e) { console.warn('Foto PDF US:', e.message); }
+      });
+    }
   });
   return doc;
+}
+
+// Scarica una foto da Drive come dataURL (per i PDF)
+async function fotoB64DaDrive(fileId) {
+  if (!fileId) return null;
+  try {
+    const res = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`,
+      { headers: { Authorization: 'Bearer ' + accessToken } });
+    if (!res.ok) return null;
+    const blob = await res.blob();
+    return await new Promise(ok => {
+      const r = new FileReader();
+      r.onload = () => ok(r.result);
+      r.onerror = () => ok(null);
+      r.readAsDataURL(blob);
+    });
+  } catch(e) { return null; }
 }
 
 function drawICCDpage(doc, s) {
@@ -7691,9 +7845,9 @@ function showToast(msg) {
   <script>
     if ('serviceWorker' in navigator && !location.hostname.includes('claudeusercontent.com')) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./service-worker.js?v=88')
+        navigator.serviceWorker.register('./service-worker.js?v=90')
           .then(reg => {
-            console.log('SW registrato v88:', reg.scope);
+            console.log('SW registrato v90:', reg.scope);
             // Forza aggiornamento immediato se c'è una nuova versione
             reg.update();
           })
