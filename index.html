@@ -5,7 +5,7 @@
   <!-- PWA -->
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#C9963A">
-  <meta name="app-version" content="92">
+  <meta name="app-version" content="93">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="SMP Scavo">
@@ -229,6 +229,7 @@
   .sync-dot.ok { background: #4a9e6b; box-shadow: 0 0 6px rgba(74,158,107,0.5); }
   .sync-dot.syncing { background: var(--earth); animation: pulse 1s infinite; box-shadow: 0 0 6px rgba(201,150,58,0.5); }
   .sync-dot.error { background: var(--accent); }
+  .sync-dot.offline { background: #8a8a8a; box-shadow: 0 0 6px rgba(138,138,138,0.5); }
   @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
 
   /* LOGIN SCREEN */
@@ -1089,7 +1090,7 @@
           <span class="nav-icon">💾</span> Crea backup dati
         </div>
         <div class="nav-dropdown-item" onclick="verificaRapporti()">
-          <span class="nav-icon">🔁</span> Verifica rapporti
+          <span class="nav-icon">🔁</span> Reciproci rapporti
         </div>
         <div class="nav-dropdown-item" onclick="cambiaOperatore()">
           <span class="nav-icon">👤</span> Operatore
@@ -2780,20 +2781,169 @@ function verificaReciprocitaScheda(s) {
   return anomalie;
 }
 
-// Report completo (menu Strumenti)
+// ─── COMPILAZIONE ASSISTITA DEI RECIPROCI ─────────────────────────
+// Numero colonna → lettera (1=A, 26=Z, 27=AA…)
+function _colLetter(n) { let s = ''; while (n > 0) { n--; s = String.fromCharCode(65 + (n % 26)) + s; n = Math.floor(n / 26); } return s; }
+
+// Calcola le asimmetrie di una lista di schede.
+// Ogni asimmetria è un rapporto che vive in 'fonte' e punta a 'target', ma il
+// reciproco non c'è. Si risolve in due modi opposti: AGGIUNGERE il reciproco al
+// target, oppure RIMUOVERE il rapporto orfano dalla fonte. Le US inesistenti
+// sono segnalate ma non azionabili (vanno create a mano).
+function calcolaAsimmetrie(listaSchede) {
+  const out = [];
+  listaSchede.forEach(s => {
+    _rapportiDi(s).forEach(r => {
+      if (!r.us || !r.tipo) return;
+      const numTarget = parseInt(r.us);
+      if (isNaN(numTarget)) return;
+      const inverso = RAPPORTI_INVERSI[r.tipo];
+      if (!inverso) return;
+      const target = schede.find(x => parseInt(x.numero) === numTarget);
+      if (!target) {
+        out.push({ kind: 'inesistente', fonteNum: s.numero, targetNum: numTarget,
+          lblTipo: RAPPORTI_LABEL[r.tipo] || r.tipo });
+        return;
+      }
+      const haInverso = _rapportiDi(target).some(rt => rt.tipo === inverso && parseInt(rt.us) === parseInt(s.numero));
+      if (!haInverso) {
+        out.push({
+          kind: 'asimmetria',
+          fonteNum: s.numero, targetNum: numTarget,
+          rapFonte:   { tipo: r.tipo,  us: String(numTarget) },
+          rapInverso: { tipo: inverso, us: String(s.numero) },
+          lblFonte:   RAPPORTI_LABEL[r.tipo] || r.tipo,
+          lblInverso: RAPPORTI_LABEL[inverso] || inverso,
+        });
+      }
+    });
+  });
+  return out;
+}
+
+// Scrittura CHIRURGICA e FRESCA del campo rapporti di una scheda sul foglio.
+// Rilegge la cella al momento, applica add/remove (idempotente), riscrive SOLO
+// quella cella. Aggiorna anche la copia in memoria. Concorrenza-safe per quanto
+// possibile su un foglio senza lock.
+async function modificaRapportoSuFoglio(numScheda, rapporto, azione) {
+  const numColIdx = HEADERS.indexOf('numero');
+  const rapColIdx = HEADERS.indexOf('rapporti');
+  const colNumero = _colLetter(numColIdx + 1);
+  const colRap    = _colLetter(rapColIdx + 1);
+  // Trova la riga (lettura fresca della colonna numero)
+  const data = await sheetsGet(`${SHEET_NAME}!A2:${colNumero}10000`);
+  const rows = data.values || [];
+  const rowIndex = rows.findIndex(r => parseInt(r[numColIdx]) === parseInt(numScheda));
+  if (rowIndex < 0) return { ok: false, reason: 'notfound' };
+  const sheetRow = rowIndex + 2;
+  // Rilegge FRESCA la sola cella rapporti
+  const cell = await sheetsGet(`${SHEET_NAME}!${colRap}${sheetRow}`);
+  let arr = [];
+  try { arr = JSON.parse((cell.values && cell.values[0] && cell.values[0][0]) || '[]') || []; } catch(e) { arr = []; }
+  const presente = arr.some(x => x.tipo === rapporto.tipo && String(x.us) === String(rapporto.us));
+  if (azione === 'add') {
+    if (presente) return { ok: true, reason: 'already' };
+    arr.push({ tipo: rapporto.tipo, us: String(rapporto.us) });
+  } else { // remove
+    if (!presente) return { ok: true, reason: 'already' };
+    arr = arr.filter(x => !(x.tipo === rapporto.tipo && String(x.us) === String(rapporto.us)));
+  }
+  await sheetsUpdate(`${SHEET_NAME}!${colRap}${sheetRow}`, [[ JSON.stringify(arr) ]]);
+  const mem = schede.find(x => parseInt(x.numero) === parseInt(numScheda));
+  if (mem) mem.rapporti = arr;
+  return { ok: true, reason: azione };
+}
+
+// Dialogo di riconciliazione: per ogni asimmetria, tre scelte (Aggiungi/Rimuovi/Salta).
+function mostraRiconciliazione(items, titolo) {
+  const ex = document.getElementById('ricoOverlay'); if (ex) ex.remove();
+  const overlay = document.createElement('div');
+  overlay.id = 'ricoOverlay';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px';
+  const box = document.createElement('div');
+  box.style.cssText = 'background:var(--parchment);border:1px solid var(--border);border-radius:6px;max-width:540px;width:100%;max-height:85vh;display:flex;flex-direction:column;box-shadow:0 8px 32px rgba(0,0,0,0.3)';
+  const head = document.createElement('div');
+  head.style.cssText = 'padding:18px 20px 6px;font-family:"Space Mono",monospace;font-size:0.85rem;color:var(--earth);font-weight:700';
+  head.textContent = titolo;
+  const sub = document.createElement('div');
+  sub.style.cssText = 'padding:0 20px 8px;font-size:0.73rem;color:var(--muted);line-height:1.45';
+  sub.textContent = 'Per ogni voce: «Aggiungi» completa il reciproco mancante, «Rimuovi» elimina il rapporto orfano dalla scheda di origine, «Salta» non tocca nulla.';
+  const list = document.createElement('div');
+  list.style.cssText = 'padding:2px 20px;overflow-y:auto;flex:1';
+
+  items.forEach(it => {
+    const row = document.createElement('div');
+    row.style.cssText = 'border-top:1px solid var(--border);padding:11px 0';
+    const msg = document.createElement('div');
+    msg.style.cssText = 'font-size:0.8rem;color:var(--ink);line-height:1.45;margin-bottom:8px';
+
+    if (it.kind === 'inesistente') {
+      msg.innerHTML = `⚠ US ${it.fonteNum} «${it.lblTipo} ${it.targetNum}» — <b>US ${it.targetNum} non esiste in archivio</b>.<br><span style="color:var(--muted);font-size:0.73rem">Crea prima la scheda US ${it.targetNum}, poi rivedi i reciproci.</span>`;
+      row.appendChild(msg);
+      list.appendChild(row);
+      return;
+    }
+
+    msg.innerHTML = `US ${it.fonteNum} «${it.lblFonte} ${it.targetNum}» — in US ${it.targetNum} manca «${it.lblInverso} ${it.fonteNum}»`;
+    const actions = document.createElement('div');
+    actions.style.cssText = 'display:flex;gap:6px;flex-wrap:wrap';
+    const esito = document.createElement('span');
+    esito.style.cssText = 'font-size:0.74rem;font-weight:700';
+
+    const bAdd  = document.createElement('button');
+    bAdd.className = 'btn btn-primary';  bAdd.style.cssText = 'font-size:0.72rem;padding:5px 9px';
+    bAdd.textContent = `+ Aggiungi a US ${it.targetNum}`;
+    const bRem  = document.createElement('button');
+    bRem.className = 'btn btn-secondary'; bRem.style.cssText = 'font-size:0.72rem;padding:5px 9px';
+    bRem.textContent = `− Rimuovi da US ${it.fonteNum}`;
+    const bSkip = document.createElement('button');
+    bSkip.className = 'btn btn-secondary'; bSkip.style.cssText = 'font-size:0.72rem;padding:5px 9px';
+    bSkip.textContent = 'Salta';
+
+    const finish = (txt, color) => { actions.remove(); esito.textContent = txt; esito.style.color = color; row.appendChild(esito); };
+    const reset  = (b, lbl) => { actions.querySelectorAll('button').forEach(x => x.disabled = false); b.textContent = lbl; };
+
+    bAdd.onclick = async () => {
+      actions.querySelectorAll('button').forEach(x => x.disabled = true); bAdd.textContent = '…';
+      try { const r = await modificaRapportoSuFoglio(it.targetNum, it.rapInverso, 'add');
+        finish(r.reason === 'already' ? '✓ era già presente' : '✓ aggiunto a US ' + it.targetNum, 'var(--earth)');
+      } catch(e) { reset(bAdd, `+ Aggiungi a US ${it.targetNum}`); showToast('⚠ ' + (navigator.onLine === false ? 'Offline — riprova con la rete' : 'Errore di scrittura')); }
+    };
+    bRem.onclick = async () => {
+      actions.querySelectorAll('button').forEach(x => x.disabled = true); bRem.textContent = '…';
+      try { const r = await modificaRapportoSuFoglio(it.fonteNum, it.rapFonte, 'remove');
+        finish(r.reason === 'already' ? '✓ era già rimosso' : '✓ rimosso da US ' + it.fonteNum, 'var(--earth)');
+      } catch(e) { reset(bRem, `− Rimuovi da US ${it.fonteNum}`); showToast('⚠ ' + (navigator.onLine === false ? 'Offline — riprova con la rete' : 'Errore di scrittura')); }
+    };
+    bSkip.onclick = () => finish('— saltato', 'var(--muted)');
+
+    actions.appendChild(bAdd); actions.appendChild(bRem); actions.appendChild(bSkip);
+    row.appendChild(msg); row.appendChild(actions);
+    list.appendChild(row);
+  });
+
+  const foot = document.createElement('div');
+  foot.style.cssText = 'padding:12px 20px;border-top:1px solid var(--border);display:flex;justify-content:flex-end';
+  const bClose = document.createElement('button');
+  bClose.className = 'btn btn-primary'; bClose.textContent = 'Chiudi';
+  bClose.onclick = () => overlay.remove();
+  foot.appendChild(bClose);
+
+  box.appendChild(head); box.appendChild(sub); box.appendChild(list); box.appendChild(foot);
+  overlay.appendChild(box); document.body.appendChild(overlay);
+}
+
+// Strumenti → riconciliazione completa dell'archivio (rete di sicurezza)
 function verificaRapporti() {
   if (!schede.length) { showToast('⚠ Nessuna scheda in archivio'); return; }
-  let tutte = [];
-  schede.forEach(s => { tutte = tutte.concat(verificaReciprocitaScheda(s)); });
-  if (!tutte.length) {
+  if (navigator.onLine === false) { showToast('⚠ Offline — la riconciliazione richiede la rete'); return; }
+  const items = calcolaAsimmetrie(schede);
+  if (!items.length) {
     showConflictDialog('✓ Rapporti stratigrafici coerenti',
       'Tutti i rapporti dichiarati hanno il loro reciproco. Nessuna anomalia su ' + schede.length + ' schede.', null);
     return;
   }
-  const MAX = 40;
-  let msg = tutte.slice(0, MAX).join('\n');
-  if (tutte.length > MAX) msg += `\n… e altre ${tutte.length - MAX} anomalie.`;
-  showConflictDialog(`⚠ ${tutte.length} rapporti senza reciproco`, msg, null);
+  mostraRiconciliazione(items, `🔁 Reciproci da rivedere — ${items.length}`);
 }
 
 // ─── OPERATORE (tracciabilità modifiche) ─────────────────────────
@@ -3052,6 +3202,8 @@ async function saveScheda() {
   const duplicate = schede.find(s => s.numero === numero && s.id !== editingId);
   if (duplicate) { showToast('⚠ US ' + numero + ' già presente'); return; }
 
+  if (isOffline()) { avvisaSalvataggioOffline('US ' + numero); return; }
+
   window._salvataggioUSInCorso = true;
   const _sbloccaSalva = _bloccaSalva('button[onclick="saveScheda()"]');
 
@@ -3125,21 +3277,22 @@ async function saveScheda() {
 
   const isNew = !editingId;
 
+  const _schedeBackup = schede;                       // snapshot per rollback se la rete cade
   if (editingId) schede = schede.map(s => s.id === editingId ? scheda : s);
-  else schede.push(scheda);
+  else schede = [...schede, scheda];
 
   try {
     await saveSchedaToSheets(scheda, isNew);
     _loadedLastModified = now; // aggiorna il lock locale dopo salvataggio ok
     setSyncStatus('ok', 'Sincronizzato');
     showToast('☁ US ' + numero + ' salvata sul cloud');
-    // Verifica reciprocità (non bloccante)
-    const _anom = verificaReciprocitaScheda(scheda);
-    if (_anom.length) setTimeout(() => showToast('⚠ ' + _anom.length + ' rapport' + (_anom.length===1?'o':'i') + ' senza reciproco — vedi Strumenti → Verifica rapporti'), 2200);
     editingId = null;
     _loadedLastModified = null;
     const origin = (window._editOrigin || 'view-list').replace('view-', '');
     showView(origin);
+    // Compilazione assistita reciproci (non bloccante): proponi e conferma uno-a-uno
+    const _items = calcolaAsimmetrie([scheda]);
+    if (_items.length) setTimeout(() => mostraRiconciliazione(_items, `🔁 Reciproci per US ${numero}`), 350);
 
   } catch (e) {
     if (e && e.type === 'DUPLICATE') {
@@ -3177,8 +3330,17 @@ async function saveScheda() {
         }
       );
     } else {
-      setSyncStatus('error', 'Errore salvataggio');
-      showToast('⚠ Errore durante il salvataggio');
+      const reteKO = isOffline() || /failed to fetch|networkerror|network request|fetch/i.test((e && e.message) || '');
+      schede = _schedeBackup; // il salvataggio non è arrivato al cloud: rollback in memoria
+      if (reteKO) {
+        setSyncStatus('offline', 'Offline');
+        showConflictDialog('📡 Connessione assente',
+          'Il salvataggio non è arrivato al cloud per un problema di rete.\n\nResta su questa scheda — i dati sono ancora qui. Appena torna il segnale, premi di nuovo Salva.',
+          null);
+      } else {
+        setSyncStatus('error', 'Errore salvataggio');
+        showToast('⚠ Errore durante il salvataggio');
+      }
       console.error(e);
     }
   } finally {
@@ -3486,6 +3648,8 @@ async function saveTomba() {
   if (!numero) { showToast('⚠ Inserisci il numero tomba'); return; }
   const duplicate = tombe.find(t => t.numero === numero && t.id !== editingTombaId);
   if (duplicate) { showToast('⚠ Tomba ' + numero + ' già presente'); return; }
+
+  if (isOffline()) { avvisaSalvataggioOffline('Tomba ' + numero); return; }
 
   setSyncStatus('syncing', 'Salvataggio…');
   const tomba = getTombaFromForm();
@@ -6504,6 +6668,7 @@ const HEADERS_DIARIO = ['id','settore','anno','data','compilatori','us_esame','f
 
 async function saveDiario() {
   const d = getDiarioFromForm();
+  if (isOffline()) { avvisaSalvataggioOffline('il diario'); return; }
   setSyncStatus('syncing', 'Caricamento foto…');
   try {
     // Upload foto su Drive solo se nuove (non già salvate)
@@ -7912,6 +8077,21 @@ function setSyncStatus(state, label) {
   document.getElementById('syncLabel').textContent = label;
 }
 
+// ─── RETE: stato e salvataggio consapevole ────────────────────────
+function isOffline() { return typeof navigator !== 'undefined' && navigator.onLine === false; }
+
+// Avviso quando si tenta di salvare senza rete: NON perde i dati, resta sulla scheda.
+function avvisaSalvataggioOffline(cosa) {
+  setSyncStatus('offline', 'Offline');
+  showConflictDialog('📡 Sei offline',
+    `Il salvataggio di ${cosa} non è possibile adesso: manca la connessione.\n\nResta su questa scheda — i dati restano qui. Appena torna il segnale, premi di nuovo Salva.`,
+    null);
+}
+
+// Aggiorna l'indicatore quando la rete va e viene
+window.addEventListener('offline', () => { if (document.getElementById('syncDot')) setSyncStatus('offline', 'Offline'); });
+window.addEventListener('online',  () => { if (document.getElementById('syncDot')) setSyncStatus('ok', 'Online'); });
+
 // ─── TOAST ────────────────────────────────────────────────────────
 function showToast(msg) {
   const t = document.getElementById('toast');
@@ -7922,9 +8102,9 @@ function showToast(msg) {
   <script>
     if ('serviceWorker' in navigator && !location.hostname.includes('claudeusercontent.com')) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./service-worker.js?v=92')
+        navigator.serviceWorker.register('./service-worker.js?v=93')
           .then(reg => {
-            console.log('SW registrato v92:', reg.scope);
+            console.log('SW registrato v93:', reg.scope);
             // Forza aggiornamento immediato se c'è una nuova versione
             reg.update();
           })

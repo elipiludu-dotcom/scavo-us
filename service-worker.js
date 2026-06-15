@@ -1,8 +1,8 @@
 // ─────────────────────────────────────────────────────────────────
 // SMP Scavo — Service Worker
-// v92 — label "Foto / Disegni", PDF foto robusto al formato + diagnostica
+// v93 — reciproci assistiti (proponi-conferma + batch) + salvataggio consapevole offline
 // ─────────────────────────────────────────────────────────────────
-const CACHE_NAME = 'smp-scavo-v92';
+const CACHE_NAME = 'smp-scavo-v93';
 
 // Shell dell'app da rendere disponibile offline.
 const APP_SHELL = [
