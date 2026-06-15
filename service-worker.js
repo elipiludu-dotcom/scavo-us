@@ -1,8 +1,8 @@
 // ─────────────────────────────────────────────────────────────────
 // SMP Scavo — Service Worker
-// v91 — ridimensionamento automatico foto + layout sez. Documentazione
+// v92 — label "Foto / Disegni", PDF foto robusto al formato + diagnostica
 // ─────────────────────────────────────────────────────────────────
-const CACHE_NAME = 'smp-scavo-v91';
+const CACHE_NAME = 'smp-scavo-v92';
 
 // Shell dell'app da rendere disponibile offline.
 const APP_SHELL = [

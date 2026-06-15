@@ -5,7 +5,7 @@
   <!-- PWA -->
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#C9963A">
-  <meta name="app-version" content="91">
+  <meta name="app-version" content="92">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="SMP Scavo">
@@ -1346,7 +1346,7 @@
           <!-- Colonna sinistra: tipo documentazione + disegni -->
           <div style="display:flex;flex-direction:column;gap:14px">
             <div class="field-group">
-              <label>Foto</label>
+              <label>Foto / Disegni</label>
               <div style="display:flex;gap:20px;padding:9px 0;flex-wrap:wrap">
                 <label style="display:flex;align-items:center;gap:7px;font-family:'DM Sans',sans-serif;font-size:0.87rem;text-transform:none;letter-spacing:normal;color:var(--ink);cursor:pointer">
                   <input type="checkbox" id="f_foto_digitali" value="Digitali"> Digitali
@@ -4517,7 +4517,14 @@ async function exportPDFSingola() {
   const fotoMap = {};
   if (s.foto1_drive_id || s.foto2_drive_id) {
     showToast('📷 Recupero foto dal Drive…');
-    fotoMap[s.id] = [await fotoB64DaDrive(s.foto1_drive_id), await fotoB64DaDrive(s.foto2_drive_id)];
+    const recuperate = [await fotoB64DaDrive(s.foto1_drive_id), await fotoB64DaDrive(s.foto2_drive_id)];
+    fotoMap[s.id] = recuperate;
+    // Conta quante erano attese vs quante effettivamente recuperate
+    const attese = [s.foto1_drive_id, s.foto2_drive_id].filter(Boolean).length;
+    const ok = recuperate.filter(Boolean).length;
+    if (ok < attese) {
+      showToast('⚠ ' + (attese - ok) + ' foto non recuperata dal Drive (riprova o ricarica)');
+    }
   }
   const doc = buildICCDpdf([s], fotoMap);
   doc.save('SchedaUS_' + s.numero + '_' + new Date().toISOString().split('T')[0] + '.pdf');
@@ -4563,7 +4570,10 @@ function buildICCDpdf(schedeList, fotoMap = {}) {
           const maxW = 180, maxH = 120;
           let w = maxW, h = w / ratio;
           if (h > maxH) { h = maxH; w = h * ratio; }
-          doc.addImage(b64, 'JPEG', 15, fy, w, h);
+          // Formato dedotto dal data URL (JPEG/PNG) invece che fisso
+          const mime = (b64.match(/^data:(image\/[a-z+]+)/i) || [])[1] || '';
+          const fmt = /png/i.test(mime) ? 'PNG' : 'JPEG';
+          doc.addImage(b64, fmt, 15, fy, w, h);
           doc.setFont('helvetica', 'normal');
           doc.setFontSize(7);
           doc.setTextColor(100, 100, 100);
@@ -7912,9 +7922,9 @@ function showToast(msg) {
   <script>
     if ('serviceWorker' in navigator && !location.hostname.includes('claudeusercontent.com')) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./service-worker.js?v=91')
+        navigator.serviceWorker.register('./service-worker.js?v=92')
           .then(reg => {
-            console.log('SW registrato v91:', reg.scope);
+            console.log('SW registrato v92:', reg.scope);
             // Forza aggiornamento immediato se c'è una nuova versione
             reg.update();
           })
