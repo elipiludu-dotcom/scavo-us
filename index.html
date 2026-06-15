@@ -5,7 +5,7 @@
   <!-- PWA -->
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#C9963A">
-  <meta name="app-version" content="90">
+  <meta name="app-version" content="91">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="SMP Scavo">
@@ -1343,37 +1343,43 @@
       <div class="form-section">
         <div class="section-title">5 · Documentazione</div>
         <div class="field-row">
-          <div class="field-group">
-            <label>Foto</label>
-            <div style="display:flex;gap:20px;padding:9px 0;flex-wrap:wrap">
-              <label style="display:flex;align-items:center;gap:7px;font-family:'DM Sans',sans-serif;font-size:0.87rem;text-transform:none;letter-spacing:normal;color:var(--ink);cursor:pointer">
-                <input type="checkbox" id="f_foto_digitali" value="Digitali"> Digitali
-              </label>
-              <label style="display:flex;align-items:center;gap:7px;font-family:'DM Sans',sans-serif;font-size:0.87rem;text-transform:none;letter-spacing:normal;color:var(--ink);cursor:pointer">
-                <input type="checkbox" id="f_foto_3d" value="3D/Laser Scanner"> 3D/Laser Scanner
-              </label>
-              <label style="display:flex;align-items:center;gap:7px;font-family:'DM Sans',sans-serif;font-size:0.87rem;text-transform:none;letter-spacing:normal;color:var(--ink);cursor:pointer">
-                <input type="checkbox" id="f_foto_drone" value="Drone/Asta"> Drone/Asta
-              </label>
+          <!-- Colonna sinistra: tipo documentazione + disegni -->
+          <div style="display:flex;flex-direction:column;gap:14px">
+            <div class="field-group">
+              <label>Foto</label>
+              <div style="display:flex;gap:20px;padding:9px 0;flex-wrap:wrap">
+                <label style="display:flex;align-items:center;gap:7px;font-family:'DM Sans',sans-serif;font-size:0.87rem;text-transform:none;letter-spacing:normal;color:var(--ink);cursor:pointer">
+                  <input type="checkbox" id="f_foto_digitali" value="Digitali"> Digitali
+                </label>
+                <label style="display:flex;align-items:center;gap:7px;font-family:'DM Sans',sans-serif;font-size:0.87rem;text-transform:none;letter-spacing:normal;color:var(--ink);cursor:pointer">
+                  <input type="checkbox" id="f_foto_3d" value="3D/Laser Scanner"> 3D/Laser Scanner
+                </label>
+                <label style="display:flex;align-items:center;gap:7px;font-family:'DM Sans',sans-serif;font-size:0.87rem;text-transform:none;letter-spacing:normal;color:var(--ink);cursor:pointer">
+                  <input type="checkbox" id="f_foto_drone" value="Drone/Asta"> Drone/Asta
+                </label>
+              </div>
+            </div>
+            <div class="field-group"><label>Disegni</label><input type="text" id="f_disegni" placeholder=""></div>
+          </div>
+          <!-- Colonna destra: foto allegate, una sotto l'altra -->
+          <div style="display:flex;flex-direction:column;gap:14px">
+            <div class="field-group">
+              <label>Foto 1 (allegato) <span style="font-size:0.72rem;color:var(--muted)">(ridimensionata in automatico)</span></label>
+              <div id="usfoto1-preview" style="margin-bottom:6px"></div>
+              <input type="file" id="f_foto1_file" accept="image/*" style="display:none" onchange="anteprima_foto(this,'usfoto1-preview','f_foto1_b64')">
+              <button class="btn btn-secondary" style="font-size:0.75rem" onclick="document.getElementById('f_foto1_file').click()">📷 Scegli immagine</button>
+              <input type="hidden" id="f_foto1_b64">
+              <input type="hidden" id="f_foto1_name">
+            </div>
+            <div class="field-group">
+              <label>Foto 2 (allegato) <span style="font-size:0.72rem;color:var(--muted)">(ridimensionata in automatico)</span></label>
+              <div id="usfoto2-preview" style="margin-bottom:6px"></div>
+              <input type="file" id="f_foto2_file" accept="image/*" style="display:none" onchange="anteprima_foto(this,'usfoto2-preview','f_foto2_b64')">
+              <button class="btn btn-secondary" style="font-size:0.75rem" onclick="document.getElementById('f_foto2_file').click()">📷 Scegli immagine</button>
+              <input type="hidden" id="f_foto2_b64">
+              <input type="hidden" id="f_foto2_name">
             </div>
           </div>
-          <div class="field-group">
-            <label>Foto 1 (allegato)</label>
-            <div id="usfoto1-preview" style="margin-bottom:6px"></div>
-            <input type="file" id="f_foto1_file" accept="image/*" style="display:none" onchange="anteprima_foto(this,'usfoto1-preview','f_foto1_b64')">
-            <button class="btn btn-secondary" style="font-size:0.75rem" onclick="document.getElementById('f_foto1_file').click()">📷 Scegli immagine</button>
-            <input type="hidden" id="f_foto1_b64">
-            <input type="hidden" id="f_foto1_name">
-          </div>
-          <div class="field-group">
-            <label>Foto 2 (allegato)</label>
-            <div id="usfoto2-preview" style="margin-bottom:6px"></div>
-            <input type="file" id="f_foto2_file" accept="image/*" style="display:none" onchange="anteprima_foto(this,'usfoto2-preview','f_foto2_b64')">
-            <button class="btn btn-secondary" style="font-size:0.75rem" onclick="document.getElementById('f_foto2_file').click()">📷 Scegli immagine</button>
-            <input type="hidden" id="f_foto2_b64">
-            <input type="hidden" id="f_foto2_name">
-          </div>
-          <div class="field-group"><label>Disegni</label><input type="text" id="f_disegni" placeholder=""></div>
         </div>
         <div class="field-row single"><div class="field-group"><label>Note documentazione</label><textarea id="f_note_doc" placeholder="Note su documentazione grafica e fotografica…"></textarea></div></div>
       </div>
@@ -1826,7 +1832,7 @@
           </div>
           <div class="field-row" style="margin-top:10px">
             <div class="field-group">
-              <label>Foto 1 <span style="font-size:0.72rem;color:var(--muted)">(max 0.5 MB)</span></label>
+              <label>Foto 1 <span style="font-size:0.72rem;color:var(--muted)">(ridimensionata in automatico)</span></label>
               <div id="foto1-preview" style="margin-bottom:6px"></div>
               <input type="file" id="d_foto1_file" accept="image/*" style="display:none" onchange="anteprima_foto(this,'foto1-preview','d_foto1_b64')">
               <button class="btn btn-secondary" style="font-size:0.75rem" onclick="document.getElementById('d_foto1_file').click()">📷 Scegli immagine</button>
@@ -1834,7 +1840,7 @@
               <input type="hidden" id="d_foto1_name">
             </div>
             <div class="field-group">
-              <label>Foto 2 <span style="font-size:0.72rem;color:var(--muted)">(max 0.5 MB)</span></label>
+              <label>Foto 2 <span style="font-size:0.72rem;color:var(--muted)">(ridimensionata in automatico)</span></label>
               <div id="foto2-preview" style="margin-bottom:6px"></div>
               <input type="file" id="d_foto2_file" accept="image/*" style="display:none" onchange="anteprima_foto(this,'foto2-preview','d_foto2_b64')">
               <button class="btn btn-secondary" style="font-size:0.75rem" onclick="document.getElementById('d_foto2_file').click()">📷 Scegli immagine</button>
@@ -6126,28 +6132,89 @@ function filtraLayerPannello(q) {
 const DRIVE_FOLDER_NAME = 'SMP Scavo - Foto Diari';
 let _driveFolderId = null;
 
-function anteprima_foto(input, previewId, b64Id) {
+// Byte approssimativi di un data URL (dalla lunghezza della parte base64)
+function _dataUrlBytes(dataUrl) {
+  const i = dataUrl.indexOf(',');
+  if (i < 0) return 0;
+  return Math.floor((dataUrl.length - i - 1) * 3 / 4);
+}
+
+// Ridimensiona/comprime un'immagine lato client.
+// Lato lungo max `maxDim` px; esporta JPEG con qualità adattiva per restare
+// sotto `targetKB`. Rispetta l'orientamento EXIF (foto iPhone). → data URL JPEG.
+async function ridimensionaImmagine(file, opts = {}) {
+  const targetKB = opts.targetKB || 450;
+  let maxDim = opts.maxDim || 1600;
+
+  // Decodifica con orientamento corretto
+  let src;
+  try {
+    src = await createImageBitmap(file, { imageOrientation: 'from-image' });
+  } catch (e) {
+    src = await new Promise((res, rej) => {
+      const url = URL.createObjectURL(file);
+      const img = new Image();
+      img.onload = () => { URL.revokeObjectURL(url); res(img); };
+      img.onerror = () => { URL.revokeObjectURL(url); rej(new Error('Formato immagine non supportato')); };
+      img.src = url;
+    });
+  }
+  const sw = src.width, sh = src.height;
+  const canvas = document.createElement('canvas');
+  const ctx = canvas.getContext('2d');
+
+  function render(dim) {
+    const scale = Math.min(1, dim / Math.max(sw, sh));
+    canvas.width  = Math.max(1, Math.round(sw * scale));
+    canvas.height = Math.max(1, Math.round(sh * scale));
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(src, 0, 0, canvas.width, canvas.height);
+  }
+
+  let dataUrl = '';
+  for (let attempt = 0; attempt < 6; attempt++) {
+    render(maxDim);
+    let q = 0.85;
+    dataUrl = canvas.toDataURL('image/jpeg', q);
+    while (_dataUrlBytes(dataUrl) > targetKB * 1024 && q > 0.45) {
+      q -= 0.1;
+      dataUrl = canvas.toDataURL('image/jpeg', q);
+    }
+    if (_dataUrlBytes(dataUrl) <= targetKB * 1024) break;
+    maxDim = Math.round(maxDim * 0.8); // riprova con dimensioni minori
+  }
+  if (src.close) src.close();
+  return dataUrl;
+}
+
+async function anteprima_foto(input, previewId, b64Id) {
   const file = input.files[0];
   if (!file) return;
-  if (file.size > 512 * 1024) {
-    showToast('⚠ Immagine troppo grande (max 0.5 MB)');
+  if (!file.type.startsWith('image/')) {
+    showToast('⚠ Seleziona un file immagine');
     input.value = '';
     return;
   }
-  const reader = new FileReader();
-  reader.onload = e => {
-    const b64 = e.target.result;
+  const prev = document.getElementById(previewId);
+  if (prev) prev.innerHTML = '<span style="font-size:0.78rem;color:var(--muted)">⏳ Ottimizzazione immagine…</span>';
+  try {
+    const b64 = await ridimensionaImmagine(file, { maxDim: 1600, targetKB: 450 });
     document.getElementById(b64Id).value = b64;
-    // Salva il nome file nell'hidden corrispondente
+    // Nome file (ricodificato in JPEG)
     const nameId = b64Id.replace('_b64', '_name');
     const nameEl = document.getElementById(nameId);
-    if (nameEl) nameEl.value = file.name;
-    // Anteprima
-    const prev = document.getElementById(previewId);
-    prev.innerHTML = `<img src="${b64}" style="max-width:100%;max-height:120px;border-radius:4px;border:1px solid var(--border)">
+    if (nameEl) nameEl.value = (file.name || 'foto').replace(/\.[^.]+$/, '') + '.jpg';
+    // Anteprima + peso finale
+    const kb = Math.round(_dataUrlBytes(b64) / 1024);
+    if (prev) prev.innerHTML = `<img src="${b64}" style="max-width:100%;max-height:120px;border-radius:4px;border:1px solid var(--border)">
+      <div style="font-size:0.72rem;color:var(--muted);margin-top:2px">${kb} KB</div>
       <button onclick="rimuoviFoto('${previewId}','${b64Id}')" style="display:block;margin-top:4px;background:none;border:none;color:var(--muted);cursor:pointer;font-size:0.75rem">✕ Rimuovi</button>`;
-  };
-  reader.readAsDataURL(file);
+  } catch (e) {
+    console.warn('Ridimensiona foto:', e);
+    showToast('⚠ Impossibile elaborare l\'immagine');
+    if (prev) prev.innerHTML = '';
+    input.value = '';
+  }
 }
 
 function rimuoviFoto(previewId, b64Id) {
@@ -7845,9 +7912,9 @@ function showToast(msg) {
   <script>
     if ('serviceWorker' in navigator && !location.hostname.includes('claudeusercontent.com')) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./service-worker.js?v=90')
+        navigator.serviceWorker.register('./service-worker.js?v=91')
           .then(reg => {
-            console.log('SW registrato v90:', reg.scope);
+            console.log('SW registrato v91:', reg.scope);
             // Forza aggiornamento immediato se c'è una nuova versione
             reg.update();
           })

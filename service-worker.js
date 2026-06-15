@@ -1,91 +1,81 @@
-// ─── SMP Scavo — Service Worker v90 ─────────────────────────────────────────
-// Strategia: Cache-first per asset statici, network-first per Google APIs.
-// Aggiorna CACHE_NAME ad ogni nuova versione dell'app.
+// ─────────────────────────────────────────────────────────────────
+// SMP Scavo — Service Worker
+// v91 — ridimensionamento automatico foto + layout sez. Documentazione
+// ─────────────────────────────────────────────────────────────────
+const CACHE_NAME = 'smp-scavo-v91';
 
-const CACHE_NAME = 'smp-scavo-v90';
-
-// Asset locali da cachare subito all'install
-const PRECACHE_ASSETS = [
+// Shell dell'app da rendere disponibile offline.
+const APP_SHELL = [
   './',
-  './index.html',
-  './manifest.json',
-  './icon-apple.png',
+  './index.html'
 ];
 
-// Pattern per cui usare sempre la rete (Google APIs, Drive, Sheets, Auth, CDNs)
-const NETWORK_ONLY_PATTERNS = [
-  /accounts\.google\.com/,
-  /googleapis\.com/,
-  /docs\.google\.com/,
-  /sheets\.googleapis\.com/,
-  /drive\.googleapis\.com/,
-  /cloudflare\.com/,
-  /cdnjs\.cloudflare\.com/,
-  /unpkg\.com/,
-  /jsdelivr\.net/,
-  /fonts\.googleapis\.com/,
-  /fonts\.gstatic\.com/,
-];
-
-// ─── INSTALL ─────────────────────────────────────────────────────────────────
+// ─── INSTALL ───────────────────────────────────────────────────────
 self.addEventListener('install', event => {
   event.waitUntil(
     caches.open(CACHE_NAME)
-      .then(cache => cache.addAll(PRECACHE_ASSETS))
-      .then(() => self.skipWaiting())  // attiva subito senza aspettare reload
+      .then(cache => cache.addAll(APP_SHELL))
+      .catch(err => console.warn('[SW] precache parziale:', err))
   );
+  // Attiva subito la nuova versione senza attendere la chiusura delle tab
+  self.skipWaiting();
 });
 
-// ─── ACTIVATE ────────────────────────────────────────────────────────────────
+// ─── ACTIVATE ──────────────────────────────────────────────────────
 self.addEventListener('activate', event => {
   event.waitUntil(
     caches.keys().then(keys =>
       Promise.all(
-        keys
-          .filter(key => key !== CACHE_NAME)
-          .map(key => caches.delete(key))   // elimina versioni vecchie
+        keys.filter(k => k !== CACHE_NAME).map(k => caches.delete(k))
       )
-    ).then(() => self.clients.claim())      // prende controllo immediato
+    ).then(() => self.clients.claim())
   );
 });
 
-// ─── FETCH ───────────────────────────────────────────────────────────────────
+// ─── FETCH ─────────────────────────────────────────────────────────
 self.addEventListener('fetch', event => {
-  const { request } = event;
-  const url = new URL(request.url);
+  const req = event.request;
 
-  // Solo richieste GET
-  if (request.method !== 'GET') return;
+  // Gestiamo solo le GET
+  if (req.method !== 'GET') return;
 
-  // Network-only per API esterne (Google, CDN…)
-  if (NETWORK_ONLY_PATTERNS.some(pattern => pattern.test(request.url))) {
-    event.respondWith(fetch(request));
+  const url = new URL(req.url);
+
+  // Mai intercettare le chiamate alle API Google (Sheets / Drive / OAuth):
+  // sono dinamiche e autenticate, devono sempre passare dalla rete.
+  if (url.origin !== self.location.origin) return;
+
+  // Navigazioni (apertura/refresh della pagina): network-first con
+  // fallback alla shell in cache quando manca rete.
+  if (req.mode === 'navigate') {
+    event.respondWith(
+      fetch(req)
+        .then(res => {
+          const copy = res.clone();
+          caches.open(CACHE_NAME).then(c => c.put('./index.html', copy)).catch(() => {});
+          return res;
+        })
+        .catch(() => caches.match('./index.html').then(r => r || caches.match('./')))
+    );
     return;
   }
 
-  // Cache-first per tutto il resto (app shell, icone, manifest…)
+  // Altri asset same-origin: stale-while-revalidate.
   event.respondWith(
-    caches.match(request).then(cached => {
-      if (cached) return cached;
-
-      // Non in cache: scarica e salva
-      return fetch(request).then(response => {
-        // Cacha solo risposte valide della stessa origine
-        if (
-          response.ok &&
-          response.type === 'basic' &&
-          url.origin === self.location.origin
-        ) {
-          const clone = response.clone();
-          caches.open(CACHE_NAME).then(cache => cache.put(request, clone));
+    caches.match(req).then(cached => {
+      const network = fetch(req).then(res => {
+        if (res && res.status === 200) {
+          const copy = res.clone();
+          caches.open(CACHE_NAME).then(c => c.put(req, copy)).catch(() => {});
         }
-        return response;
-      }).catch(() => {
-        // Offline fallback: restituisce la shell
-        if (request.destination === 'document') {
-          return caches.match('./index.html');
-        }
-      });
+        return res;
+      }).catch(() => cached);
+      return cached || network;
     })
   );
+});
+
+// Consente alla pagina di forzare l'attivazione immediata dell'aggiornamento
+self.addEventListener('message', event => {
+  if (event.data === 'skipWaiting') self.skipWaiting();
 });
