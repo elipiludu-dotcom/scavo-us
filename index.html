@@ -5,7 +5,7 @@
   <!-- PWA -->
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#C9963A">
-  <meta name="app-version" content="93">
+  <meta name="app-version" content="94">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="SMP Scavo">
@@ -1216,6 +1216,8 @@
           <button class="btn btn-secondary" id="btnDuplica" style="display:none;white-space:nowrap" onclick="duplicaScheda()">⧉ Duplica</button>
           <button class="btn btn-secondary" id="btnMappaUS" style="display:none;white-space:nowrap" onclick="apriMappaPerUS()">🗺 Vedi su mappa</button>
           <button class="btn btn-secondary" onclick="showView(window._editOrigin?.replace('view-','') || 'schede')" style="white-space:nowrap">← Indietro</button>
+          <button class="btn btn-secondary" id="btnExportUSPDF" style="display:none;white-space:nowrap" onclick="exportPDFUS(editingId)">⬇ PDF</button>
+          <button class="btn btn-danger" id="btnDelete" style="display:none;white-space:nowrap" onclick="deleteScheda()">🗑 Elimina</button>
           <button class="btn btn-success" onclick="saveScheda()">Salva</button>
         </div>
       </div>
@@ -1415,7 +1417,6 @@
 
       <div style="padding:0 16px 24px;display:flex;gap:10px;border-top:1px solid var(--border);margin-top:8px;padding-top:16px">
         <button class="btn btn-success" style="flex:1" onclick="saveScheda()">☁ Salva su Cloud</button>
-        <button class="btn btn-danger" id="btnDelete" style="display:none" onclick="deleteScheda()">🗑 Elimina</button>
       </div>
     </div>
 
@@ -1455,11 +1456,19 @@
           <div class="field-group"><label>Località</label><input type="text" id="t_localita" placeholder="es. Colle Mustarola, Peccioli"></div>
           <div class="field-group"><label>Pianta N.</label><input type="text" id="t_pianta_n" placeholder="es. 12"></div>
         </div>
+        <div class="field-row">
+          <div class="field-group">
+            <label>US taglio tomba <span style="font-size:0.75rem;color:var(--muted)">(numeri separati da virgola)</span></label>
+            <input type="text" id="t_us_taglio" placeholder="es. -2611" oninput="renderUSBadges()">
+          </div>
+          <div class="field-group">
+            <label>US riempimento tomba <span style="font-size:0.75rem;color:var(--muted)">(numeri separati da virgola)</span></label>
+            <input type="text" id="t_us_riempimento" placeholder="es. 2627" oninput="renderUSBadges()">
+          </div>
+        </div>
         <div class="field-row single">
           <div class="field-group">
-            <label>US collegate <span style="font-size:0.75rem;color:var(--muted)">(numeri separati da virgola)</span></label>
-            <input type="text" id="t_us_collegate" placeholder="es. 101, -174, 2627" oninput="renderUSBadges()">
-            <div id="us-badges" style="margin-top:6px;display:flex;flex-wrap:wrap;gap:4px"></div>
+            <div id="us-badges" style="margin-top:2px;display:flex;flex-wrap:wrap;gap:4px"></div>
           </div>
         </div>
       </div>
@@ -1708,6 +1717,7 @@
           <button class="btn btn-secondary" onclick="exportMatrixSVG()" style="font-size:0.72rem;padding:5px 10px;white-space:nowrap">⬇ SVG</button>
           <button class="btn btn-secondary" onclick="exportMatrixPDF()" style="font-size:0.72rem;padding:5px 10px;white-space:nowrap">⬇ PDF</button>
           <button class="btn btn-secondary" onclick="printMatrixConflicts()" id="btn-print-conflicts" style="font-size:0.72rem;padding:5px 10px;white-space:nowrap;display:none">🖨 Report conflitti</button>
+          <button class="btn btn-secondary" onclick="aggiornaMatrix()" title="Ricarica le modifiche senza uscire dalla sezione" style="font-size:0.72rem;padding:5px 10px;white-space:nowrap">🔄 Aggiorna</button>
           <button class="btn btn-secondary" onclick="showView('list')" style="font-size:0.72rem;padding:5px 10px;white-space:nowrap">← Home</button>
         </div>
       </div>
@@ -2050,7 +2060,9 @@ const HEADERS_TOMBE = [
   'morf_arcate','morf_margini','morf_frontale','morf_mandibola',
   'morf_mento','morf_protub_occ','morf_orbite',
   'morf_angolo_pubico','morf_ali_iliache','morf_incisura',
-  'sesso','note_antropologiche'
+  'sesso','note_antropologiche',
+  // US collegate splittate (v94): taglio della fossa e riempimento
+  'us_taglio','us_riempimento'
 ];
 
 const HEADERS = ['id','numero','anno','area','saggio','tipo','pos_neg','data','definizione','formazione','criteri','responsabile','stato',
@@ -2604,6 +2616,7 @@ function resetForm() {
   rapportiCount = 0; repertiCount = 0;
   document.getElementById('formTitle').textContent = 'Nuova Scheda US';
   document.getElementById('btnDelete').style.display = 'none';
+  const _bpdf2 = document.getElementById('btnExportUSPDF'); if(_bpdf2) _bpdf2.style.display = 'none';
   const _bmu2 = document.getElementById('btnMappaUS'); if(_bmu2) _bmu2.style.display = 'none';
   const _bdu2 = document.getElementById('btnDuplica'); if(_bdu2) _bdu2.style.display = 'none';
   const _lmi2 = document.getElementById('lastModInfo'); if(_lmi2) _lmi2.style.display = 'none';
@@ -2623,6 +2636,7 @@ function openEdit(id) {
   window._editOrigin = document.querySelector('.view.active')?.id || 'view-list';
   document.getElementById('formTitle').textContent = 'Scheda US ' + s.numero;
   document.getElementById('btnDelete').style.display = 'block';
+  const _bpdf = document.getElementById('btnExportUSPDF'); if (_bpdf) _bpdf.style.display = 'inline-block';
   const _bmu = document.getElementById('btnMappaUS');
   if (_bmu) _bmu.style.display = 'inline-block';
   const _bdu = document.getElementById('btnDuplica');
@@ -3142,25 +3156,33 @@ function showAnnoDialog(dataset, annoField) {
     t.textContent = 'Seleziona anno di scavo';
     box.appendChild(t);
 
-    // Pulsante "Tutti gli anni"
+    // Pulsante "Tutti gli anni" (in evidenza)
     const btnTutti = document.createElement('button');
     btnTutti.className = 'btn btn-secondary';
-    btnTutti.style.cssText = 'width:100%;margin-bottom:8px;text-align:left';
+    btnTutti.style.cssText = 'width:100%;margin-bottom:12px;text-align:center';
     btnTutti.textContent = '📋 Tutti gli anni';
     btnTutti.onclick = () => { overlay.remove(); resolve('tutti'); };
     box.appendChild(btnTutti);
 
-    // Pulsante per ogni anno
-    anni.forEach(anno => {
-      const btn = document.createElement('button');
-      btn.className = 'btn btn-primary';
-      btn.style.cssText = 'width:100%;margin-bottom:8px;text-align:left';
-      btn.textContent = '📅 ' + anno;
-      btn.onclick = () => { overlay.remove(); resolve(anno); };
-      box.appendChild(btn);
-    });
+    if (anni.length) {
+      const subt = document.createElement('div');
+      subt.style.cssText = 'font-size:0.72rem;color:var(--muted);margin-bottom:8px';
+      subt.textContent = 'oppure scegli un anno:';
+      box.appendChild(subt);
 
-    if (!anni.length) {
+      // Griglia compatta di anni (3 per riga), scrollabile se molti
+      const grid = document.createElement('div');
+      grid.style.cssText = 'display:grid;grid-template-columns:repeat(3,1fr);gap:8px;max-height:46vh;overflow-y:auto;margin-bottom:4px;padding:2px';
+      anni.forEach(anno => {
+        const btn = document.createElement('button');
+        btn.className = 'btn btn-primary';
+        btn.style.cssText = 'padding:9px 4px;text-align:center;font-size:0.82rem';
+        btn.textContent = anno;
+        btn.onclick = () => { overlay.remove(); resolve(anno); };
+        grid.appendChild(btn);
+      });
+      box.appendChild(grid);
+    } else {
       const nota = document.createElement('div');
       nota.style.cssText = 'font-size:0.8rem;color:var(--muted);margin-bottom:12px';
       nota.textContent = 'Nessun anno trovato nei dati.';
@@ -3500,7 +3522,7 @@ function renderTombe(q = '') {
 
 // ─── TOMBE — FORM ────────────────────────────────────────────────
 function resetTombaForm() {
-  ['t_numero','t_anno','t_area','t_localita','t_pianta_n','t_us_collegate',
+  ['t_numero','t_anno','t_area','t_localita','t_pianta_n','t_us_taglio','t_us_riempimento',
    't_quota_pre_min','t_quota_pre_max','t_quota_post_min','t_quota_post_max',
    't_orientamento','t_condizioni','t_altre_sepolture',
    't_descrizione','t_reperti_connessione','t_elementi_copertura',
@@ -3525,7 +3547,7 @@ function resetTombaForm() {
 }
 
 function loadTombaForm(t) {
-  ['numero','anno','area','localita','pianta_n','us_collegate',
+  ['numero','anno','area','localita','pianta_n','us_taglio','us_riempimento',
    'quota_pre_min','quota_pre_max','quota_post_min','quota_post_max',
    'orientamento','condizioni','altre_sepolture',
    'descrizione','reperti_connessione','elementi_copertura',
@@ -3554,6 +3576,12 @@ function loadTombaForm(t) {
 }
 
 function getTombaFromForm(id) {
+  const _exT = editingTombaId ? tombe.find(x => x.id === editingTombaId) : null;
+  const _taglio = (document.getElementById('t_us_taglio')?.value || '').trim();
+  const _riemp  = (document.getElementById('t_us_riempimento')?.value || '').trim();
+  // us_collegate resta come campo derivato (unione) per compatibilità con
+  // mappa, ricerca, elenco e tabelle PDF. Se vuoto, conserva il valore legacy.
+  const _comb = [_taglio, _riemp].filter(Boolean).join(', ');
   return {
     id: id || editingTombaId || Date.now().toString(36) + Math.random().toString(36).slice(2),
     numero: parseInt(document.getElementById('t_numero').value) || 0,
@@ -3561,7 +3589,9 @@ function getTombaFromForm(id) {
     area: document.getElementById('t_area').value,
     localita: document.getElementById('t_localita').value,
     pianta_n: document.getElementById('t_pianta_n').value,
-    us_collegate: document.getElementById('t_us_collegate').value,
+    us_taglio: _taglio,
+    us_riempimento: _riemp,
+    us_collegate: _comb || (_exT?.us_collegate || ''),
     quota_pre_min: document.getElementById('t_quota_pre_min').value,
     quota_pre_max: document.getElementById('t_quota_pre_max').value,
     quota_post_min: document.getElementById('t_quota_post_min').value,
@@ -3708,7 +3738,9 @@ function updateTombaStatoStyle() {}
 
 // ─── MODAL SCHEDA US IN SOLA LETTURA ─────────────────────────────
 function renderUSBadges() {
-  const val = (document.getElementById('t_us_collegate')?.value || '');
+  const taglio = (document.getElementById('t_us_taglio')?.value || '');
+  const riemp  = (document.getElementById('t_us_riempimento')?.value || '');
+  const val = [taglio, riemp].filter(Boolean).join(',');
   const container = document.getElementById('us-badges');
   if (!container) return;
   const nums = val.split(',').map(s => s.trim()).filter(s => s);
@@ -4673,8 +4705,13 @@ function populatePDFSelect() {
 async function exportPDFSingola() {
   const id = document.getElementById('pdfSelectUS').value;
   if (!id) { showToast('⚠ Seleziona una scheda US'); return; }
+  return exportPDFUS(id);
+}
+
+async function exportPDFUS(id) {
+  if (!id) { showToast('⚠ Nessuna scheda selezionata'); return; }
   const s = schede.find(x => x.id === id);
-  if (!s) return;
+  if (!s) { showToast('⚠ Scheda non trovata'); return; }
   showToast('Generazione PDF…');
   await loadJsPDF();
   // Scarica le eventuali foto allegate da Drive
@@ -5227,7 +5264,7 @@ function drawTombaPage1(doc, t) {
     { lbl:'LOCALITÀ',  w:25 },
     { lbl:'ANNO',      w:13 },
     { lbl:'AREA',      w:26 },
-    { lbl:'US',        w:20 },
+    { lbl:'US T / R',  w:20 },
     { lbl:'SCHEDA N.', w:22 },
     { lbl:'PIANTA N.', w:18 },
   ];
@@ -5290,6 +5327,17 @@ function drawTombaPage1(doc, t) {
     if (i === 4) {
       doc.setFontSize(11); doc.setFont('helvetica','bold'); doc.setTextColor(0,0,0);
       doc.text(String(vals0[i]||''), cx+1.5, hRow+12);
+    } else if (i === 3) {
+      // US: taglio / riempimento su due righe (fallback al legacy us_collegate)
+      doc.setFontSize(6.5); doc.setFont('helvetica','normal'); doc.setTextColor(0,0,0);
+      const tg = String(t.us_taglio || '').trim();
+      const rm = String(t.us_riempimento || '').trim();
+      if (!tg && !rm && t.us_collegate) {
+        doc.text(doc.splitTextToSize(String(t.us_collegate), c.w-3), cx+1.5, hRow+7.5);
+      } else {
+        doc.text(doc.splitTextToSize('T: ' + (tg || '—'), c.w-3), cx+1.5, hRow+6);
+        doc.text(doc.splitTextToSize('R: ' + (rm || '—'), c.w-3), cx+1.5, hRow+10.5);
+      }
     } else {
       doc.setFontSize(7.5); doc.setFont('helvetica','normal'); doc.setTextColor(0,0,0);
       const lines = doc.splitTextToSize(String(vals0[i]||''), c.w-3);
@@ -7348,6 +7396,28 @@ function _mxInitEvents() {
 }
 
 
+async function aggiornaMatrix() {
+  if (isOffline()) { showToast('⚠ Offline — impossibile aggiornare ora'); return; }
+  const s = document.getElementById('matrix-settore')?.value || '';
+  const a = document.getElementById('matrix-anno')?.value || '';
+  setSyncStatus('syncing', 'Aggiornamento…');
+  try {
+    await loadFromSheets(false);
+    popolaFiltriMatrix();
+    const selS = document.getElementById('matrix-settore');
+    const selA = document.getElementById('matrix-anno');
+    if (selS && [...selS.options].some(o => o.value === s)) selS.value = s;
+    if (selA && [...selA.options].some(o => o.value === a)) selA.value = a;
+    renderMatrix();
+    setSyncStatus('ok', 'Sincronizzato');
+    showToast('🔄 Matrix aggiornata');
+  } catch(e) {
+    setSyncStatus('error', 'Errore sync');
+    showToast('⚠ Aggiornamento non riuscito');
+    console.error(e);
+  }
+}
+
 function renderMatrix() {
   const settore = document.getElementById('matrix-settore')?.value || '';
   const anno    = document.getElementById('matrix-anno')?.value || '';
@@ -8102,9 +8172,9 @@ function showToast(msg) {
   <script>
     if ('serviceWorker' in navigator && !location.hostname.includes('claudeusercontent.com')) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./service-worker.js?v=93')
+        navigator.serviceWorker.register('./service-worker.js?v=94')
           .then(reg => {
-            console.log('SW registrato v93:', reg.scope);
+            console.log('SW registrato v94:', reg.scope);
             // Forza aggiornamento immediato se c'è una nuova versione
             reg.update();
           })
