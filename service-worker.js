@@ -1,8 +1,8 @@
 // ─────────────────────────────────────────────────────────────────
 // SMP Scavo — Service Worker
-// v94 — Matrix refresh, tasti PDF/Elimina schede US, dialogo anni a griglia, US taglio/riempimento tomba
+// v95 — operatore all'avvio + tracciabilità tombe + operatore in elenco, fix Matrix refresh, matrix tappabile su mobile, filtri lista persistenti
 // ─────────────────────────────────────────────────────────────────
-const CACHE_NAME = 'smp-scavo-v94';
+const CACHE_NAME = 'smp-scavo-v95';
 
 // Shell dell'app da rendere disponibile offline.
 const APP_SHELL = [

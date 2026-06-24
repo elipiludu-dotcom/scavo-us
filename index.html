@@ -5,7 +5,7 @@
   <!-- PWA -->
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#C9963A">
-  <meta name="app-version" content="94">
+  <meta name="app-version" content="95">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="SMP Scavo">
@@ -1443,6 +1443,7 @@
           <button class="btn btn-success" onclick="saveTomba()">Salva</button>
         </div>
       </div>
+      <div id="lastModInfoTomba" style="display:none;padding:4px 16px 0;font-size:0.72rem;color:var(--muted);font-family:'Space Mono',monospace"></div>
 
       <!-- SEZ 1: IDENTIFICAZIONE -->
       <div class="form-section">
@@ -2062,7 +2063,9 @@ const HEADERS_TOMBE = [
   'morf_angolo_pubico','morf_ali_iliache','morf_incisura',
   'sesso','note_antropologiche',
   // US collegate splittate (v94): taglio della fossa e riempimento
-  'us_taglio','us_riempimento'
+  'us_taglio','us_riempimento',
+  // Tracciabilità modifiche (v95)
+  '_last_modified','_modified_by'
 ];
 
 const HEADERS = ['id','numero','anno','area','saggio','tipo','pos_neg','data','definizione','formazione','criteri','responsabile','stato',
@@ -2177,6 +2180,7 @@ function onAuthenticated() {
   document.getElementById('loginScreen').style.display = 'none';
   document.getElementById('appShell').style.display = 'block';
   editingId = null;
+  if (!window._operatoreChiesto) { window._operatoreChiesto = true; chiediOperatoreAllAvvio(); }
   setSyncStatus('syncing', 'Caricamento…');
   loadFromSheets(false);
   loadTombe();
@@ -2246,7 +2250,7 @@ async function ensureHeaders() {
   }
 }
 
-async function loadFromSheets(showMsg = false) {
+async function loadFromSheets(showMsg = false, keepView = false) {
   setSyncStatus('syncing', 'Sync…');
   try {
     await ensureHeaders();
@@ -2284,11 +2288,13 @@ async function loadFromSheets(showMsg = false) {
     }
     setSyncStatus('ok', 'Sincronizzato');
     renderList(); renderStats();
-    // Assicura che la vista lista sia sempre quella mostrata dopo il caricamento
-    document.querySelectorAll('.view').forEach(el => el.classList.remove('active'));
-    document.querySelectorAll('.nav-tab').forEach(el => el.classList.remove('active'));
-    document.getElementById('view-list').classList.add('active');
-    document.querySelectorAll('.nav-tab')[0].classList.add('active');
+    if (!keepView) {
+      // Assicura che la vista lista sia sempre quella mostrata dopo il caricamento
+      document.querySelectorAll('.view').forEach(el => el.classList.remove('active'));
+      document.querySelectorAll('.nav-tab').forEach(el => el.classList.remove('active'));
+      document.getElementById('view-list').classList.add('active');
+      document.querySelectorAll('.nav-tab')[0].classList.add('active');
+    }
     if (showMsg) showToast('✓ Dati aggiornati (' + schede.length + ' schede)');
   } catch (e) {
     setSyncStatus('error', 'Errore sync');
@@ -2391,6 +2397,7 @@ async function writeAllToSheets() {
 
 // ─── VIEW ─────────────────────────────────────────────────────────
 function showView(v) {
+  const _prevView = document.querySelector('.view.active')?.id || '';
   document.querySelectorAll('.view').forEach(el => el.classList.remove('active'));
   document.querySelectorAll('.nav-tab').forEach(el => el.classList.remove('active'));
   document.getElementById('view-' + v).classList.add('active');
@@ -2399,14 +2406,14 @@ function showView(v) {
   if (_fab) _fab.classList.toggle('fab-visible', v === 'list' || v === 'schede');
   const idx = {list:0,new:1,tombe:2,mappa:3,diario:3,export:4,import:5}[v];
   if (idx !== undefined) document.querySelectorAll('.nav-tab')[idx].classList.add('active');
-  if (v === 'new' && editingId === null) resetForm();
+  if (v === 'new' && editingId === null) { if (_prevView) window._editOrigin = _prevView; resetForm(); }
   if (v === 'list') { editingId = null; renderList(); renderStats(); }
   if (v === 'mappa') {
     initMappa();
     setTimeout(() => { if (_mappaMap) _mappaMap.invalidateSize(); }, 100);
   }
   if (v === 'matrix') { popolaFiltriMatrix(); renderMatrix(); }
-  if (v === 'schede') { renderList(); }
+  if (v === 'schede') { renderListFiltri(); }
   if (v === 'tombe') { renderTombe(); }
 }
 
@@ -2527,6 +2534,7 @@ function renderList(q = '', filtri = {}) {
           ${s.tipo ? '<span class="us-badge" style="background:rgba(122,173,221,0.1);color:#7aaddd;border:1px solid rgba(122,173,221,0.3);margin-right:6px">'+s.tipo+'</span>' : '<strong>Tipo non definito</strong>'}
           ${s.area ? 'Area ' + s.area : ''}${s.saggio ? ' · ' + s.saggio : ''}
           ${s.datazione ? '<br><span style="font-size:0.75rem;color:var(--muted)">'+s.datazione+'</span>' : ''}
+          ${(s._modified_by || s._last_modified) ? '<br><span style="font-size:0.7rem;color:var(--muted)">👤 ' + (s._modified_by || '—') + (s._last_modified ? ' · ' + (isNaN(new Date(s._last_modified)) ? '' : new Date(s._last_modified).toLocaleDateString('it-IT')) : '') + '</span>' : ''}
           ${getTombePerUS(s.numero).map(t => `<span onclick="event.stopPropagation();openEditTomba('${t.id}')" style="display:inline-block;margin-top:3px;margin-right:4px;padding:1px 7px;border-radius:10px;font-size:0.68rem;background:rgba(201,150,58,0.15);border:1px solid var(--earth);color:var(--earth);cursor:pointer">⚰ T.${t.numero}</span>`).join('')}
         </div>
       </div>
@@ -2978,6 +2986,45 @@ function cambiaOperatore() {
   }
 }
 
+// Chiede il nome operatore a ogni accesso (tracciabilità). Pre-compila con
+// l'ultimo nome salvato e richiede un nome non vuoto.
+function chiediOperatoreAllAvvio() {
+  const ex = document.getElementById('operatoreOverlay'); if (ex) ex.remove();
+  const attuale = localStorage.getItem('smp_operatore') || '';
+  const overlay = document.createElement('div');
+  overlay.id = 'operatoreOverlay';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:10000;display:flex;align-items:center;justify-content:center;padding:20px';
+  const box = document.createElement('div');
+  box.style.cssText = 'background:var(--parchment);border:1px solid var(--border);border-radius:6px;max-width:360px;width:100%;padding:24px 20px;box-shadow:0 8px 32px rgba(0,0,0,0.35)';
+  const t = document.createElement('div');
+  t.style.cssText = 'font-family:"Space Mono",monospace;font-size:0.9rem;color:var(--earth);font-weight:700;margin-bottom:6px';
+  t.textContent = "👤 Chi sta usando l'app?";
+  const sub = document.createElement('div');
+  sub.style.cssText = 'font-size:0.78rem;color:var(--muted);line-height:1.45;margin-bottom:14px';
+  sub.textContent = 'Il nome viene registrato come autore delle modifiche. Conferma o cambialo.';
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.value = attuale;
+  input.placeholder = 'Nome e cognome';
+  input.style.cssText = 'width:100%;padding:11px 12px;border:1px solid var(--border);border-radius:4px;font-size:0.95rem;background:var(--parchment-light);color:var(--ink);outline:none;margin-bottom:14px;box-sizing:border-box';
+  const btn = document.createElement('button');
+  btn.className = 'btn btn-primary';
+  btn.style.cssText = 'width:100%';
+  btn.textContent = 'Conferma';
+  const conferma = () => {
+    const v = (input.value || '').trim();
+    if (!v) { input.style.borderColor = 'var(--accent)'; input.focus(); return; }
+    localStorage.setItem('smp_operatore', v);
+    overlay.remove();
+    showToast('👤 Operatore: ' + v);
+  };
+  btn.onclick = conferma;
+  input.addEventListener('keydown', e => { if (e.key === 'Enter') conferma(); });
+  box.appendChild(t); box.appendChild(sub); box.appendChild(input); box.appendChild(btn);
+  overlay.appendChild(box); document.body.appendChild(overlay);
+  setTimeout(() => { input.focus(); input.select(); }, 120);
+}
+
 // ─── BACKUP DATI ──────────────────────────────────────────────────
 // Crea un nuovo spreadsheet su Drive con una copia dei valori di tutti i fogli.
 // (Non si può usare Drive files.copy perché lo scope drive.file non copre il foglio originale)
@@ -3392,7 +3439,7 @@ async function ensureSheetTombeExists() {
 async function ensureHeadersTombe() {
   try {
     await ensureSheetTombeExists();
-    const data = await sheetsGetT(`${SHEET_TOMBE}!A1:BJ1`);
+    const data = await sheetsGetT(`${SHEET_TOMBE}!A1:CZ1`);
     const existing = (data.values && data.values[0]) || [];
     const match = HEADERS_TOMBE.every((h,i) => existing[i] === h) && existing.length === HEADERS_TOMBE.length;
     if (!match) await sheetsUpdateT(`${SHEET_TOMBE}!A1`, [HEADERS_TOMBE]);
@@ -3469,7 +3516,7 @@ async function deleteTombaFromSheets(id) {
 async function loadTombe() {
   try {
     await ensureHeadersTombe();
-    const data = await sheetsGetT(`${SHEET_TOMBE}!A1:BJ5000`);
+    const data = await sheetsGetT(`${SHEET_TOMBE}!A1:CZ5000`);
     const rows = data.values || [];
     if (rows.length <= 1) { tombe = []; return; }
     const hdrs = rows[0];
@@ -3510,6 +3557,7 @@ function renderTombe(q = '') {
           ${t.area ? ' — Area ' + t.area : ''}
           ${t.us_collegate ? '<br><span style="font-size:0.75rem;color:var(--earth)">US: ' + t.us_collegate + '</span>' : ''}
           ${t.datazione ? '<br><span style="font-size:0.75rem;color:var(--muted)">'+t.datazione+'</span>' : ''}
+          ${(t._modified_by || t._last_modified) ? '<br><span style="font-size:0.7rem;color:var(--muted)">👤 ' + (t._modified_by || '—') + (t._last_modified ? ' · ' + (isNaN(new Date(t._last_modified)) ? '' : new Date(t._last_modified).toLocaleDateString('it-IT')) : '') + '</span>' : ''}
         </div>
       </div>
       <div style="display:flex;align-items:center;gap:10px">
@@ -3544,6 +3592,7 @@ function resetTombaForm() {
    't_morf_angolo_pubico','t_morf_ali_iliache','t_morf_incisura','t_stato']
     .forEach(id => { const el = document.getElementById(id); if(el) el.value = id === 't_stato' ? 'parziale' : ''; });
   const dc = document.getElementById('t_data_controllo'); if(dc) dc.value = '';
+  const _lmt2 = document.getElementById('lastModInfoTomba'); if(_lmt2) _lmt2.style.display = 'none';
 }
 
 function loadTombaForm(t) {
@@ -3572,6 +3621,17 @@ function loadTombaForm(t) {
    'morf_ali_iliache','morf_incisura','stato']
     .forEach(k => { const el = document.getElementById('t_'+k); if(el) el.value = t[k] || ''; });
   const dc = document.getElementById('t_data_controllo'); if(dc) dc.value = t.data_controllo || '';
+  const _lmt = document.getElementById('lastModInfoTomba');
+  if (_lmt) {
+    if (t._last_modified || t._modified_by) {
+      const dt = new Date(t._last_modified);
+      const quando = (t._last_modified && !isNaN(dt)) ? dt.toLocaleDateString('it-IT') + ' ' + dt.toLocaleTimeString('it-IT', {hour:'2-digit',minute:'2-digit'}) : (t._last_modified || '');
+      _lmt.textContent = 'Ultima modifica: ' + quando + (t._modified_by ? ' — ' + t._modified_by : '');
+      _lmt.style.display = 'block';
+    } else {
+      _lmt.style.display = 'none';
+    }
+  }
   renderUSBadges();
 }
 
@@ -3592,6 +3652,8 @@ function getTombaFromForm(id) {
     us_taglio: _taglio,
     us_riempimento: _riemp,
     us_collegate: _comb || (_exT?.us_collegate || ''),
+    _last_modified: new Date().toISOString(),
+    _modified_by: getOperatore(),
     quota_pre_min: document.getElementById('t_quota_pre_min').value,
     quota_pre_max: document.getElementById('t_quota_pre_max').value,
     quota_post_min: document.getElementById('t_quota_post_min').value,
@@ -7402,7 +7464,7 @@ async function aggiornaMatrix() {
   const a = document.getElementById('matrix-anno')?.value || '';
   setSyncStatus('syncing', 'Aggiornamento…');
   try {
-    await loadFromSheets(false);
+    await loadFromSheets(false, true);
     popolaFiltriMatrix();
     const selS = document.getElementById('matrix-settore');
     const selA = document.getElementById('matrix-anno');
@@ -7430,17 +7492,14 @@ function renderMatrix() {
 
   document.getElementById('matrix-info').textContent = `${sel.length} US`;
 
-  // Rilevamento mobile: su schermi piccoli mostra bottone PDF, nasconde SVG
+  // Rilevamento mobile (mantenuto per altri usi)
   const isMobile = window.innerWidth <= 768 || /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
   const mobileBtn = document.getElementById('matrix-mobile-btn');
   const mxContainer = document.getElementById('matrix-container');
-  if (isMobile) {
-    if (mxContainer) mxContainer.style.display = 'none';
-    if (mobileBtn)  { mobileBtn.style.display = 'flex'; }
-  } else {
-    if (mxContainer) mxContainer.style.display = '';
-    if (mobileBtn)   mobileBtn.style.display = 'none';
-  }
+  // Mostra sempre la matrix interattiva (anche su mobile: pinch-zoom, drag e
+  // tap sui nodi per aprire la scheda US in popup). Il PDF resta nella toolbar.
+  if (mxContainer) mxContainer.style.display = '';
+  if (mobileBtn)   mobileBtn.style.display = 'none';
   const svg = document.getElementById('matrix-svg');
   svg.innerHTML = '';
   if (!sel.length) return;
@@ -8172,9 +8231,9 @@ function showToast(msg) {
   <script>
     if ('serviceWorker' in navigator && !location.hostname.includes('claudeusercontent.com')) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./service-worker.js?v=94')
+        navigator.serviceWorker.register('./service-worker.js?v=95')
           .then(reg => {
-            console.log('SW registrato v94:', reg.scope);
+            console.log('SW registrato v95:', reg.scope);
             // Forza aggiornamento immediato se c'è una nuova versione
             reg.update();
           })
