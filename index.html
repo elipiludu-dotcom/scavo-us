@@ -5,7 +5,7 @@
   <!-- PWA -->
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#C9963A">
-  <meta name="app-version" content="95">
+  <meta name="app-version" content="96">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="SMP Scavo">
@@ -1226,7 +1226,7 @@
       <div class="form-section">
         <div class="section-title">1 · Identificazione</div>
         <div class="field-row triple">
-          <div class="field-group"><label>N° US *</label><input type="number" id="f_numero" placeholder="es. 101" min="1"></div>
+          <div class="field-group"><label>N° US *</label><input type="text" id="f_numero" placeholder="es. 183 o 183a" autocapitalize="off" autocorrect="off" spellcheck="false"></div>
           <div class="field-group"><label>Area</label><input type="text" id="f_area" placeholder="es. A"></div>
           <div class="field-group"><label>Saggio / Settore</label><input type="text" id="f_saggio" placeholder="es. S3"></div>
         </div>
@@ -1449,7 +1449,7 @@
       <div class="form-section">
         <div class="section-title">1 · Identificazione</div>
         <div class="field-row">
-          <div class="field-group"><label>Scheda N. *</label><input type="number" id="t_numero" placeholder="es. 334"></div>
+          <div class="field-group"><label>Scheda N. *</label><input type="text" id="t_numero" placeholder="es. 289 o 289.1" autocapitalize="off" autocorrect="off" spellcheck="false"></div>
           <div class="field-group"><label>Anno</label><input type="text" id="t_anno" placeholder="es. 2024"></div>
           <div class="field-group"><label>Area</label><input type="text" id="t_area" placeholder="es. A"></div>
         </div>
@@ -1497,11 +1497,14 @@
             </div>
           </div>
           <div class="field-group">
-            <label>Tipologia</label>
+            <label>Tipologia &mdash; numero deposizioni</label>
             <div class="radio-group" style="flex-wrap:wrap">
-              <label class="radio-label"><input type="radio" name="t_tipologia" onchange="document.getElementById('tipologia_altro_wrap').style.display='none'" value="singola"> Singola</label>
-              <label class="radio-label"><input type="radio" name="t_tipologia" onchange="document.getElementById('tipologia_altro_wrap').style.display='none'" value="bisoma"> Bisoma</label>
-              <label class="radio-label"><input type="radio" name="t_tipologia" onchange="document.getElementById('tipologia_altro_wrap').style.display='none'" value="multipla"> Multipla</label>
+              <label class="radio-label"><input type="radio" name="t_tipologia_num" value="singola"> Singola</label>
+              <label class="radio-label"><input type="radio" name="t_tipologia_num" value="bisoma"> Bisoma</label>
+              <label class="radio-label"><input type="radio" name="t_tipologia_num" value="multipla"> Multipla</label>
+            </div>
+            <label style="margin-top:8px">Tipologia &mdash; sepoltura</label>
+            <div class="radio-group" style="flex-wrap:wrap">
               <label class="radio-label"><input type="radio" name="t_tipologia" onchange="document.getElementById('tipologia_altro_wrap').style.display='none'" value="cappuccina"> Cappuccina</label>
               <label class="radio-label"><input type="radio" name="t_tipologia" onchange="document.getElementById('tipologia_altro_wrap').style.display='none'" value="pietra"> Pietra</label>
               <label class="radio-label"><input type="radio" name="t_tipologia" onchange="document.getElementById('tipologia_altro_wrap').style.display='none'" value="anfora"> Anfora</label>
@@ -2065,7 +2068,9 @@ const HEADERS_TOMBE = [
   // US collegate splittate (v94): taglio della fossa e riempimento
   'us_taglio','us_riempimento',
   // Tracciabilità modifiche (v95)
-  '_last_modified','_modified_by'
+  '_last_modified','_modified_by',
+  // Tipologia numero deposizioni (singola/bisoma/multipla) — v96, in coda per non disallineare le righe esistenti
+  'tipologia_num'
 ];
 
 const HEADERS = ['id','numero','anno','area','saggio','tipo','pos_neg','data','definizione','formazione','criteri','responsabile','stato',
@@ -2083,6 +2088,27 @@ let editingTombaId = null;
 let rapportiCount = 0;
 let repertiCount = 0;
 let _loadedLastModified = null; // ottimistic locking: timestamp al momento dell'apertura scheda
+
+// ─── NUMERAZIONE US / TOMBE (supporto suffissi "bis": 183a, 289.1) ─
+// Il numero NON è più un intero: è una stringa che può avere un suffisso
+// (es. "183a", "289.1"). Conserva il segno per i tagli (es. "-2611").
+//   normNum    → forma canonica per i confronti (trim + minuscolo)
+//   sameNum    → uguaglianza fra due numeri (case-insensitive)
+//   numKey     → chiave di ordinamento [valore assoluto della parte numerica, suffisso]
+//   compareNum → ordinamento naturale crescente (182, 183, 183a, 183b, 184)
+function normNum(v) { return String(v == null ? '' : v).trim().toLowerCase(); }
+function sameNum(a, b) { return normNum(a) === normNum(b); }
+function numKey(v) {
+  const s = String(v == null ? '' : v).trim();
+  const m = s.match(/^-?(\d+)(.*)$/);
+  if (m) return [parseInt(m[1], 10), (m[2] || '').toLowerCase()];
+  return [Number.MAX_SAFE_INTEGER, s.toLowerCase()];
+}
+function compareNum(a, b) {
+  const ka = numKey(a), kb = numKey(b);
+  if (ka[0] !== kb[0]) return ka[0] - kb[0];
+  return ka[1] < kb[1] ? -1 : ka[1] > kb[1] ? 1 : 0;
+}
 
 // ─── GOOGLE IDENTITY ─────────────────────────────────────────────
 window.onload = async () => {
@@ -2267,7 +2293,7 @@ async function loadFromSheets(showMsg = false, keepView = false) {
         try { obj.reperti = JSON.parse(obj.reperti || '[]'); } catch { obj.reperti = []; }
         // Parse boolean fields
         ['foto_digitali','foto_3d','foto_drone'].forEach(k => { obj[k] = obj[k] === 'true'; });
-        obj.numero = parseInt(obj.numero) || 0;
+        obj.numero = String(obj.numero == null ? '' : obj.numero).trim();
         // Arrotonda quote e spessore a 2 decimali
         ['quota_max','quota_min','spessore'].forEach(k => {
           if (obj[k] !== '' && obj[k] !== undefined) {
@@ -2332,7 +2358,7 @@ async function saveSchedaToSheets(scheda, isNew = false) {
 
   if (isNew) {
     // ── NUOVA SCHEDA: anti-duplicato concorrente ──────────────────
-    const esisteSulFoglio = rows.some(r => String(r[numColIdx]) === String(scheda.numero));
+    const esisteSulFoglio = rows.some(r => sameNum(r[numColIdx], scheda.numero));
     if (esisteSulFoglio) {
       throw { type: 'DUPLICATE', numero: scheda.numero };
     }
@@ -2441,7 +2467,7 @@ function updateTombaTabLabel() {
 // ─── RENDER LIST ─────────────────────────────────────────────────
 function getTombePerUS(numeroUS) {
   return tombe.filter(t =>
-    String(t.us_collegate || '').split(',').map(s => s.trim()).includes(String(numeroUS))
+    String(t.us_collegate || '').split(',').map(s => normNum(s)).includes(normNum(numeroUS))
   );
 }
 
@@ -2520,7 +2546,7 @@ function renderList(q = '', filtri = {}) {
     if (filtri.tipo   && s.tipo   !== filtri.tipo)   return false;
     if (filtri.stato  && (s.stato||'').toLowerCase() !== filtri.stato.toLowerCase()) return false;
     return true;
-  }).sort((a,b) => Math.abs(b.numero) - Math.abs(a.numero));
+  }).sort((a,b) => compareNum(b.numero, a.numero));
 
   if (!filtered.length) {
     list.innerHTML = `<div class="empty-state"><div class="icon">🏺</div><p>${schede.length ? 'Nessun risultato.' : 'Nessuna scheda US ancora.<br>Tocca "+ Nuova US" per iniziare.'}</p></div>`;
@@ -2708,7 +2734,7 @@ function addRapporto(prefill = {}) {
       <option value="gli_si_appoggia" ${prefill.tipo==='gli_si_appoggia'?'selected':''}>Gli si appoggia</option>
       <option value="si_appoggia_a" ${prefill.tipo==='si_appoggia_a'?'selected':''}>Si appoggia a</option>
     </select>
-    <input type="text" id="${id}_us" placeholder="N° US" value="${prefill.us||''}" style="flex:1;min-width:0">
+    <input type="text" id="${id}_us" placeholder="N° US" value="${prefill.us||''}" autocapitalize="off" autocorrect="off" spellcheck="false" style="flex:1;min-width:0">
     <button class="btn-rm" onclick="document.getElementById('${id}').remove()">×</button>`;
   document.getElementById('rapportiList').appendChild(div);
 }
@@ -2784,9 +2810,9 @@ function verificaReciprocitaScheda(s) {
   const anomalie = [];
   _rapportiDi(s).forEach(r => {
     if (!r.us || !r.tipo) return;
-    const numTarget = parseInt(r.us);
-    if (isNaN(numTarget)) return;
-    const target = schede.find(x => x.numero === numTarget);
+    const numTarget = String(r.us).trim();
+    if (!numTarget) return;
+    const target = schede.find(x => sameNum(x.numero, numTarget));
     const lbl = RAPPORTI_LABEL[r.tipo] || r.tipo;
     if (!target) {
       anomalie.push(`US ${s.numero} «${lbl} ${numTarget}» — ma US ${numTarget} non esiste in archivio`);
@@ -2795,7 +2821,7 @@ function verificaReciprocitaScheda(s) {
     const inverso = RAPPORTI_INVERSI[r.tipo];
     if (!inverso) return;
     const haInverso = _rapportiDi(target).some(rt =>
-      rt.tipo === inverso && parseInt(rt.us) === s.numero);
+      rt.tipo === inverso && sameNum(rt.us, s.numero));
     if (!haInverso) {
       anomalie.push(`US ${s.numero} «${lbl} ${numTarget}» — ma US ${numTarget} non ha «${RAPPORTI_LABEL[inverso]} ${s.numero}»`);
     }
@@ -2817,17 +2843,17 @@ function calcolaAsimmetrie(listaSchede) {
   listaSchede.forEach(s => {
     _rapportiDi(s).forEach(r => {
       if (!r.us || !r.tipo) return;
-      const numTarget = parseInt(r.us);
-      if (isNaN(numTarget)) return;
+      const numTarget = String(r.us).trim();
+      if (!numTarget) return;
       const inverso = RAPPORTI_INVERSI[r.tipo];
       if (!inverso) return;
-      const target = schede.find(x => parseInt(x.numero) === numTarget);
+      const target = schede.find(x => sameNum(x.numero, numTarget));
       if (!target) {
         out.push({ kind: 'inesistente', fonteNum: s.numero, targetNum: numTarget,
           lblTipo: RAPPORTI_LABEL[r.tipo] || r.tipo });
         return;
       }
-      const haInverso = _rapportiDi(target).some(rt => rt.tipo === inverso && parseInt(rt.us) === parseInt(s.numero));
+      const haInverso = _rapportiDi(target).some(rt => rt.tipo === inverso && sameNum(rt.us, s.numero));
       if (!haInverso) {
         out.push({
           kind: 'asimmetria',
@@ -2855,7 +2881,7 @@ async function modificaRapportoSuFoglio(numScheda, rapporto, azione) {
   // Trova la riga (lettura fresca della colonna numero)
   const data = await sheetsGet(`${SHEET_NAME}!A2:${colNumero}10000`);
   const rows = data.values || [];
-  const rowIndex = rows.findIndex(r => parseInt(r[numColIdx]) === parseInt(numScheda));
+  const rowIndex = rows.findIndex(r => sameNum(r[numColIdx], numScheda));
   if (rowIndex < 0) return { ok: false, reason: 'notfound' };
   const sheetRow = rowIndex + 2;
   // Rilegge FRESCA la sola cella rapporti
@@ -2871,7 +2897,7 @@ async function modificaRapportoSuFoglio(numScheda, rapporto, azione) {
     arr = arr.filter(x => !(x.tipo === rapporto.tipo && String(x.us) === String(rapporto.us)));
   }
   await sheetsUpdate(`${SHEET_NAME}!${colRap}${sheetRow}`, [[ JSON.stringify(arr) ]]);
-  const mem = schede.find(x => parseInt(x.numero) === parseInt(numScheda));
+  const mem = schede.find(x => sameNum(x.numero, numScheda));
   if (mem) mem.rapporti = arr;
   return { ok: true, reason: azione };
 }
@@ -3266,9 +3292,9 @@ function _bloccaSalva(selettore) {
 
 async function saveScheda() {
   if (window._salvataggioUSInCorso) return;
-  const numero = parseInt(document.getElementById('f_numero').value);
+  const numero = (document.getElementById('f_numero').value || '').trim();
   if (!numero) { showToast('⚠ Inserisci il numero US'); return; }
-  const duplicate = schede.find(s => s.numero === numero && s.id !== editingId);
+  const duplicate = schede.find(s => sameNum(s.numero, numero) && s.id !== editingId);
   if (duplicate) { showToast('⚠ US ' + numero + ' già presente'); return; }
 
   if (isOffline()) { avvisaSalvataggioOffline('US ' + numero); return; }
@@ -3523,7 +3549,7 @@ async function loadTombe() {
     tombe = rows.slice(1).map(row => {
       const obj = {};
       hdrs.forEach((h,i) => obj[h] = row[i] || '');
-      obj.numero = parseInt(obj.numero) || 0;
+      obj.numero = String(obj.numero == null ? '' : obj.numero).trim();
       ['osso_cranio','osso_vertebre','osso_torace','osso_bacino',
        'osso_braccia','osso_gambe','osso_mani','osso_piedi']
         .forEach(k => { obj[k] = obj[k] === 'true' || obj[k] === 'SI'; });
@@ -3542,7 +3568,7 @@ function renderTombe(q = '') {
     (t.area||'').toLowerCase().includes(term) ||
     (t.descrizione||'').toLowerCase().includes(term) ||
     (t.us_collegate||'').toLowerCase().includes(term)
-  ).sort((a,b) => Math.abs(b.numero) - Math.abs(a.numero));
+  ).sort((a,b) => compareNum(b.numero, a.numero));
 
   if (!filtered.length) {
     list.innerHTML = `<div class="empty-state"><div class="icon">⚰</div><p>${tombe.length ? 'Nessun risultato.' : 'Nessuna tomba ancora.<br>Tocca "+ Nuova Tomba" per iniziare.'}</p></div>`;
@@ -3580,7 +3606,7 @@ function resetTombaForm() {
    't_omero_lungh','t_femore_lungh','t_omero_omero_dist',
    't_bacino_lungh_max','t_bacino_largh_max','t_note_antropologiche']
     .forEach(id => { const el = document.getElementById(id); if(el) el.value = ''; });
-  ['t_giacitura','t_tipologia','t_posizione','t_sesso']
+  ['t_giacitura','t_tipologia','t_tipologia_num','t_posizione','t_sesso']
     .forEach(n => document.querySelectorAll(`input[name="${n}"]`).forEach(r => r.checked = false));
   const _wrap = document.getElementById('tipologia_altro_wrap');
   if(_wrap) _wrap.style.display = 'none';
@@ -3605,7 +3631,7 @@ function loadTombaForm(t) {
    'omero_lungh','femore_lungh','omero_omero_dist',
    'bacino_lungh_max','bacino_largh_max','note_antropologiche']
     .forEach(k => { const el = document.getElementById('t_'+k); if(el) el.value = t[k] || ''; });
-  ['giacitura','tipologia','posizione_scheletro','sesso']
+  ['giacitura','tipologia','tipologia_num','posizione_scheletro','sesso']
     .forEach(k => {
       const nm = k === 'posizione_scheletro' ? 't_posizione' : 't_'+k;
       document.querySelectorAll(`input[name="${nm}"]`).forEach(r => { r.checked = r.value === t[k]; });
@@ -3644,7 +3670,7 @@ function getTombaFromForm(id) {
   const _comb = [_taglio, _riemp].filter(Boolean).join(', ');
   return {
     id: id || editingTombaId || Date.now().toString(36) + Math.random().toString(36).slice(2),
-    numero: parseInt(document.getElementById('t_numero').value) || 0,
+    numero: (document.getElementById('t_numero').value || '').trim(),
     anno: document.getElementById('t_anno').value,
     area: document.getElementById('t_area').value,
     localita: document.getElementById('t_localita').value,
@@ -3659,6 +3685,7 @@ function getTombaFromForm(id) {
     quota_post_min: document.getElementById('t_quota_post_min').value,
     quota_post_max: document.getElementById('t_quota_post_max').value,
     giacitura: (document.querySelector('input[name="t_giacitura"]:checked')||{}).value||'',
+    tipologia_num: (document.querySelector('input[name="t_tipologia_num"]:checked')||{}).value||'',
     tipologia: (document.querySelector('input[name="t_tipologia"]:checked')||{}).value||'',
     tipologia_altro: document.getElementById('t_tipologia_altro')?.value||'',
     orientamento: document.getElementById('t_orientamento').value,
@@ -3736,9 +3763,9 @@ function openEditTomba(id) {
 }
 
 async function saveTomba() {
-  const numero = parseInt(document.getElementById('t_numero').value);
+  const numero = (document.getElementById('t_numero').value || '').trim();
   if (!numero) { showToast('⚠ Inserisci il numero tomba'); return; }
-  const duplicate = tombe.find(t => t.numero === numero && t.id !== editingTombaId);
+  const duplicate = tombe.find(t => sameNum(t.numero, numero) && t.id !== editingTombaId);
   if (duplicate) { showToast('⚠ Tomba ' + numero + ' già presente'); return; }
 
   if (isOffline()) { avvisaSalvataggioOffline('Tomba ' + numero); return; }
@@ -3808,7 +3835,7 @@ function renderUSBadges() {
   const nums = val.split(',').map(s => s.trim()).filter(s => s);
   container.innerHTML = '';
   nums.forEach(n => {
-    const found = schede.find(s => String(s.numero) === n);
+    const found = schede.find(s => sameNum(s.numero, n));
     const span = document.createElement('span');
     span.className = 'us-badge-link';
     span.textContent = 'US ' + n;
@@ -3826,7 +3853,7 @@ function renderUSBadges() {
 }
 
 function openUSModal(id) {
-  const s = schede.find(x => x.id === id) || schede.find(x => String(x.numero) === String(id));
+  const s = schede.find(x => x.id === id) || schede.find(x => sameNum(x.numero, id));
   if (!s) { showToast('⚠ Scheda US non trovata'); return; }
 
   document.getElementById('us-modal-title').textContent = `Scheda US ${s.numero}`;
@@ -4089,7 +4116,7 @@ async function importTombeFromExcel(input) {
 
     const nuove = rows.map(r => ({
       id: Date.now().toString(36) + Math.random().toString(36).slice(2),
-      numero:              parseInt(r['numero']) || 0,
+      numero:              String(r['numero'] || '').trim(),
       localita:            String(r['localita']          || '').replace(/\r/g,''),
       anno:                String(r['anno']               || ''),
       area:                String(r['area']               || ''),
@@ -4146,7 +4173,7 @@ async function importTombeFromExcel(input) {
       morf_incisura:       String(r['morf_incisura']      || ''),
       sesso:               String(r['sesso']              || ''),
       stato: 'parziale',
-    })).filter(t => t.numero > 0);
+    })).filter(t => String(t.numero || '').trim() !== '');
 
     if (!nuove.length) { status.textContent = '⚠ Nessuna tomba valida trovata.'; input.value=''; return; }
 
@@ -4171,7 +4198,7 @@ async function importTombeFromExcel(input) {
     // 2. Merge con tombe esistenti
     let nuoveCnt = 0, aggiornateCnt = 0;
     for (const t of nuove) {
-      const idx = tombe.findIndex(x => x.numero === t.numero);
+      const idx = tombe.findIndex(x => sameNum(x.numero, t.numero));
       if (idx >= 0) { tombe[idx] = { ...tombe[idx], ...t, id: tombe[idx].id }; aggiornateCnt++; }
       else { tombe.push(t); nuoveCnt++; }
     }
@@ -4265,7 +4292,7 @@ async function importFromPDF(input) {
   // Salva
   let salvate = 0, aggiornate = 0;
   for (const { tomba } of results) {
-    const existing = tombe.findIndex(t => t.numero === tomba.numero);
+    const existing = tombe.findIndex(t => sameNum(t.numero, tomba.numero));
     if (existing >= 0) { tombe[existing] = { ...tombe[existing], ...tomba, id: tombe[existing].id }; aggiornate++; }
     else { tombe.push(tomba); salvate++; }
     try { await saveTombaToSheets(tomba); } catch(e) { console.error(e); }
@@ -4295,11 +4322,11 @@ function parseTombaPDF(tokens1, p2, filename) {
   t.area         = zone(165, 237, 760, 775);   // Settore 4
   t.us_collegate = zone(237, 300, 760, 775);   // 3208
   const schedaT  = zone(300, 365, 762, 778);   // 297
-  t.numero       = parseInt(schedaT) || 0;
+  t.numero       = String(schedaT || '').trim();
   t.pianta_n     = zone(365, 425, 762, 778);   // gis
 
   // Fallback dal filename
-  if (!t.numero)       { const fm = filename.match(/Tb[_\s]*(\d+)/i); if (fm) t.numero = parseInt(fm[1]); }
+  if (!t.numero)       { const fm = filename.match(/Tb[_\s]*([\d.]+)/i); if (fm) t.numero = fm[1]; }
   if (!t.us_collegate) { const fm = filename.match(/us[_\s]*(\d+)/i); if (fm) t.us_collegate = fm[1]; }
 
   // ── Quote (JS_y: pre~761, post~736) ──────────────────────────
@@ -4450,7 +4477,7 @@ async function importFromExcel(input) {
 
       // Mostra quante schede verranno aggiornate vs aggiunte
       const usNelFile = rows.map(r => String(r['us']).trim());
-      const giàPresenti = usNelFile.filter(u => schede.some(s => String(s.numero) === u)).length;
+      const giàPresenti = usNelFile.filter(u => schede.some(s => sameNum(s.numero, u))).length;
       const nuoveCount  = usNelFile.length - giàPresenti;
 
       const okImport = await showConfirm({
@@ -4509,7 +4536,7 @@ async function importFromExcel(input) {
 
         return {
           id,
-          numero:                    parseInt(r['us']) || 0,
+          numero:                    String(r['us'] || '').trim(),
           anno:                      cleanVal(r['anno']),
           area:                      cleanVal(r['area']),
           saggio:                    cleanVal(r['settore']),
@@ -4559,7 +4586,7 @@ async function importFromExcel(input) {
       // Merge: aggiorna esistenti (stesso numero), aggiunge nuove
       let aggiunte = 0, aggiornate = 0;
       nuove.forEach(n => {
-        const idx = schede.findIndex(s => s.numero === n.numero);
+        const idx = schede.findIndex(s => sameNum(s.numero, n.numero));
         if (idx >= 0) { schede[idx] = { ...schede[idx], ...n, id: schede[idx].id }; aggiornate++; }
         else { schede.push(n); aggiunte++; }
       });
@@ -4593,7 +4620,7 @@ function apriSelezionePDF(tipo) {
 
   if (tipo === 'us') {
     title.textContent = 'Stampa Scheda US';
-    [...schede].sort((a,b) => a.numero - b.numero).forEach(s => {
+    [...schede].sort((a,b) => compareNum(a.numero, b.numero)).forEach(s => {
       const o = document.createElement('option');
       o.value = s.id;
       o.textContent = `US ${s.numero} — ${s.tipo || ''}`;
@@ -4601,7 +4628,7 @@ function apriSelezionePDF(tipo) {
     });
   } else if (tipo === 'tomba') {
     title.textContent = 'Stampa Scheda Tomba';
-    [...tombe].sort((a,b) => a.numero - b.numero).forEach(t => {
+    [...tombe].sort((a,b) => compareNum(a.numero, b.numero)).forEach(t => {
       const o = document.createElement('option');
       o.value = t.id;
       o.textContent = `Tomba ${t.numero} — US ${t.us_collegate || ''}`;
@@ -4748,7 +4775,7 @@ function populatePDFSelect() {
   const selT = document.getElementById('pdfSelectTomba');
   if (selT) {
     selT.innerHTML = '<option value="">— seleziona tomba —</option>';
-    [...tombe].sort((a,b)=>a.numero-b.numero).forEach(t => {
+    [...tombe].sort((a,b)=>compareNum(a.numero, b.numero)).forEach(t => {
       const o = document.createElement('option');
       o.value = t.id;
       o.textContent = `T.${t.numero} — US ${t.us_collegate||''}`;
@@ -4758,7 +4785,7 @@ function populatePDFSelect() {
   const sel = document.getElementById('pdfSelectUS');
   if (!sel) return;
   sel.innerHTML = '<option value="">— seleziona US —</option>' +
-    [...schede].sort((a,b)=>a.numero-b.numero).map(s =>
+    [...schede].sort((a,b)=>compareNum(a.numero, b.numero)).map(s =>
       `<option value="${s.id}">US ${s.numero}${s.area?' – Area '+s.area:''}${s.tipo?' ('+s.tipo+')':''}</option>`
     ).join('');
 }
@@ -4800,8 +4827,8 @@ async function exportPDFTutte() {
   if (anno === null) return; // annullato
   await loadJsPDF();
   const filtered = anno === 'tutti'
-    ? [...schede].sort((a,b) => a.numero - b.numero)
-    : [...schede].filter(s => String(s.anno) === anno).sort((a,b) => a.numero - b.numero);
+    ? [...schede].sort((a,b) => compareNum(a.numero, b.numero))
+    : [...schede].filter(s => String(s.anno) === anno).sort((a,b) => compareNum(a.numero, b.numero));
   if (!filtered.length) { showToast('⚠ Nessuna scheda per l\'anno ' + anno); return; }
   showToast('Generazione PDF…');
   const doc = buildICCDpdf(filtered);
@@ -5770,8 +5797,8 @@ async function exportTombePDFTutte() {
   if (anno === null) return;
   await loadJsPDF();
   const filtered = anno === 'tutti'
-    ? [...tombe].sort((a,b) => a.numero - b.numero)
-    : [...tombe].filter(t => String(t.anno) === anno).sort((a,b) => a.numero - b.numero);
+    ? [...tombe].sort((a,b) => compareNum(a.numero, b.numero))
+    : [...tombe].filter(t => String(t.anno) === anno).sort((a,b) => compareNum(a.numero, b.numero));
   if (!filtered.length) { showToast('⚠ Nessuna tomba per l\'anno ' + anno); return; }
   showToast('Generazione PDF…');
   const doc = buildTombaPDF(filtered);
@@ -5787,7 +5814,7 @@ async function exportElencoUS() {
   await loadJsPDF();
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
-  const sorted = [...schede].sort((a, b) => Math.abs(a.numero) - Math.abs(b.numero));
+  const sorted = [...schede].sort((a, b) => compareNum(a.numero, b.numero));
 
   const pageW = 297, pageH = 210;
   const marginL = 10, marginT = 18, marginR = 10;
@@ -5888,7 +5915,7 @@ async function exportElencoTombe() {
   await loadJsPDF();
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
-  const sorted = [...tombe].sort((a, b) => Math.abs(a.numero) - Math.abs(b.numero));
+  const sorted = [...tombe].sort((a, b) => compareNum(a.numero, b.numero));
 
   const pageW = 210, pageH = 297;
   const marginL = 10, marginT = 18, marginR = 10;
@@ -6195,7 +6222,7 @@ async function caricaLayer(url, tipo) {
         onEachFeature: (feat, lyr) => {
           const layerName = feat.properties?.layer || '';
           const usNum = estraiNumeroUS(layerName);
-          const scheda = usNum ? schede.find(s => String(s.numero) === usNum) : null;
+          const scheda = usNum ? schede.find(s => sameNum(s.numero, usNum)) : null;
           const tombeUS = usNum ? getTombePerUS(usNum) : [];
 
           let popup = `<div style="font-family:'Space Mono',monospace;font-size:0.72rem;min-width:160px">`;
@@ -8231,9 +8258,9 @@ function showToast(msg) {
   <script>
     if ('serviceWorker' in navigator && !location.hostname.includes('claudeusercontent.com')) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./service-worker.js?v=95')
+        navigator.serviceWorker.register('./service-worker.js?v=96')
           .then(reg => {
-            console.log('SW registrato v95:', reg.scope);
+            console.log('SW registrato v96:', reg.scope);
             // Forza aggiornamento immediato se c'è una nuova versione
             reg.update();
           })

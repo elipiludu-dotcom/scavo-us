@@ -1,8 +1,8 @@
 // ─────────────────────────────────────────────────────────────────
 // SMP Scavo — Service Worker
-// v95 — operatore all'avvio + tracciabilità tombe + operatore in elenco, fix Matrix refresh, matrix tappabile su mobile, filtri lista persistenti
+// v96 — tipologia tomba sdoppiata (numero deposizioni + sepoltura), numerazione US/Tombe con suffissi "bis" (183a, 289.1) gestita come stringa in confronti/reciproci/Matrix/ordinamenti
 // ─────────────────────────────────────────────────────────────────
-const CACHE_NAME = 'smp-scavo-v95';
+const CACHE_NAME = 'smp-scavo-v96';
 
 // Shell dell'app da rendere disponibile offline.
 const APP_SHELL = [
