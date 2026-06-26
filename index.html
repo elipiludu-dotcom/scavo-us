@@ -5,7 +5,7 @@
   <!-- PWA -->
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#C9963A">
-  <meta name="app-version" content="97">
+  <meta name="app-version" content="99">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="SMP Scavo">
@@ -1799,6 +1799,7 @@
             <button class="btn btn-success" onclick="saveDiario()">Salva</button>
           </div>
         </div>
+        <div id="lastModInfoDiario" style="display:none;padding:4px 16px 0;font-size:0.72rem;color:var(--muted);font-family:'Space Mono',monospace"></div>
 
         <div class="form-section">
           <div class="section-title">Intestazione</div>
@@ -2097,6 +2098,8 @@ const HEADERS = ['id','numero','anno','area','saggio','tipo','pos_neg','data','d
   '_last_modified','_modified_by','foto1_drive_id','foto2_drive_id'];
 
 let accessToken = null;
+let _tokenExpiry  = 0;        // timestamp ms di scadenza del token corrente
+let _tokenRefreshTimer = null; // setTimeout handle per il refresh proattivo
 let schede = [];
 let tombe = [];
 let editingId = null;
@@ -2126,6 +2129,326 @@ function compareNum(a, b) {
   return ka[1] < kb[1] ? -1 : ka[1] > kb[1] ? 1 : 0;
 }
 
+// ─── A · REFRESH SILENZIOSO DEL TOKEN ────────────────────────────
+// Il token Google scade dopo ~1 ora. Pianifichiamo un refresh automatico
+// 5 minuti prima della scadenza, così l'operatore non viene mai interrotto.
+// Se il refresh silenzioso fallisce (sessione Google scaduta), mostriamo
+// un avviso non bloccante invece di perdere i dati.
+
+function _storeToken(resp) {
+  accessToken = resp.access_token;
+  const expiresIn = resp.expires_in || 3600; // secondi
+  _tokenExpiry = Date.now() + expiresIn * 1000;
+  _scheduleTokenRefresh(expiresIn);
+}
+
+function _scheduleTokenRefresh(expiresInSec) {
+  if (_tokenRefreshTimer) clearTimeout(_tokenRefreshTimer);
+  // Refresh 5 minuti prima della scadenza (min 30s per non ciclare su token corti)
+  const delay = Math.max((expiresInSec - 300) * 1000, 30000);
+  _tokenRefreshTimer = setTimeout(_silentRefresh, delay);
+}
+
+function _silentRefresh() {
+  if (!window._tokenClient) return;
+  console.log('[Auth] Refresh silenzioso del token…');
+  // Wrap callback per rilevare successo/fallimento
+  const orig = window._tokenClient.callback;
+  window._tokenClient.callback = (resp) => {
+    window._tokenClient.callback = orig; // ripristina
+    if (resp.error || !resp.access_token) {
+      // Refresh fallito: avvisa ma non blocca
+      console.warn('[Auth] Refresh fallito:', resp.error);
+      _mostraAvvisoTokenScaduto();
+    } else {
+      _storeToken(resp);
+      console.log('[Auth] Token rinnovato automaticamente.');
+    }
+  };
+  try {
+    window._tokenClient.requestAccessToken({ prompt: '' });
+  } catch(e) {
+    window._tokenClient.callback = orig;
+    console.warn('[Auth] Refresh silenzioso: eccezione', e);
+    _mostraAvvisoTokenScaduto();
+  }
+}
+
+// Restituisce una Promise che si risolve con un access_token valido.
+// Se il token è già valido la risolve subito; altrimenti tenta un refresh.
+function _ensureToken() {
+  if (accessToken && Date.now() < _tokenExpiry - 10000) return Promise.resolve(accessToken);
+  return new Promise((resolve, reject) => {
+    if (!window._tokenClient) { reject(new Error('tokenClient non disponibile')); return; }
+    const orig = window._tokenClient.callback;
+    window._tokenClient.callback = (resp) => {
+      window._tokenClient.callback = orig;
+      if (resp.error || !resp.access_token) reject(new Error('Token refresh: ' + (resp.error || 'no token')));
+      else { _storeToken(resp); resolve(resp.access_token); }
+    };
+    try { window._tokenClient.requestAccessToken({ prompt: '' }); }
+    catch(e) { window._tokenClient.callback = orig; reject(e); }
+  });
+}
+
+// Avviso toast non bloccante quando il refresh silenzioso fallisce
+function _mostraAvvisoTokenScaduto() {
+  const banner = document.createElement('div');
+  banner.style.cssText = [
+    'position:fixed;bottom:80px;left:50%;transform:translateX(-50%)',
+    'background:#5a3a1a;border:1px solid var(--earth);color:var(--earth)',
+    'padding:10px 18px;border-radius:6px;font-size:0.78rem;z-index:9999',
+    'font-family:"Space Mono",monospace;text-align:center;max-width:88vw',
+    'box-shadow:0 4px 16px rgba(0,0,0,0.4)'
+  ].join(';');
+  banner.textContent = '⏱ Sessione in scadenza — al prossimo salvataggio potrebbe servire il login.';
+  document.body.appendChild(banner);
+  setTimeout(() => banner.remove(), 7000);
+}
+
+// ─── B · DRAFT LOCALE (bozza automatica del form US) ─────────────
+// Ogni 30 secondi, se il form US è aperto e contiene dati, salva una bozza
+// in localStorage. Quando si riapre la stessa scheda (o si inizia una nuova)
+// viene offerto il ripristino se la bozza è più recente dell'ultimo salvataggio.
+// La bozza viene cancellata automaticamente al salvataggio riuscito.
+// Non ha nessun impatto sul foglio Google: è solo locale, sul dispositivo.
+
+const DRAFT_KEY_NEW = 'smp_draft_us_new';
+function _draftKeyEdit(id) { return 'smp_draft_us_' + id; }
+
+function _captureUSDraft() {
+  // Serializza lo stato attuale del form US in un oggetto plain
+  const get = id => { const el = document.getElementById('f_' + id); return el ? el.value : ''; };
+  const radio = name => { const el = document.querySelector(`input[name="${name}"]:checked`); return el ? el.value : ''; };
+  const chk = id => { const el = document.getElementById('f_' + id); return el ? el.checked : false; };
+  return {
+    _draftTs: new Date().toISOString(),
+    _editingId: editingId || null,
+    numero: get('numero'), anno: get('anno'), area: get('area'), saggio: get('saggio'),
+    tipo: get('tipo'), data: get('data'), pos_neg: radio('f_pos_neg'),
+    definizione: get('definizione'), formazione: radio('f_formazione'),
+    criteri: get('criteri'), responsabile: get('responsabile'), stato: get('stato'),
+    colore: get('colore'), consistenza: get('consistenza'), composizione: get('composizione'),
+    umidita: get('umidita'), inclusi_geo: get('inclusi_geo'), inclusi_org: get('inclusi_org'),
+    inclusi_art: get('inclusi_art'), quota_max: get('quota_max'), quota_min: get('quota_min'),
+    spessore: get('spessore'), descrizione: get('descrizione'), osservazioni: get('osservazioni'),
+    disegni: get('disegni'), note_doc: get('note_doc'),
+    foto_digitali: chk('foto_digitali'), foto_3d: chk('foto_3d'), foto_drone: chk('foto_drone'),
+    interpretazione: get('interpretazione'), datazione: get('datazione'), fase: get('fase'),
+    affidabilita: get('affidabilita'), note_interp: get('note_interp'),
+    modo_formazione: get('modo_formazione'), stato_conservazione: radio('f_stato_conservazione'),
+    stato_conservazione_note: get('stato_conservazione_note'),
+    responsabile_scientifico: get('responsabile_scientifico'),
+    responsabile_rielaborazione: get('responsabile_rielaborazione'),
+    data_rielaborazione: get('data_rielaborazione'),
+    rapporti: getRapporti(),
+    reperti: getReperti(),
+  };
+}
+
+function _restoreUSDraft(d) {
+  // Ripopola il form con i dati della bozza (stessa logica di openEdit)
+  const set = (id, val) => { const el = document.getElementById('f_' + id); if (el && val !== undefined) el.value = val; };
+  const setRadio = (name, val) => document.querySelectorAll(`input[name="${name}"]`).forEach(r => { r.checked = r.value === val; });
+  const setChk = (id, val) => { const el = document.getElementById('f_' + id); if (el) el.checked = !!val; };
+  ['numero','anno','area','saggio','tipo','data','definizione','criteri','responsabile','stato',
+   'colore','consistenza','composizione','umidita','inclusi_geo','inclusi_org','inclusi_art',
+   'quota_max','quota_min','spessore','descrizione','osservazioni','disegni','note_doc',
+   'interpretazione','datazione','fase','affidabilita','note_interp','modo_formazione',
+   'stato_conservazione_note','responsabile_scientifico','responsabile_rielaborazione','data_rielaborazione'
+  ].forEach(k => set(k, d[k]));
+  setRadio('f_pos_neg', d.pos_neg);
+  setRadio('f_formazione', d.formazione);
+  setRadio('f_stato_conservazione', d.stato_conservazione);
+  setChk('foto_digitali', d.foto_digitali);
+  setChk('foto_3d', d.foto_3d);
+  setChk('foto_drone', d.foto_drone);
+  // Rapporti e reperti
+  document.getElementById('rapportiList').innerHTML = ''; rapportiCount = 0;
+  (d.rapporti || []).forEach(r => addRapporto(r));
+  document.getElementById('repertiList').innerHTML = ''; repertiCount = 0;
+  (d.reperti || []).forEach(r => addReperto(r.tipo || 'reperto', r));
+  updateStatoStyle();
+}
+
+function _saveDraftToStorage(key, data) {
+  try { localStorage.setItem(key, JSON.stringify(data)); } catch(e) { /* quota piena */ }
+}
+
+function _loadDraftFromStorage(key) {
+  try { const v = localStorage.getItem(key); return v ? JSON.parse(v) : null; } catch { return null; }
+}
+
+function _clearDraft(key) {
+  try { localStorage.removeItem(key); } catch(e) {}
+}
+
+// Autosave ogni 30 s — attivo solo se il form US è visibile e ha almeno il numero
+let _draftAutoSaveTimer = null;
+function _startDraftAutoSave() {
+  _stopDraftAutoSave();
+  _draftAutoSaveTimer = setInterval(() => {
+    // Form US
+    const viewUS = document.getElementById('view-new');
+    if (viewUS && viewUS.classList.contains('active')) {
+      const numEl = document.getElementById('f_numero');
+      if (numEl && numEl.value.trim()) {
+        const key = editingId ? _draftKeyEdit(editingId) : DRAFT_KEY_NEW;
+        _saveDraftToStorage(key, _captureUSDraft());
+      }
+    }
+    // Form Tombe
+    const viewT = document.getElementById('view-tomba-form');
+    if (viewT && viewT.classList.contains('active')) {
+      const numT = document.getElementById('t_numero');
+      if (numT && numT.value.trim()) {
+        const key = editingTombaId ? _draftKeyTomba(editingTombaId) : DRAFT_KEY_TOMBA_NEW;
+        _saveDraftToStorage(key, _captureTombaDraft());
+      }
+    }
+    // Form Diari
+    const viewD = document.getElementById('view-diario-form');
+    if (viewD && viewD.classList.contains('active')) {
+      const dataD = document.getElementById('d_data');
+      if (dataD && dataD.value.trim()) {
+        const key = editingDiarioId ? _draftKeyDiario(editingDiarioId) : DRAFT_KEY_DIARIO_NEW;
+        _saveDraftToStorage(key, _captureDiarioDraft());
+      }
+    }
+  }, 30000);
+}
+function _stopDraftAutoSave() {
+  if (_draftAutoSaveTimer) { clearInterval(_draftAutoSaveTimer); _draftAutoSaveTimer = null; }
+}
+
+// Banner di ripristino bozza (non bloccante)
+// bannerId: ID univoco del banner per quel form (evita duplicati)
+// anchorId: elemento dopo il quale inserire il banner
+function _offerDraftRestore(draft, onAccept, onDiscard, bannerId, anchorId) {
+  bannerId  = bannerId  || 'draftRestoreBanner';
+  anchorId  = anchorId  || 'usNavBar';
+  const existing = document.getElementById(bannerId);
+  if (existing) existing.remove();
+  const dt = new Date(draft._draftTs);
+  const ora = isNaN(dt) ? '' : dt.toLocaleTimeString('it-IT', {hour:'2-digit', minute:'2-digit'});
+  const banner = document.createElement('div');
+  banner.id = bannerId;
+  banner.style.cssText = [
+    'background:rgba(90,58,26,0.18);border:1px solid var(--earth)',
+    'padding:8px 14px;display:flex;align-items:center;justify-content:space-between',
+    'gap:10px;font-size:0.78rem;color:var(--earth)',
+    'font-family:"Space Mono",monospace;flex-wrap:wrap'
+  ].join(';');
+  banner.innerHTML = `
+    <span>📋 Bozza salvata alle ${ora} — ripristino?</span>
+    <span style="display:flex;gap:8px">
+      <button class="btn btn-secondary" style="font-size:0.7rem;padding:5px 10px;min-height:unset"
+        onclick="document.getElementById('${bannerId}').remove();(${onDiscard.toString()})()">Scarta</button>
+      <button class="btn btn-primary" style="font-size:0.7rem;padding:5px 10px;min-height:unset"
+        onclick="document.getElementById('${bannerId}').remove();(${onAccept.toString()})()">Ripristina</button>
+    </span>`;
+  const anchor = document.getElementById(anchorId);
+  if (anchor && anchor.parentNode) anchor.parentNode.insertBefore(banner, anchor.nextSibling);
+  else { const fv = document.getElementById('view-new') || document.body; fv.prepend(banner); }
+}
+
+// ─── B2 · DRAFT LOCALE — TOMBE ───────────────────────────────────
+const DRAFT_KEY_TOMBA_NEW = 'smp_draft_tomba_new';
+function _draftKeyTomba(id) { return 'smp_draft_tomba_' + id; }
+
+function _captureTombaDraft() {
+  const get = id => { const el = document.getElementById(id); return el ? el.value : ''; };
+  const radio = name => { const el = document.querySelector(`input[name="${name}"]:checked`); return el ? el.value : ''; };
+  const chk = id => { const el = document.getElementById(id); return el ? el.checked : false; };
+  return {
+    _draftTs: new Date().toISOString(),
+    _editingTombaId: editingTombaId || null,
+    numero: get('t_numero'), anno: get('t_anno'), area: get('t_area'),
+    localita: get('t_localita'), pianta_n: get('t_pianta_n'),
+    us_taglio: get('t_us_taglio'), us_riempimento: get('t_us_riempimento'), us_scheletro: get('t_us_scheletro'),
+    quota_pre_min: get('t_quota_pre_min'), quota_pre_max: get('t_quota_pre_max'),
+    quota_post_min: get('t_quota_post_min'), quota_post_max: get('t_quota_post_max'),
+    orientamento: get('t_orientamento'), condizioni: get('t_condizioni'),
+    altre_sepolture: get('t_altre_sepolture'), descrizione: get('t_descrizione'),
+    reperti_connessione: get('t_reperti_connessione'), elementi_copertura: get('t_elementi_copertura'),
+    elementi_datanti: get('t_elementi_datanti'), datazione: get('t_datazione'),
+    osservazioni: get('t_osservazioni'), bibliografia: get('t_bibliografia'),
+    compilatore: get('t_compilatore'),
+    giacitura: radio('t_giacitura'), tipologia: radio('t_tipologia'),
+    tipologia_num: radio('t_tipologia_num'), posizione: radio('t_posizione'), sesso: radio('t_sesso'),
+    tipologia_altro: get('t_tipologia_altro'),
+    cranio: chk('t_cranio'), vertebre: chk('t_vertebre'), torace: chk('t_torace'),
+    bacino: chk('t_bacino'), braccia: chk('t_braccia'), gambe: chk('t_gambe'),
+    mani: chk('t_mani'), piedi: chk('t_piedi'),
+    affidabilita: get('t_affidabilita'), morf_arcate: get('t_morf_arcate'),
+    morf_margini: get('t_morf_margini'), morf_frontale: get('t_morf_frontale'),
+    morf_mandibola: get('t_morf_mandibola'), morf_mento: get('t_morf_mento'),
+    morf_protub_occ: get('t_morf_protub_occ'), morf_orbite: get('t_morf_orbite'),
+    morf_angolo_pubico: get('t_morf_angolo_pubico'), morf_ali_iliache: get('t_morf_ali_iliache'),
+    morf_incisura: get('t_morf_incisura'),
+    cranio_lungh_max: get('t_cranio_lungh_max'), cranio_largh_max: get('t_cranio_largh_max'),
+    cranio_alt_faccia: get('t_cranio_alt_faccia'), cranio_largh_faccia: get('t_cranio_largh_faccia'),
+    omero_lungh: get('t_omero_lungh'), femore_lungh: get('t_femore_lungh'),
+    omero_omero_dist: get('t_omero_omero_dist'),
+    bacino_lungh_max: get('t_bacino_lungh_max'), bacino_largh_max: get('t_bacino_largh_max'),
+    note_antropologiche: get('t_note_antropologiche'),
+    stato: get('t_stato'), data_controllo: get('t_data_controllo'),
+  };
+}
+
+function _restoreTombaDraft(d) {
+  const set = (id, val) => { const el = document.getElementById(id); if (el && val !== undefined) el.value = val; };
+  const setR = (name, val) => document.querySelectorAll(`input[name="${name}"]`).forEach(r => { r.checked = r.value === val; });
+  const setC = (id, val) => { const el = document.getElementById(id); if (el) el.checked = !!val; };
+  const textFields = ['t_numero','t_anno','t_area','t_localita','t_pianta_n',
+    't_us_taglio','t_us_riempimento','t_us_scheletro',
+    't_quota_pre_min','t_quota_pre_max','t_quota_post_min','t_quota_post_max',
+    't_orientamento','t_condizioni','t_altre_sepolture','t_descrizione',
+    't_reperti_connessione','t_elementi_copertura','t_elementi_datanti',
+    't_datazione','t_osservazioni','t_bibliografia','t_compilatore',
+    't_tipologia_altro','t_affidabilita','t_morf_arcate','t_morf_margini',
+    't_morf_frontale','t_morf_mandibola','t_morf_mento','t_morf_protub_occ',
+    't_morf_orbite','t_morf_angolo_pubico','t_morf_ali_iliache','t_morf_incisura',
+    't_cranio_lungh_max','t_cranio_largh_max','t_cranio_alt_faccia','t_cranio_largh_faccia',
+    't_omero_lungh','t_femore_lungh','t_omero_omero_dist',
+    't_bacino_lungh_max','t_bacino_largh_max','t_note_antropologiche',
+    't_stato','t_data_controllo'];
+  textFields.forEach(id => {
+    const k = id.replace('t_','');
+    set(id, d[k] !== undefined ? d[k] : '');
+  });
+  setR('t_giacitura', d.giacitura); setR('t_tipologia', d.tipologia);
+  setR('t_tipologia_num', d.tipologia_num); setR('t_posizione', d.posizione); setR('t_sesso', d.sesso);
+  const wrap = document.getElementById('tipologia_altro_wrap');
+  if (wrap) wrap.style.display = d.tipologia === 'altro' ? 'block' : 'none';
+  ['cranio','vertebre','torace','bacino','braccia','gambe','mani','piedi']
+    .forEach(k => setC('t_'+k, d[k]));
+  renderUSBadges();
+}
+
+// ─── B3 · DRAFT LOCALE — DIARI ───────────────────────────────────
+const DRAFT_KEY_DIARIO_NEW = 'smp_draft_diario_new';
+function _draftKeyDiario(id) { return 'smp_draft_diario_' + id; }
+
+function _captureDiarioDraft() {
+  const get = id => { const el = document.getElementById(id); return el ? el.value : ''; };
+  return {
+    _draftTs: new Date().toISOString(),
+    _editingDiarioId: editingDiarioId || null,
+    settore: get('d_settore'), anno: get('d_anno'), data: get('d_data'),
+    compilatori: get('d_compilatori'), us_esame: get('d_us_esame'),
+    foto: get('d_foto'), osservazioni: get('d_osservazioni'),
+    schizzo1: get('d_schizzo1'), schizzo2: get('d_schizzo2'),
+    note_prossima: get('d_note_prossima'),
+  };
+}
+
+function _restoreDiarioDraft(d) {
+  const set = (id, val) => { const el = document.getElementById(id); if (el && val !== undefined) el.value = val; };
+  ['settore','anno','data','compilatori','us_esame','foto','osservazioni','schizzo1','schizzo2','note_prossima']
+    .forEach(k => set('d_'+k, d[k]));
+}
+
 // ─── GOOGLE IDENTITY ─────────────────────────────────────────────
 window.onload = async () => {
   initSunMode();
@@ -2144,7 +2467,7 @@ function tryTokenClient() {
       if (resp.error || !resp.access_token) {
         showLogin(); return;
       }
-      accessToken = resp.access_token;
+      _storeToken(resp);
       onAuthenticated();
     },
     error_callback: () => { showLogin(); },
@@ -2203,7 +2526,7 @@ function checkRedirectToken() {
   const params = new URLSearchParams(hash.replace('#', '?'));
   const token = params.get('access_token');
   if (token) {
-    accessToken = token;
+    _storeToken({ access_token: token, expires_in: 3600 });
     // Pulisci l'URL
     history.replaceState(null, '', window.location.pathname);
     onAuthenticated();
@@ -2227,6 +2550,7 @@ function onAuthenticated() {
   loadFromSheets(false);
   loadTombe();
   loadDiari();
+  _startDraftAutoSave(); // avvia autosave bozze (B)
 }
 
 function signOut() {
@@ -2239,17 +2563,19 @@ function signOut() {
 
 // ─── SHEETS API ──────────────────────────────────────────────────
 async function sheetsGet(range) {
+  const tok = await _ensureToken();
   const url = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(range)}`;
-  const res = await fetch(url, { headers: { Authorization: 'Bearer ' + accessToken } });
+  const res = await fetch(url, { headers: { Authorization: 'Bearer ' + tok } });
   if (!res.ok) throw new Error('Sheets GET error ' + res.status);
   return res.json();
 }
 
 async function sheetsUpdate(range, values) {
+  const tok = await _ensureToken();
   const url = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(range)}?valueInputOption=RAW`;
   const res = await fetch(url, {
     method: 'PUT',
-    headers: { Authorization: 'Bearer ' + accessToken, 'Content-Type': 'application/json' },
+    headers: { Authorization: 'Bearer ' + tok, 'Content-Type': 'application/json' },
     body: JSON.stringify({ values })
   });
   if (!res.ok) throw new Error('Sheets PUT error ' + res.status);
@@ -2257,10 +2583,11 @@ async function sheetsUpdate(range, values) {
 }
 
 async function sheetsAppend(values) {
+  const tok = await _ensureToken();
   const url = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(SHEET_NAME)}:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`;
   const res = await fetch(url, {
     method: 'POST',
-    headers: { Authorization: 'Bearer ' + accessToken, 'Content-Type': 'application/json' },
+    headers: { Authorization: 'Bearer ' + tok, 'Content-Type': 'application/json' },
     body: JSON.stringify({ values })
   });
   if (!res.ok) throw new Error('Sheets APPEND error ' + res.status);
@@ -2685,6 +3012,18 @@ function resetForm() {
   editingId = null;
   _loadedLastModified = null;
   updateStatoStyle();
+  // Offri ripristino bozza per scheda nuova (se esiste ed è recente)
+  const _draftNew = _loadDraftFromStorage(DRAFT_KEY_NEW);
+  const _draftBanner = document.getElementById('draftRestoreBanner');
+  if (_draftBanner) _draftBanner.remove();
+  if (_draftNew && _draftNew._draftTs) {
+    setTimeout(() => _offerDraftRestore(
+      _draftNew,
+      () => { _restoreUSDraft(_draftNew); },
+      () => { _clearDraft(DRAFT_KEY_NEW); },
+      'draftRestoreBanner', 'usNavBar'
+    ), 100);
+  }
 }
 
 // ─── NAVIGAZIONE US PRECEDENTE / SUCCESSIVA (v97) ────────────────
@@ -2790,6 +3129,24 @@ function openEdit(id) {
   document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
   document.getElementById('view-new').classList.add('active');
   updateStatoStyle();
+  // Offri ripristino bozza se esiste ed è più recente dell'ultimo salvataggio
+  const _draftBannerOld = document.getElementById('draftRestoreBanner');
+  if (_draftBannerOld) _draftBannerOld.remove();
+  const _draftEdit = _loadDraftFromStorage(_draftKeyEdit(id));
+  if (_draftEdit && _draftEdit._draftTs) {
+    const draftTime = new Date(_draftEdit._draftTs).getTime();
+    const savedTime = s._last_modified ? new Date(s._last_modified).getTime() : 0;
+    if (draftTime > savedTime) {
+      setTimeout(() => _offerDraftRestore(
+        _draftEdit,
+        () => { _restoreUSDraft(_draftEdit); },
+        () => { _clearDraft(_draftKeyEdit(id)); },
+        'draftRestoreBanner', 'usNavBar'
+      ), 100);
+    } else {
+      _clearDraft(_draftKeyEdit(id)); // bozza obsoleta: pulisci
+    }
+  }
 }
 
 // ─── RAPPORTI ─────────────────────────────────────────────────────
@@ -3495,6 +3852,9 @@ async function saveScheda() {
   try {
     await saveSchedaToSheets(scheda, isNew);
     _loadedLastModified = now; // aggiorna il lock locale dopo salvataggio ok
+    // Cancella la bozza locale: il dato è ora sul cloud
+    _clearDraft(isNew ? DRAFT_KEY_NEW : _draftKeyEdit(scheda.id));
+    const _banner = document.getElementById('draftRestoreBanner'); if (_banner) _banner.remove();
     setSyncStatus('ok', 'Sincronizzato');
     showToast('☁ US ' + numero + ' salvata sul cloud');
     editingId = null;
@@ -3608,10 +3968,11 @@ async function sheetsUpdateT(range, values) {
   return res.json();
 }
 async function sheetsAppendT(values) {
+  const tok = await _ensureToken();
   const url = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(SHEET_TOMBE)}:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`;
   const res = await fetch(url, {
     method: 'POST',
-    headers: { Authorization: 'Bearer ' + accessToken, 'Content-Type': 'application/json' },
+    headers: { Authorization: 'Bearer ' + tok, 'Content-Type': 'application/json' },
     body: JSON.stringify({ values })
   });
   if (!res.ok) throw new Error('Sheets APPEND error ' + res.status);
@@ -3747,6 +4108,8 @@ function resetTombaForm() {
     .forEach(id => { const el = document.getElementById(id); if(el) el.value = id === 't_stato' ? 'parziale' : ''; });
   const dc = document.getElementById('t_data_controllo'); if(dc) dc.value = '';
   const _lmt2 = document.getElementById('lastModInfoTomba'); if(_lmt2) _lmt2.style.display = 'none';
+  // Rimuovi eventuale banner bozza precedente
+  const _ob = document.getElementById('draftRestoreBannerTomba'); if (_ob) _ob.remove();
 }
 
 function loadTombaForm(t) {
@@ -3874,6 +4237,16 @@ function openNewTomba() {
   const _bmt = document.getElementById('btnMappaTomba'); if(_bmt) _bmt.style.display = 'none';
   window._editTombaOrigin = 'view-tombe';
   showView('tomba-form');
+  // Offri ripristino bozza per nuova tomba
+  const _draftTN = _loadDraftFromStorage(DRAFT_KEY_TOMBA_NEW);
+  if (_draftTN && _draftTN._draftTs) {
+    setTimeout(() => _offerDraftRestore(
+      _draftTN,
+      () => { _restoreTombaDraft(_draftTN); },
+      () => { _clearDraft(DRAFT_KEY_TOMBA_NEW); },
+      'draftRestoreBannerTomba', 'lastModInfoTomba'
+    ), 100);
+  }
 }
 
 function openEditTomba(id) {
@@ -3889,6 +4262,20 @@ function openEditTomba(id) {
   document.getElementById('btnMappaTomba').style.display = 'inline-block';
   window._editTombaOrigin = document.querySelector('.view.active')?.id || 'view-tombe';
   showView('tomba-form');
+  // Offri ripristino bozza se esiste ed è più recente dell'ultimo salvataggio
+  const _draftT = _loadDraftFromStorage(_draftKeyTomba(id));
+  if (_draftT && _draftT._draftTs) {
+    const draftTime = new Date(_draftT._draftTs).getTime();
+    const savedTime = t._last_modified ? new Date(t._last_modified).getTime() : 0;
+    if (draftTime > savedTime) {
+      setTimeout(() => _offerDraftRestore(
+        _draftT,
+        () => { _restoreTombaDraft(_draftT); },
+        () => { _clearDraft(_draftKeyTomba(id)); },
+        'draftRestoreBannerTomba', 'lastModInfoTomba'
+      ), 100);
+    } else { _clearDraft(_draftKeyTomba(id)); }
+  }
 }
 
 async function saveTomba() {
@@ -3909,6 +4296,8 @@ async function saveTomba() {
   const _sbloccaSalvaT = _bloccaSalva('button[onclick="saveTomba()"]');
   try {
     await saveTombaToSheets(tomba);
+    _clearDraft(editingTombaId ? _draftKeyTomba(editingTombaId) : DRAFT_KEY_TOMBA_NEW);
+    const _bT = document.getElementById('draftRestoreBannerTomba'); if (_bT) _bT.remove();
     setSyncStatus('ok', 'Sincronizzato');
     showToast('☁ Tomba ' + numero + ' salvata');
     editingTombaId = null;
@@ -6849,6 +7238,16 @@ function nuovaDiarioScheda() {
   document.getElementById('btnDeleteDiario').style.display = 'none';
   document.getElementById('btnExportDiarioPDF').style.display = 'none';
   showView('diario-form');
+  // Offri ripristino bozza per nuovo diario
+  const _draftDN = _loadDraftFromStorage(DRAFT_KEY_DIARIO_NEW);
+  if (_draftDN && _draftDN._draftTs) {
+    setTimeout(() => _offerDraftRestore(
+      _draftDN,
+      () => { _restoreDiarioDraft(_draftDN); },
+      () => { _clearDraft(DRAFT_KEY_DIARIO_NEW); },
+      'draftRestoreBannerDiario', 'lastModInfoDiario'
+    ), 100);
+  }
 }
 
 async function openEditDiario(id) {
@@ -6870,7 +7269,20 @@ async function openEditDiario(id) {
   document.getElementById('btnDeleteDiario').style.display = 'inline-block';
   document.getElementById('btnExportDiarioPDF').style.display = 'inline-block';
   showView('diario-form');
-
+  // Offri ripristino bozza se più recente dell'ultimo salvataggio
+  const _draftD = _loadDraftFromStorage(_draftKeyDiario(id));
+  if (_draftD && _draftD._draftTs) {
+    const draftTime = new Date(_draftD._draftTs).getTime();
+    const savedTime = d._last_modified ? new Date(d._last_modified).getTime() : 0;
+    if (draftTime > savedTime) {
+      setTimeout(() => _offerDraftRestore(
+        _draftD,
+        () => { _restoreDiarioDraft(_draftD); },
+        () => { _clearDraft(_draftKeyDiario(id)); },
+        'draftRestoreBannerDiario', 'lastModInfoDiario'
+      ), 100);
+    } else { _clearDraft(_draftKeyDiario(id)); }
+  }
   // Recupera foto da Drive e mostra anteprima
   if (d.foto1_drive_id) caricaAnteprimaFotoDrive(d.foto1_drive_id, 'foto1-preview', 'd_foto1_b64');
   if (d.foto2_drive_id) caricaAnteprimaFotoDrive(d.foto2_drive_id, 'foto2-preview', 'd_foto2_b64');
@@ -6915,6 +7327,7 @@ function resetDiarioForm() {
   ['d_settore','d_anno','d_data','d_compilatori','d_us_esame','d_foto','d_osservazioni','d_schizzo1','d_schizzo2','d_note_prossima','d_foto1_b64','d_foto1_name','d_foto2_b64','d_foto2_name']
     .forEach(id => { const el = document.getElementById(id); if(el) el.value = ''; });
   ['foto1-preview','foto2-preview'].forEach(id => { const el = document.getElementById(id); if(el) el.innerHTML = ''; });
+  const _ob = document.getElementById('draftRestoreBannerDiario'); if (_ob) _ob.remove();
 }
 
 function getDiarioFromForm() {
@@ -6959,6 +7372,7 @@ async function saveDiario() {
 
     setSyncStatus('syncing', 'Salvataggio…');
     await ensureSheetExists(SHEET_DIARIO, HEADERS_DIARIO);
+    const _tok = await _ensureToken();
     if (editingDiarioId) {
       const all = await sheetsGet(`${SHEET_DIARIO}!A:A`);
       const rows = (all.values || []);
@@ -6967,7 +7381,7 @@ async function saveDiario() {
         const updateUrl = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(SHEET_DIARIO + '!A' + (rowIdx+1))}?valueInputOption=RAW`;
         const updateRes = await fetch(updateUrl, {
           method: 'PUT',
-          headers: { Authorization: 'Bearer ' + accessToken, 'Content-Type': 'application/json' },
+          headers: { Authorization: 'Bearer ' + _tok, 'Content-Type': 'application/json' },
           body: JSON.stringify({ values: [HEADERS_DIARIO.map(h => String(d[h]||''))] })
         });
         if (!updateRes.ok) throw new Error('Update error ' + updateRes.status);
@@ -6977,12 +7391,14 @@ async function saveDiario() {
       const appendUrl = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(SHEET_DIARIO)}:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`;
       const appendRes = await fetch(appendUrl, {
         method: 'POST',
-        headers: { Authorization: 'Bearer ' + accessToken, 'Content-Type': 'application/json' },
+        headers: { Authorization: 'Bearer ' + _tok, 'Content-Type': 'application/json' },
         body: JSON.stringify({ values: [HEADERS_DIARIO.map(h => String(d[h]||''))] })
       });
       if (!appendRes.ok) throw new Error('Append error ' + appendRes.status);
       diari.push(d);
     }
+    _clearDraft(editingDiarioId ? _draftKeyDiario(editingDiarioId) : DRAFT_KEY_DIARIO_NEW);
+    const _bD = document.getElementById('draftRestoreBannerDiario'); if (_bD) _bD.remove();
     setSyncStatus('ok', 'Sincronizzato');
     showView('diario');
     renderDiari();
@@ -8390,9 +8806,9 @@ function showToast(msg) {
   <script>
     if ('serviceWorker' in navigator && !location.hostname.includes('claudeusercontent.com')) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./service-worker.js?v=97')
+        navigator.serviceWorker.register('./service-worker.js?v=99')
           .then(reg => {
-            console.log('SW registrato v97:', reg.scope);
+            console.log('SW registrato v99:', reg.scope);
             // Forza aggiornamento immediato se c'è una nuova versione
             reg.update();
           })

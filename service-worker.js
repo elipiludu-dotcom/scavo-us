@@ -1,8 +1,8 @@
 // ─────────────────────────────────────────────────────────────────
 // SMP Scavo — Service Worker
-// v97 — us_scheletro nel form tombe + badge giallo in elenco; "Elisa Piludu" predefinito e bulk nei campi responsabili US; tasti US precedente/successiva con avviso modifiche non salvate
+// v99 — draft locale esteso a Tombe e Diari; fix fetch diretti Diario con _ensureToken
 // ─────────────────────────────────────────────────────────────────
-const CACHE_NAME = 'smp-scavo-v97';
+const CACHE_NAME = 'smp-scavo-v99';
 
 // Shell dell'app da rendere disponibile offline.
 const APP_SHELL = [
