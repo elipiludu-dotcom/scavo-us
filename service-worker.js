@@ -1,8 +1,8 @@
 // ─────────────────────────────────────────────────────────────────
 // SMP Scavo — Service Worker
-// v96 — tipologia tomba sdoppiata (numero deposizioni + sepoltura), numerazione US/Tombe con suffissi "bis" (183a, 289.1) gestita come stringa in confronti/reciproci/Matrix/ordinamenti
+// v97 — us_scheletro nel form tombe + badge giallo in elenco; "Elisa Piludu" predefinito e bulk nei campi responsabili US; tasti US precedente/successiva con avviso modifiche non salvate
 // ─────────────────────────────────────────────────────────────────
-const CACHE_NAME = 'smp-scavo-v96';
+const CACHE_NAME = 'smp-scavo-v97';
 
 // Shell dell'app da rendere disponibile offline.
 const APP_SHELL = [

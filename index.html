@@ -5,7 +5,7 @@
   <!-- PWA -->
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#C9963A">
-  <meta name="app-version" content="96">
+  <meta name="app-version" content="97">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="SMP Scavo">
@@ -1095,6 +1095,9 @@
         <div class="nav-dropdown-item" onclick="cambiaOperatore()">
           <span class="nav-icon">👤</span> Operatore
         </div>
+        <div class="nav-dropdown-item" onclick="compilaResponsabili()">
+          <span class="nav-icon">✍️</span> Compila responsabili (bulk)
+        </div>
         <div class="nav-dropdown-sep"></div>
         <div class="nav-dropdown-item" onclick="apriSelezionePDF('us')">
           <span class="nav-icon">📄</span> Stampa Scheda US singola
@@ -1220,6 +1223,11 @@
           <button class="btn btn-danger" id="btnDelete" style="display:none;white-space:nowrap" onclick="deleteScheda()">🗑 Elimina</button>
           <button class="btn btn-success" onclick="saveScheda()">Salva</button>
         </div>
+      </div>
+      <!-- Navigazione rapida US precedente / successiva (v97) -->
+      <div id="usNavBar" style="display:none;gap:6px;padding:4px 16px 6px;justify-content:flex-end;flex-wrap:wrap">
+        <button class="btn btn-secondary" id="btnUSPrev" style="white-space:nowrap;font-size:0.72rem;padding:5px 10px" onclick="navigaUS(-1)">◀ US prec.</button>
+        <button class="btn btn-secondary" id="btnUSNext" style="white-space:nowrap;font-size:0.72rem;padding:5px 10px" onclick="navigaUS(+1)">US succ. ▶</button>
       </div>
       <div id="lastModInfo" style="display:none;padding:4px 16px 0;font-size:0.72rem;color:var(--muted);font-family:'Space Mono',monospace"></div>
 
@@ -1465,6 +1473,12 @@
           <div class="field-group">
             <label>US riempimento tomba <span style="font-size:0.75rem;color:var(--muted)">(numeri separati da virgola)</span></label>
             <input type="text" id="t_us_riempimento" placeholder="es. 2627" oninput="renderUSBadges()">
+          </div>
+        </div>
+        <div class="field-row single">
+          <div class="field-group">
+            <label>US scheletro <span style="font-size:0.75rem;color:var(--muted)">(US della deposizione/individuo)</span></label>
+            <input type="text" id="t_us_scheletro" placeholder="es. 290" autocapitalize="off" autocorrect="off" spellcheck="false" oninput="renderUSBadges()">
           </div>
         </div>
         <div class="field-row single">
@@ -2070,7 +2084,9 @@ const HEADERS_TOMBE = [
   // Tracciabilità modifiche (v95)
   '_last_modified','_modified_by',
   // Tipologia numero deposizioni (singola/bisoma/multipla) — v96, in coda per non disallineare le righe esistenti
-  'tipologia_num'
+  'tipologia_num',
+  // US dello scheletro/deposizione (badge giallo elenco tombe) — v97, in coda
+  'us_scheletro'
 ];
 
 const HEADERS = ['id','numero','anno','area','saggio','tipo','pos_neg','data','definizione','formazione','criteri','responsabile','stato',
@@ -2466,9 +2482,14 @@ function updateTombaTabLabel() {
 
 // ─── RENDER LIST ─────────────────────────────────────────────────
 function getTombePerUS(numeroUS) {
-  return tombe.filter(t =>
-    String(t.us_collegate || '').split(',').map(s => normNum(s)).includes(normNum(numeroUS))
-  );
+  const n = normNum(numeroUS);
+  return tombe.filter(t => {
+    const inCollegate = String(t.us_collegate || '').split(',').map(s => normNum(s)).includes(n);
+    const inTaglio    = String(t.us_taglio    || '').split(',').map(s => normNum(s)).includes(n);
+    const inRiemp     = String(t.us_riempimento || '').split(',').map(s => normNum(s)).includes(n);
+    const inSk        = normNum(t.us_scheletro || '') === n;
+    return inCollegate || inTaglio || inRiemp || inSk;
+  });
 }
 
 function renderListFiltri() {
@@ -2638,7 +2659,10 @@ function resetForm() {
    'stato_conservazione','stato_conservazione_note','responsabile_scientifico','responsabile_rielaborazione','data_rielaborazione','modo_formazione'];
   ids.forEach(id => {
     const el = document.getElementById('f_' + id);
-    if (el) el.value = id === 'data' ? new Date().toISOString().split('T')[0] : id === 'stato' ? 'parziale' : '';
+    if (el) el.value = id === 'data' ? new Date().toISOString().split('T')[0]
+                     : id === 'stato' ? 'parziale'
+                     : (id === 'responsabile_scientifico' || id === 'responsabile_rielaborazione') ? 'Elisa Piludu'
+                     : '';
   });
   document.querySelectorAll('input[name="f_formazione"]').forEach(r => r.checked = false);
   const mfEl = document.getElementById('f_modo_formazione'); if (mfEl) mfEl.value = '';
@@ -2653,6 +2677,7 @@ function resetForm() {
   const _bpdf2 = document.getElementById('btnExportUSPDF'); if(_bpdf2) _bpdf2.style.display = 'none';
   const _bmu2 = document.getElementById('btnMappaUS'); if(_bmu2) _bmu2.style.display = 'none';
   const _bdu2 = document.getElementById('btnDuplica'); if(_bdu2) _bdu2.style.display = 'none';
+  const _nav2 = document.getElementById('usNavBar'); if (_nav2) _nav2.style.display = 'none';
   const _lmi2 = document.getElementById('lastModInfo'); if(_lmi2) _lmi2.style.display = 'none';
   ['f_foto1_b64','f_foto1_name','f_foto2_b64','f_foto2_name'].forEach(i => { const el = document.getElementById(i); if (el) el.value = ''; });
   ['f_foto1_file','f_foto2_file'].forEach(i => { const el = document.getElementById(i); if (el) el.value = ''; });
@@ -2660,6 +2685,50 @@ function resetForm() {
   editingId = null;
   _loadedLastModified = null;
   updateStatoStyle();
+}
+
+// ─── NAVIGAZIONE US PRECEDENTE / SUCCESSIVA (v97) ────────────────
+// Calcola lo snapshot corrente del form e lo confronta con la scheda in memoria
+// per rilevare modifiche non salvate prima di spostarsi.
+function _formdirty() {
+  if (!editingId) return false;
+  const s = schede.find(x => x.id === editingId);
+  if (!s) return false;
+  // Confronta un campione di campi di testo significativi
+  const checks = ['numero','definizione','descrizione','osservazioni','interpretazione','datazione'];
+  return checks.some(id => {
+    const el = document.getElementById('f_' + id);
+    return el && String(el.value).trim() !== String(s[id] || '').trim();
+  });
+}
+
+async function navigaUS(dir) {
+  // Calcola lista ordinata con stessi criteri della lista principale
+  const sorted = [...schede].sort((a, b) => compareNum(a.numero, b.numero));
+  if (!sorted.length || !editingId) return;
+  const idx = sorted.findIndex(s => s.id === editingId);
+  if (idx === -1) return;
+  const target = sorted[idx + dir];
+  if (!target) {
+    showToast(dir < 0 ? '⚠ Sei già alla prima US' : '⚠ Sei già all\'ultima US');
+    return;
+  }
+  // Avviso se ci sono modifiche non salvate
+  const dirty = _formdirty();
+  if (dirty) {
+    const ok = await showConfirm({
+      icon: '⚠️',
+      title: 'Modifiche non salvate',
+      message: 'Hai modifiche non salvate in questa scheda. Procedere senza salvare?',
+      okLabel: 'Prosegui senza salvare',
+      okClass: 'btn-danger'
+    });
+    if (!ok) return;
+  }
+  openEdit(target.id);
+  // Scorri in cima al form
+  const formView = document.getElementById('view-new');
+  if (formView) formView.scrollTop = 0;
 }
 
 function openEdit(id) {
@@ -2675,6 +2744,7 @@ function openEdit(id) {
   if (_bmu) _bmu.style.display = 'inline-block';
   const _bdu = document.getElementById('btnDuplica');
   if (_bdu) _bdu.style.display = 'inline-block';
+  const _nav = document.getElementById('usNavBar'); if (_nav) _nav.style.display = 'flex';
   // Foto allegate: pulisce e carica anteprime da Drive
   ['f_foto1_b64','f_foto1_name','f_foto2_b64','f_foto2_name'].forEach(i => { const el = document.getElementById(i); if (el) el.value = ''; });
   ['f_foto1_file','f_foto2_file'].forEach(i => { const el = document.getElementById(i); if (el) el.value = ''; });
@@ -2697,7 +2767,13 @@ function openEdit(id) {
    'composizione','umidita','inclusi_geo','inclusi_org','inclusi_art','quota_max','quota_min','spessore','descrizione','osservazioni',
    'disegni','note_doc','interpretazione','datazione','fase','affidabilita','note_interp',
    'stato_conservazione','stato_conservazione_note','responsabile_scientifico','responsabile_rielaborazione','data_rielaborazione','modo_formazione'];
-  fields.forEach(id => { const el = document.getElementById('f_'+id); if (el && s[id] !== undefined) el.value = s[id]; });
+  fields.forEach(id => {
+    const el = document.getElementById('f_'+id);
+    if (!el) return;
+    let val = s[id] !== undefined ? s[id] : '';
+    if (!val && (id === 'responsabile_scientifico' || id === 'responsabile_rielaborazione')) val = 'Elisa Piludu';
+    el.value = val;
+  });
   document.querySelectorAll('input[name="f_formazione"]').forEach(r => { r.checked = r.value === s.formazione; });
   const mfLoadEl = document.getElementById('f_modo_formazione'); if (mfLoadEl) mfLoadEl.value = s.modo_formazione || '';
   document.querySelectorAll('input[name="f_pos_neg"]').forEach(r => { r.checked = r.value === s.pos_neg; });
@@ -3010,6 +3086,46 @@ function cambiaOperatore() {
     localStorage.setItem('smp_operatore', o);
     showToast('👤 Operatore: ' + o);
   }
+}
+
+// Strumenti → compila in blocco responsabile_scientifico e responsabile_rielaborazione
+// su tutte le schede US che hanno ancora quei campi vuoti.
+async function compilaResponsabili() {
+  const NOME = 'Elisa Piludu';
+  const daAggiornare = schede.filter(s =>
+    !String(s.responsabile_scientifico || '').trim() ||
+    !String(s.responsabile_rielaborazione || '').trim()
+  );
+  if (!daAggiornare.length) {
+    showToast('✅ Tutte le schede hanno già i campi responsabili compilati');
+    return;
+  }
+  const ok = await showConfirm({
+    icon: '✍️',
+    title: 'Compila responsabili',
+    message: `Scrivere "${NOME}" nei campi responsabile scientifico e responsabile rielaborazione di ${daAggiornare.length} scheda${daAggiornare.length > 1 ? 'e' : ''} ancora vuote?`,
+    detail: 'I campi già compilati non verranno toccati.',
+    okLabel: 'Compila',
+    okClass: 'btn-primary'
+  });
+  if (!ok) return;
+  showToast('✍️ Compilazione in corso…');
+  let errori = 0;
+  for (const s of daAggiornare) {
+    const aggiornata = { ...s };
+    if (!String(aggiornata.responsabile_scientifico || '').trim()) aggiornata.responsabile_scientifico = NOME;
+    if (!String(aggiornata.responsabile_rielaborazione || '').trim()) aggiornata.responsabile_rielaborazione = NOME;
+    try {
+      await saveSchedaToSheets(aggiornata, false);
+      const idx = schede.findIndex(x => x.id === s.id);
+      if (idx !== -1) schede[idx] = aggiornata;
+    } catch(e) {
+      console.warn('compilaResponsabili: errore su US', s.numero, e);
+      errori++;
+    }
+  }
+  if (errori) showToast(`⚠ Completato con ${errori} errori — riprova per le schede mancanti`);
+  else showToast(`✅ ${daAggiornare.length} scheda${daAggiornare.length > 1 ? 'e aggiornate' : ' aggiornata'}`);
 }
 
 // Chiede il nome operatore a ogni accesso (tracciabilità). Pre-compila con
@@ -3348,7 +3464,7 @@ async function saveScheda() {
     stato_conservazione: (document.querySelector('input[name="f_stato_conservazione"]:checked') || {}).value || '',
     stato_conservazione_note: document.getElementById('f_stato_conservazione_note').value,
     responsabile_scientifico: document.getElementById('f_responsabile_scientifico').value,
-    responsabile_rielaborazione: document.getElementById('f_responsabile_scientifico').value,
+    responsabile_rielaborazione: document.getElementById('f_responsabile_rielaborazione').value,
     data_rielaborazione: document.getElementById('f_data_rielaborazione').value,
     anno: document.getElementById('f_anno').value,
     _last_modified: now,
@@ -3567,20 +3683,31 @@ function renderTombe(q = '') {
     String(t.numero).includes(term) ||
     (t.area||'').toLowerCase().includes(term) ||
     (t.descrizione||'').toLowerCase().includes(term) ||
-    (t.us_collegate||'').toLowerCase().includes(term)
+    (t.us_collegate||'').toLowerCase().includes(term) ||
+    (t.us_scheletro||'').toLowerCase().includes(term)
   ).sort((a,b) => compareNum(b.numero, a.numero));
 
   if (!filtered.length) {
     list.innerHTML = `<div class="empty-state"><div class="icon">⚰</div><p>${tombe.length ? 'Nessun risultato.' : 'Nessuna tomba ancora.<br>Tocca "+ Nuova Tomba" per iniziare.'}</p></div>`;
     return;
   }
-  list.innerHTML = filtered.map(t => `
+  list.innerHTML = filtered.map(t => {
+    const _sk = String(t.us_scheletro || '').trim();
+    let skBadge = '';
+    if (_sk) {
+      const _f = schede.find(s => sameNum(s.numero, _sk));
+      skBadge = _f
+        ? `<span class="us-badge-link" title="Apri US ${_sk}" onclick="event.stopPropagation();openUSModal('${_f.id}')">US ${_sk}</span>`
+        : `<span class="us-badge-link" style="opacity:.5;cursor:default" title="US ${_sk} (non in archivio)">US ${_sk}</span>`;
+    }
+    return `
     <div class="us-card" onclick="openEditTomba('${t.id}')">
       <div class="us-card-left">
         <div class="us-number">T. ${t.numero}</div>
         <div class="us-meta">
           <strong>${t.tipologia || ''} ${t.giacitura || ''}</strong>
           ${t.area ? ' — Area ' + t.area : ''}
+          ${skBadge ? '<br><span style="font-size:0.75rem;color:var(--muted)">Scheletro: </span>' + skBadge : ''}
           ${t.us_collegate ? '<br><span style="font-size:0.75rem;color:var(--earth)">US: ' + t.us_collegate + '</span>' : ''}
           ${t.datazione ? '<br><span style="font-size:0.75rem;color:var(--muted)">'+t.datazione+'</span>' : ''}
           ${(t._modified_by || t._last_modified) ? '<br><span style="font-size:0.7rem;color:var(--muted)">👤 ' + (t._modified_by || '—') + (t._last_modified ? ' · ' + (isNaN(new Date(t._last_modified)) ? '' : new Date(t._last_modified).toLocaleDateString('it-IT')) : '') + '</span>' : ''}
@@ -3591,12 +3718,13 @@ function renderTombe(q = '') {
         <button class="btn-edit-card" onclick="event.stopPropagation();openEditTomba('${t.id}')">✏ Modifica</button>
       </div>
     </div>
-  `).join('');
+  `;
+  }).join('');
 }
 
 // ─── TOMBE — FORM ────────────────────────────────────────────────
 function resetTombaForm() {
-  ['t_numero','t_anno','t_area','t_localita','t_pianta_n','t_us_taglio','t_us_riempimento',
+  ['t_numero','t_anno','t_area','t_localita','t_pianta_n','t_us_taglio','t_us_riempimento','t_us_scheletro',
    't_quota_pre_min','t_quota_pre_max','t_quota_post_min','t_quota_post_max',
    't_orientamento','t_condizioni','t_altre_sepolture',
    't_descrizione','t_reperti_connessione','t_elementi_copertura',
@@ -3622,7 +3750,7 @@ function resetTombaForm() {
 }
 
 function loadTombaForm(t) {
-  ['numero','anno','area','localita','pianta_n','us_taglio','us_riempimento',
+  ['numero','anno','area','localita','pianta_n','us_taglio','us_riempimento','us_scheletro',
    'quota_pre_min','quota_pre_max','quota_post_min','quota_post_max',
    'orientamento','condizioni','altre_sepolture',
    'descrizione','reperti_connessione','elementi_copertura',
@@ -3677,6 +3805,7 @@ function getTombaFromForm(id) {
     pianta_n: document.getElementById('t_pianta_n').value,
     us_taglio: _taglio,
     us_riempimento: _riemp,
+    us_scheletro: (document.getElementById('t_us_scheletro')?.value || '').trim(),
     us_collegate: _comb || (_exT?.us_collegate || ''),
     _last_modified: new Date().toISOString(),
     _modified_by: getOperatore(),
@@ -3829,7 +3958,8 @@ function updateTombaStatoStyle() {}
 function renderUSBadges() {
   const taglio = (document.getElementById('t_us_taglio')?.value || '');
   const riemp  = (document.getElementById('t_us_riempimento')?.value || '');
-  const val = [taglio, riemp].filter(Boolean).join(',');
+  const scheletro = (document.getElementById('t_us_scheletro')?.value || '');
+  const val = [taglio, riemp, scheletro].filter(Boolean).join(',');
   const container = document.getElementById('us-badges');
   if (!container) return;
   const nums = val.split(',').map(s => s.trim()).filter(s => s);
@@ -5417,15 +5547,17 @@ function drawTombaPage1(doc, t) {
       doc.setFontSize(11); doc.setFont('helvetica','bold'); doc.setTextColor(0,0,0);
       doc.text(String(vals0[i]||''), cx+1.5, hRow+12);
     } else if (i === 3) {
-      // US: taglio / riempimento su due righe (fallback al legacy us_collegate)
+      // US: taglio / riempimento / scheletro su tre righe (fallback al legacy us_collegate)
       doc.setFontSize(6.5); doc.setFont('helvetica','normal'); doc.setTextColor(0,0,0);
       const tg = String(t.us_taglio || '').trim();
       const rm = String(t.us_riempimento || '').trim();
-      if (!tg && !rm && t.us_collegate) {
+      const sk = String(t.us_scheletro || '').trim();
+      if (!tg && !rm && !sk && t.us_collegate) {
         doc.text(doc.splitTextToSize(String(t.us_collegate), c.w-3), cx+1.5, hRow+7.5);
       } else {
-        doc.text(doc.splitTextToSize('T: ' + (tg || '—'), c.w-3), cx+1.5, hRow+6);
-        doc.text(doc.splitTextToSize('R: ' + (rm || '—'), c.w-3), cx+1.5, hRow+10.5);
+        doc.text(doc.splitTextToSize('T: ' + (tg || '—'), c.w-3), cx+1.5, hRow+5);
+        doc.text(doc.splitTextToSize('R: ' + (rm || '—'), c.w-3), cx+1.5, hRow+8.5);
+        doc.text(doc.splitTextToSize('S: ' + (sk || '—'), c.w-3), cx+1.5, hRow+12);
       }
     } else {
       doc.setFontSize(7.5); doc.setFont('helvetica','normal'); doc.setTextColor(0,0,0);
@@ -8258,9 +8390,9 @@ function showToast(msg) {
   <script>
     if ('serviceWorker' in navigator && !location.hostname.includes('claudeusercontent.com')) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./service-worker.js?v=96')
+        navigator.serviceWorker.register('./service-worker.js?v=97')
           .then(reg => {
-            console.log('SW registrato v96:', reg.scope);
+            console.log('SW registrato v97:', reg.scope);
             // Forza aggiornamento immediato se c'è una nuova versione
             reg.update();
           })
