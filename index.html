@@ -5,7 +5,7 @@
   <!-- PWA -->
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#C9963A">
-  <meta name="app-version" content="99">
+  <meta name="app-version" content="100">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="SMP Scavo">
@@ -3404,14 +3404,66 @@ function mostraRiconciliazione(items, titolo) {
   });
 
   const foot = document.createElement('div');
-  foot.style.cssText = 'padding:12px 20px;border-top:1px solid var(--border);display:flex;justify-content:flex-end';
+  foot.style.cssText = 'padding:12px 20px;border-top:1px solid var(--border);display:flex;justify-content:space-between;align-items:center';
+  const bPrint = document.createElement('button');
+  bPrint.className = 'btn btn-secondary'; bPrint.textContent = '🖨 Stampa';
+  bPrint.style.cssText = 'font-size:0.78rem;padding:6px 12px';
+  bPrint.onclick = () => printReciprocita(titolo, items);
   const bClose = document.createElement('button');
   bClose.className = 'btn btn-primary'; bClose.textContent = 'Chiudi';
   bClose.onclick = () => overlay.remove();
-  foot.appendChild(bClose);
+  foot.appendChild(bPrint); foot.appendChild(bClose);
 
   box.appendChild(head); box.appendChild(sub); box.appendChild(list); box.appendChild(foot);
   overlay.appendChild(box); document.body.appendChild(overlay);
+}
+
+// Stampa PDF dei reciproci rapporti
+function printReciprocita(titolo, items) {
+  const oggi = new Date().toLocaleDateString('it-IT', { day:'2-digit', month:'long', year:'numeric' });
+
+  const righe = items.map(it => {
+    if (it.kind === 'inesistente') {
+      return `<tr class="row-warn">
+        <td class="icon">⚠</td>
+        <td>US <strong>${it.fonteNum}</strong> «${it.lblTipo} ${it.targetNum}» — <em>US ${it.targetNum} non esiste in archivio</em></td>
+      </tr>`;
+    }
+    return `<tr>
+      <td class="icon">🔁</td>
+      <td>US <strong>${it.fonteNum}</strong> «${it.lblFonte} ${it.targetNum}» — in US <strong>${it.targetNum}</strong> manca «${it.lblInverso} ${it.fonteNum}»</td>
+    </tr>`;
+  }).join('');
+
+  const html = `<!DOCTYPE html>
+<html lang="it"><head><meta charset="UTF-8">
+<title>${titolo} — SMP Scavo</title>
+<style>
+  body { font-family: Georgia, serif; background: #fff; color: #1a1810; margin: 0; padding: 30px 40px; }
+  h1 { font-size: 18px; color: #6b3f10; border-bottom: 2px solid #c9963a; padding-bottom: 8px; margin-bottom: 4px; }
+  .meta { font-size: 11px; color: #7a6f60; margin-bottom: 20px; font-family: 'Courier New', monospace; }
+  table { width: 100%; border-collapse: collapse; }
+  td { padding: 8px 10px; font-size: 12.5px; border-bottom: 1px solid #e0d8cc; vertical-align: top; line-height: 1.55; }
+  td.icon { width: 28px; text-align: center; color: #b07010; }
+  tr.row-warn td { color: #b02010; }
+  tr.row-warn td.icon { color: #b02010; }
+  .footer { margin-top: 22px; font-size: 10px; color: #aaa; font-family: 'Courier New', monospace; }
+  @media print { body { padding: 10px 20px; } }
+</style>
+</head><body>
+<h1>${titolo}</h1>
+<div class="meta">Santa Mustiola — Peccioli (PI) · Generato il ${oggi}</div>
+<table><tbody>${righe || '<tr><td colspan="2" style="color:#6b3f10;padding:12px 10px">Nessuna anomalia rilevata.</td></tr>'}</tbody></table>
+<div class="footer">SMP Scavo · Archivio Documentazione di Scavo · report reciproci generato automaticamente</div>
+<script>window.addEventListener('load', () => setTimeout(() => window.print(), 400));<\/script>
+</body></html>`;
+
+  const w = window.open('', '_blank', 'width=820,height=600');
+  if (!w) { showToast('⚠ Popup bloccato — consenti i popup per questo sito'); return; }
+  w.document.open();
+  w.document.write(html);
+  w.document.close();
+  w.focus();
 }
 
 // Strumenti → riconciliazione completa dell'archivio (rete di sicurezza)
@@ -8806,9 +8858,9 @@ function showToast(msg) {
   <script>
     if ('serviceWorker' in navigator && !location.hostname.includes('claudeusercontent.com')) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./service-worker.js?v=99')
+        navigator.serviceWorker.register('./service-worker.js?v=100')
           .then(reg => {
-            console.log('SW registrato v99:', reg.scope);
+            console.log('SW registrato v100:', reg.scope);
             // Forza aggiornamento immediato se c'è una nuova versione
             reg.update();
           })

@@ -1,8 +1,8 @@
 // ─────────────────────────────────────────────────────────────────
 // SMP Scavo — Service Worker
-// v99 — draft locale esteso a Tombe e Diari; fix fetch diretti Diario con _ensureToken
+// v100 — stampa PDF reciproci rapporti dalla modale Strumenti
 // ─────────────────────────────────────────────────────────────────
-const CACHE_NAME = 'smp-scavo-v99';
+const CACHE_NAME = 'smp-scavo-v100';
 
 // Shell dell'app da rendere disponibile offline.
 const APP_SHELL = [
