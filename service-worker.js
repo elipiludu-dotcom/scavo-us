@@ -1,8 +1,8 @@
 // ─────────────────────────────────────────────────────────────────
 // SMP Scavo — Service Worker
-// v100 — stampa PDF reciproci rapporti dalla modale Strumenti
+// v101 — foto diari: permesso pubblico automatico dopo upload Drive
 // ─────────────────────────────────────────────────────────────────
-const CACHE_NAME = 'smp-scavo-v100';
+const CACHE_NAME = 'smp-scavo-v101';
 
 // Shell dell'app da rendere disponibile offline.
 const APP_SHELL = [
