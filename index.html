@@ -5,7 +5,7 @@
   <!-- PWA -->
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#C9963A">
-  <meta name="app-version" content="101">
+  <meta name="app-version" content="102">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="SMP Scavo">
@@ -1091,6 +1091,9 @@
         </div>
         <div class="nav-dropdown-item" onclick="verificaRapporti()">
           <span class="nav-icon">🔁</span> Reciproci rapporti
+        </div>
+        <div class="nav-dropdown-item" onclick="apriCreazioneUSRielaborazione()">
+          <span class="nav-icon">🏗️</span> Crea US taglio/riempimento (bulk)
         </div>
         <div class="nav-dropdown-item" onclick="cambiaOperatore()">
           <span class="nav-icon">👤</span> Operatore
@@ -2655,6 +2658,15 @@ async function loadFromSheets(showMsg = false, keepView = false) {
         return obj;
       });
     }
+    // v102: unisce in memoria le US "da rielaborazione" (linguetta separata),
+    // così compaiono in Matrix, Reciproci e ricerca insieme alle US reali.
+    // Un fallimento qui non deve mai bloccare il caricamento delle US reali.
+    try {
+      const rielab = await loadSchedeRielab();
+      schede = schede.concat(rielab);
+    } catch (eRielab) {
+      console.warn('US da rielaborazione: caricamento non riuscito', eRielab);
+    }
     setSyncStatus('ok', 'Sincronizzato');
     renderList(); renderStats();
     if (!keepView) {
@@ -2758,8 +2770,12 @@ async function writeAllToSheets() {
   await ensureHeaders();
   const range = `${SHEET_NAME}!A2:AM10000`;
   await sheetsClear(range);
-  if (schede.length > 0) {
-    const rows = schede.map(schedaToRow);
+  // v102: schede è ora un array unito (SchedeUS + "us da rielaborazione" in
+  // memoria) — qui riscriviamo SOLO SchedeUS, altrimenti le US inventate per
+  // la rielaborazione finirebbero duplicate anche nel foglio reale.
+  const soloReali = schede.filter(s => s._src !== 'rielab');
+  if (soloReali.length > 0) {
+    const rows = soloReali.map(schedaToRow);
     await sheetsUpdate(`${SHEET_NAME}!A2`, rows);
   }
 }
@@ -2901,10 +2917,11 @@ function renderList(q = '', filtri = {}) {
     return;
   }
   list.innerHTML = filtered.map(s => `
-    <div class="us-card" onclick="openEdit('${s.id}')">
+    <div class="us-card" onclick="openEdit('${s.id}')" style="${s._src==='rielab' ? 'border-left:3px dashed var(--earth);background:rgba(201,150,58,0.06)' : ''}">
       <div class="us-card-left">
         <div class="us-number">US ${s.numero}</div>
         <div class="us-meta">
+          ${s._src==='rielab' ? '<span class="us-badge" style="background:rgba(201,150,58,0.18);color:var(--earth);border:1px dashed var(--earth);margin-right:6px" title="'+RIELAB_DESCRIZIONE+'">🛠 rielaborazione</span>' : ''}
           ${s.tipo ? '<span class="us-badge" style="background:rgba(122,173,221,0.1);color:#7aaddd;border:1px solid rgba(122,173,221,0.3);margin-right:6px">'+s.tipo+'</span>' : '<strong>Tipo non definito</strong>'}
           ${s.area ? 'Area ' + s.area : ''}${s.saggio ? ' · ' + s.saggio : ''}
           ${s.datazione ? '<br><span style="font-size:0.75rem;color:var(--muted)">'+s.datazione+'</span>' : ''}
@@ -2937,6 +2954,10 @@ function renderStats() {
       <span class="stat-label">Schede US</span>
       <span class="stat-arrow">→</span>
     </div>
+    ${schede.filter(s => s._src === 'rielab').length ? `<div class="stat-box" style="border:1px dashed var(--earth)" title="US create per coerenza nei rapporti stratigrafici e nel matrix, linguetta &quot;us da rielaborazione&quot;">
+      <span class="stat-num" style="color:var(--earth)">${schede.filter(s => s._src === 'rielab').length}</span>
+      <span class="stat-label">🛠 Rielaborazione</span>
+    </div>` : ''}
     <div class="stat-box stat-box-link" onclick="filtraPerStato('parziale')" title="Vedi le schede ancora da completare">
       <span class="stat-num" style="color:var(--earth)">${parziali}</span>
       <span class="stat-label">Parziali</span>
@@ -3076,7 +3097,7 @@ function openEdit(id) {
   editingId = id;
   _loadedLastModified = s._last_modified || null; // salva timestamp per ottimistic lock
   window._editOrigin = document.querySelector('.view.active')?.id || 'view-list';
-  document.getElementById('formTitle').textContent = 'Scheda US ' + s.numero;
+  document.getElementById('formTitle').textContent = (s._src === 'rielab' ? '🛠 ' : '') + 'Scheda US ' + s.numero;
   document.getElementById('btnDelete').style.display = 'block';
   const _bpdf = document.getElementById('btnExportUSPDF'); if (_bpdf) _bpdf.style.display = 'inline-block';
   const _bmu = document.getElementById('btnMappaUS');
@@ -3311,14 +3332,24 @@ async function modificaRapportoSuFoglio(numScheda, rapporto, azione) {
   const rapColIdx = HEADERS.indexOf('rapporti');
   const colNumero = _colLetter(numColIdx + 1);
   const colRap    = _colLetter(rapColIdx + 1);
-  // Trova la riga (lettura fresca della colonna numero)
-  const data = await sheetsGet(`${SHEET_NAME}!A2:${colNumero}10000`);
-  const rows = data.values || [];
-  const rowIndex = rows.findIndex(r => sameNum(r[numColIdx], numScheda));
+  // Cerca la riga prima nel foglio principale SchedeUS, poi — solo se non
+  // trovata — nella linguetta "us da rielaborazione" (v102). Per ogni US
+  // reale il comportamento resta identico a prima: trovata al primo giro.
+  async function trovaRiga(sheetName) {
+    const data = await sheetsGet(`${sheetName}!A2:${colNumero}10000`);
+    const rows = data.values || [];
+    return rows.findIndex(r => sameNum(r[numColIdx], numScheda));
+  }
+  let sheetName = SHEET_NAME;
+  let rowIndex = await trovaRiga(sheetName);
+  if (rowIndex < 0) {
+    sheetName = SHEET_RIELAB;
+    rowIndex = await trovaRiga(sheetName);
+  }
   if (rowIndex < 0) return { ok: false, reason: 'notfound' };
   const sheetRow = rowIndex + 2;
   // Rilegge FRESCA la sola cella rapporti
-  const cell = await sheetsGet(`${SHEET_NAME}!${colRap}${sheetRow}`);
+  const cell = await sheetsGet(`${sheetName}!${colRap}${sheetRow}`);
   let arr = [];
   try { arr = JSON.parse((cell.values && cell.values[0] && cell.values[0][0]) || '[]') || []; } catch(e) { arr = []; }
   const presente = arr.some(x => x.tipo === rapporto.tipo && String(x.us) === String(rapporto.us));
@@ -3329,7 +3360,7 @@ async function modificaRapportoSuFoglio(numScheda, rapporto, azione) {
     if (!presente) return { ok: true, reason: 'already' };
     arr = arr.filter(x => !(x.tipo === rapporto.tipo && String(x.us) === String(rapporto.us)));
   }
-  await sheetsUpdate(`${SHEET_NAME}!${colRap}${sheetRow}`, [[ JSON.stringify(arr) ]]);
+  await sheetsUpdate(`${sheetName}!${colRap}${sheetRow}`, [[ JSON.stringify(arr) ]]);
   const mem = schede.find(x => sameNum(x.numero, numScheda));
   if (mem) mem.rapporti = arr;
   return { ok: true, reason: azione };
@@ -3473,7 +3504,8 @@ async function compilaResponsabili() {
     if (!String(aggiornata.responsabile_scientifico || '').trim()) aggiornata.responsabile_scientifico = NOME;
     if (!String(aggiornata.responsabile_rielaborazione || '').trim()) aggiornata.responsabile_rielaborazione = NOME;
     try {
-      await saveSchedaToSheets(aggiornata, false);
+      // v102: rispetta la linguetta di provenienza della scheda
+      await (s._src === 'rielab' ? saveSchedaRielabToSheets(aggiornata, false) : saveSchedaToSheets(aggiornata, false));
       const idx = schede.findIndex(x => x.id === s.id);
       if (idx !== -1) schede[idx] = aggiornata;
     } catch(e) {
@@ -3483,6 +3515,349 @@ async function compilaResponsabili() {
   }
   if (errori) showToast(`⚠ Completato con ${errori} errori — riprova per le schede mancanti`);
   else showToast(`✅ ${daAggiornare.length} scheda${daAggiornare.length > 1 ? 'e aggiornate' : ' aggiornata'}`);
+}
+
+// ─── US "DA RIELABORAZIONE" (v102) ─────────────────────────────────
+// Linguetta separata dello stesso spreadsheet, per US inventate a posteriori
+// (tipicamente taglio/riempimento di tombe di cui manca la documentazione).
+// Condividono lo schema colonne di SchedeUS (HEADERS) così si comportano
+// come US normali nell'app; sono unite in memoria a `schede` con il flag
+// runtime `_src: 'rielab'` (mai scritto sul foglio, non è tra gli HEADERS).
+const SHEET_RIELAB = 'us da rielaborazione';
+const RIELAB_DESCRIZIONE = 'US creata in fase di rielaborazione della documentazione al fine di avere coerenza nei rapporti stratigrafici e nel matrix';
+
+async function sheetsAppendR(values) {
+  const tok = await _ensureToken();
+  const url = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(SHEET_RIELAB)}:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`;
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { Authorization: 'Bearer ' + tok, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ values })
+  });
+  if (!res.ok) throw new Error('Sheets APPEND (rielab) error ' + res.status);
+  return res.json();
+}
+
+// Legge la linguetta "us da rielaborazione" (la crea se non esiste ancora) e
+// restituisce le schede nello stesso formato di quelle di SchedeUS, taggate
+// con _src:'rielab'. Un errore qui non deve mai bloccare il caricamento
+// delle US reali: chi chiama gestisce già il try/catch.
+async function loadSchedeRielab() {
+  await ensureSheetExists(SHEET_RIELAB, HEADERS);
+  const data = await sheetsGet(`${SHEET_RIELAB}!A1:AM5000`);
+  const rows = data.values || [];
+  if (rows.length <= 1) return [];
+  const hdrs = rows[0];
+  return rows.slice(1).map(row => {
+    const obj = {};
+    hdrs.forEach((h, i) => obj[h] = row[i] || '');
+    try { obj.rapporti = JSON.parse(obj.rapporti || '[]'); } catch { obj.rapporti = []; }
+    try { obj.reperti = JSON.parse(obj.reperti || '[]'); } catch { obj.reperti = []; }
+    ['foto_digitali','foto_3d','foto_drone'].forEach(k => { obj[k] = obj[k] === 'true'; });
+    obj.numero = String(obj.numero == null ? '' : obj.numero).trim();
+    ['quota_max','quota_min','spessore'].forEach(k => {
+      if (obj[k] !== '' && obj[k] !== undefined) {
+        const n = parseFloat(obj[k]);
+        if (!isNaN(n)) obj[k] = Math.round(n * 100) / 100;
+      }
+    });
+    obj._src = 'rielab';
+    return obj;
+  });
+}
+
+// Salva/aggiorna una scheda sulla linguetta "us da rielaborazione" — gemella
+// di saveSchedaToSheets ma isolata sul proprio foglio, per non toccare mai
+// la logica di scrittura di SchedeUS.
+async function saveSchedaRielabToSheets(scheda, isNew = false) {
+  await ensureSheetExists(SHEET_RIELAB, HEADERS);
+  const numColIdx = HEADERS.indexOf('numero');
+  function colToLetter(n) { let s=''; while(n>0){n--; s=String.fromCharCode(65+(n%26))+s; n=Math.floor(n/26);} return s; }
+  const numCol = colToLetter(numColIdx + 1);
+  const data = await sheetsGet(`${SHEET_RIELAB}!A2:${numCol}10000`);
+  const rows = data.values || [];
+  const idColIdx = HEADERS.indexOf('id');
+
+  if (isNew) {
+    const esisteSulFoglio = rows.some(r => sameNum(r[numColIdx], scheda.numero));
+    if (esisteSulFoglio) throw { type: 'DUPLICATE', numero: scheda.numero };
+    await sheetsAppendR([schedaToRow(scheda)]);
+  } else {
+    const rowIndex = rows.findIndex(r => r[idColIdx] === scheda.id);
+    if (rowIndex < 0) { await sheetsAppendR([schedaToRow(scheda)]); return; }
+    const sheetRow = rowIndex + 2;
+    await sheetsUpdate(`${SHEET_RIELAB}!A${sheetRow}`, [schedaToRow(scheda)]);
+  }
+}
+
+async function deleteSchedaRielabFromSheets(id) {
+  await ensureSheetExists(SHEET_RIELAB, HEADERS);
+  const data = await sheetsGet(`${SHEET_RIELAB}!A2:A10000`);
+  const idRows = (data.values || []);
+  const rowIndex = idRows.findIndex(r => r[0] === id);
+  if (rowIndex < 0) return;
+  const sheetRow = rowIndex + 1;
+  const metaRes = await fetch(
+    `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}?fields=sheets.properties`,
+    { headers: { Authorization: 'Bearer ' + accessToken } }
+  );
+  const meta = await metaRes.json();
+  const sheetId = meta.sheets.find(s => s.properties.title === SHEET_RIELAB)?.properties.sheetId;
+  if (sheetId == null) return;
+  const url = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}:batchUpdate`;
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { Authorization: 'Bearer ' + accessToken, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ requests: [{
+      deleteDimension: { range: { sheetId, dimension: 'ROWS', startIndex: sheetRow, endIndex: sheetRow + 1 } }
+    }]})
+  });
+  if (!res.ok) throw new Error('Delete row (rielab) error ' + res.status);
+}
+
+// Prossimo numero libero del contatore condiviso taglio/riempimento: riparte
+// sempre da 1200 la prima volta, poi continua dal numero più alto già usato
+// nella linguetta di rielaborazione (indipendentemente dal segno).
+function _nextRielabCounter() {
+  let max = 1199;
+  schede.filter(s => s._src === 'rielab').forEach(s => {
+    const n = parseInt(String(s.numero).replace('-', ''), 10);
+    if (!isNaN(n) && n > max) max = n;
+  });
+  return max + 1;
+}
+
+// Numero US reale (non di rielaborazione) più alto in archivio — usato solo
+// come controllo di sicurezza per avvisare di eventuali sovrapposizioni.
+function _maxRealUSNumber() {
+  let max = 0;
+  schede.filter(s => s._src !== 'rielab').forEach(s => {
+    const n = parseInt(String(s.numero).replace('-', ''), 10);
+    if (!isNaN(n) && n > max) max = n;
+  });
+  return max;
+}
+
+// Calcola l'anteprima per una lista di numeri tomba (stringa separata da
+// virgole). Per ciascuna tomba determina se si può procedere (ok), se va
+// saltata (già documentata) o se c'è un errore (tomba/scheletro non trovati).
+// Assegna la numerazione sequenziale solo alle voci 'ok', nell'ordine dato.
+function calcolaAnteprimaRielab(input) {
+  const numeri = [...new Set(String(input || '').split(',').map(x => x.trim()).filter(Boolean))];
+  const items = [];
+  numeri.forEach(numTomba => {
+    const tomba = tombe.find(t => sameNum(t.numero, numTomba));
+    if (!tomba) { items.push({ numTomba, stato: 'errore', msg: 'Tomba non trovata' }); return; }
+    const hasTaglio = String(tomba.us_taglio || '').trim();
+    const hasRiemp  = String(tomba.us_riempimento || '').trim();
+    if (hasTaglio || hasRiemp) {
+      items.push({ numTomba, stato: 'skip',
+        msg: `Tomba già documentata (taglio: ${hasTaglio || '—'}, riempimento: ${hasRiemp || '—'})`, tomba });
+      return;
+    }
+    const numScheletro = String(tomba.us_scheletro || '').trim();
+    if (!numScheletro) { items.push({ numTomba, stato: 'errore', msg: 'Tomba senza US scheletro collegata', tomba }); return; }
+    const schedaScheletro = schede.find(s => sameNum(s.numero, numScheletro) && s._src !== 'rielab');
+    if (!schedaScheletro) { items.push({ numTomba, stato: 'errore', msg: `US scheletro ${numScheletro} non trovata in archivio`, tomba }); return; }
+    items.push({ numTomba, stato: 'ok', tomba, schedaScheletro, numScheletro });
+  });
+  let counter = _nextRielabCounter();
+  items.forEach(it => {
+    if (it.stato !== 'ok') return;
+    it.numTaglio = '-' + counter; counter++;
+    it.numRiempimento = String(counter); counter++;
+  });
+  return items;
+}
+
+// Costruisce le due schede (Taglio + Riempimento) per una voce 'ok'
+// dell'anteprima, con campi ereditati dalla scheda scheletro e rapporti
+// stratigrafici reciproci già impostati (schema concordato).
+function _costruisciSchedeRielab(item) {
+  const oggi = new Date().toISOString().slice(0,10);
+  const now = new Date().toISOString();
+  const base = {
+    anno: item.schedaScheletro.anno || '',
+    area: item.schedaScheletro.area || '',
+    saggio: item.schedaScheletro.saggio || '',
+    datazione: item.schedaScheletro.datazione || '',
+    responsabile_scientifico: item.schedaScheletro.responsabile_scientifico || '',
+  };
+  const mk = (numero, tipo, definizione, posNeg) => ({
+    id: 'rielab_' + Date.now().toString(36) + Math.random().toString(36).slice(2),
+    numero, ...base,
+    tipo, pos_neg: posNeg, data: oggi, definizione,
+    formazione: 'Artificiale', criteri: '', responsabile: '', stato: 'completa',
+    colore: '', consistenza: '', composizione: '', umidita: '', inclusi_geo: '', inclusi_org: '', inclusi_art: '',
+    quota_max: '', quota_min: '', spessore: '',
+    descrizione: RIELAB_DESCRIZIONE,
+    osservazioni: '',
+    rapporti: [], reperti: [],
+    foto_digitali: false, foto_3d: false, foto_drone: false,
+    disegni: '', note_doc: '',
+    interpretazione: '', fase: '', affidabilita: '', note_interp: '',
+    stato_conservazione: '', stato_conservazione_note: '',
+    responsabile_rielaborazione: 'Elisa Piludu',
+    data_rielaborazione: oggi,
+    _last_modified: now, _modified_by: getOperatore(false) || 'Elisa Piludu',
+    foto1_drive_id: '', foto2_drive_id: '',
+    _src: 'rielab',
+  });
+  const schedaTaglio = mk(item.numTaglio, 'Taglio', 'Taglio di fossa', 'Negativa');
+  const schedaRiempimento = mk(item.numRiempimento, 'Riempimento', 'Riempimento di fossa', 'Positiva');
+  // Rapporti reciproci: riempimento riempie il taglio, riempimento copre lo scheletro.
+  // Il reciproco "coperto da" sulla scheda scheletro (US reale) viene scritto a parte.
+  schedaRiempimento.rapporti = [{ tipo: 'riempie', us: item.numTaglio }, { tipo: 'copre', us: item.numScheletro }];
+  schedaTaglio.rapporti = [{ tipo: 'riempito_da', us: item.numRiempimento }];
+  return { schedaTaglio, schedaRiempimento };
+}
+
+// Esegue la creazione per tutte le voci 'ok' dell'anteprima: crea le due US
+// di rielaborazione, aggiunge il reciproco "coperto da" sulla scheda US
+// reale dello scheletro (scrittura chirurgica, stessa tecnica sicura di
+// modificaRapportoSuFoglio) e aggiorna la Tomba con i nuovi riferimenti.
+// Ogni tomba è indipendente: un errore su una non blocca le altre.
+async function confermaCreazioneRielab(items) {
+  const okItems = items.filter(i => i.stato === 'ok');
+  if (!okItems.length) { showToast('⚠ Nessuna US da creare'); return; }
+  showToast('🏗️ Creazione in corso…');
+  let creati = 0, errori = 0;
+  for (const it of okItems) {
+    try {
+      const { schedaTaglio, schedaRiempimento } = _costruisciSchedeRielab(it);
+      await saveSchedaRielabToSheets(schedaTaglio, true);
+      schede.push(schedaTaglio);
+      await saveSchedaRielabToSheets(schedaRiempimento, true);
+      schede.push(schedaRiempimento);
+
+      await modificaRapportoSuFoglio(it.numScheletro, { tipo: 'coperto_da', us: it.numRiempimento }, 'add');
+
+      const tombaAggiornata = { ...it.tomba, us_taglio: it.numTaglio, us_riempimento: it.numRiempimento };
+      await saveTombaToSheets(tombaAggiornata);
+      const idxT = tombe.findIndex(t => t.id === it.tomba.id);
+      if (idxT !== -1) tombe[idxT] = tombaAggiornata;
+
+      creati++;
+    } catch (e) {
+      console.warn('Creazione US rielaborazione: errore su tomba', it.numTomba, e);
+      errori++;
+    }
+  }
+  renderList(); renderStats(); renderTombe();
+  if (errori) showToast(`⚠ Create le US per ${creati} tomb${creati===1?'a':'e'}, ${errori} errori — controlla e riprova`);
+  else showToast(`✅ Create ${creati*2} US di rielaborazione per ${creati} tomb${creati===1?'a':'e'}`);
+}
+
+// Pannello Strumenti → apre il tool di creazione massiva US taglio/riempimento.
+function apriCreazioneUSRielaborazione() {
+  const ex = document.getElementById('rielabOverlay'); if (ex) ex.remove();
+  const overlay = document.createElement('div');
+  overlay.id = 'rielabOverlay';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px';
+  const box = document.createElement('div');
+  box.style.cssText = 'background:var(--parchment);border:1px solid var(--border);border-radius:6px;max-width:620px;width:100%;max-height:88vh;display:flex;flex-direction:column;box-shadow:0 8px 32px rgba(0,0,0,0.3)';
+
+  const head = document.createElement('div');
+  head.style.cssText = 'padding:18px 20px 6px;font-family:"Space Mono",monospace;font-size:0.85rem;color:var(--earth);font-weight:700';
+  head.textContent = '🏗️ Crea US taglio/riempimento (rielaborazione)';
+
+  const sub = document.createElement('div');
+  sub.style.cssText = 'padding:0 20px 10px;font-size:0.73rem;color:var(--muted);line-height:1.45';
+  sub.textContent = 'Per ogni numero di tomba, crea una US Taglio e una US Riempimento nella linguetta "us da rielaborazione", collega i rapporti stratigrafici e aggiorna la scheda Tomba. Le tombe già documentate (taglio/riempimento già presenti) vengono saltate automaticamente.';
+
+  const inputWrap = document.createElement('div');
+  inputWrap.style.cssText = 'padding:0 20px 12px';
+  const label = document.createElement('label');
+  label.style.cssText = 'font-size:0.72rem;color:var(--muted);display:block;margin-bottom:5px';
+  label.textContent = 'Numeri tomba (separati da virgola):';
+  const textarea = document.createElement('textarea');
+  textarea.id = 'rielabInput';
+  textarea.placeholder = 'es. 289, 290, 291';
+  textarea.style.cssText = 'width:100%;min-height:60px;padding:9px 10px;border:1px solid var(--border);border-radius:4px;font-size:0.85rem;background:var(--parchment-light);color:var(--ink);box-sizing:border-box;font-family:inherit;resize:vertical';
+  inputWrap.appendChild(label); inputWrap.appendChild(textarea);
+
+  const previewBtn = document.createElement('button');
+  previewBtn.className = 'btn btn-secondary';
+  previewBtn.textContent = '👁 Genera anteprima';
+  previewBtn.style.cssText = 'margin:0 20px 12px';
+
+  const warnBox = document.createElement('div');
+  warnBox.style.cssText = 'margin:0 20px 10px;display:none';
+
+  const previewList = document.createElement('div');
+  previewList.style.cssText = 'padding:0 20px;overflow-y:auto;flex:1';
+
+  const foot = document.createElement('div');
+  foot.style.cssText = 'padding:12px 20px;border-top:1px solid var(--border);display:flex;justify-content:space-between;gap:10px';
+  const bClose = document.createElement('button');
+  bClose.className = 'btn btn-secondary'; bClose.textContent = 'Chiudi';
+  bClose.onclick = () => overlay.remove();
+  const bConfirm = document.createElement('button');
+  bConfirm.className = 'btn btn-primary'; bConfirm.textContent = '✓ Conferma e crea';
+  bConfirm.disabled = true;
+  bConfirm.style.opacity = '0.5';
+  foot.appendChild(bClose); foot.appendChild(bConfirm);
+
+  let _previewItems = [];
+
+  previewBtn.onclick = () => {
+    const val = textarea.value || '';
+    if (!val.trim()) { showToast('⚠ Inserisci almeno un numero tomba'); return; }
+    _previewItems = calcolaAnteprimaRielab(val);
+
+    const maxReale = _maxRealUSNumber();
+    if (maxReale >= 1200) {
+      warnBox.style.display = 'block';
+      warnBox.innerHTML = `<div style="font-size:0.75rem;color:#b23a2e;background:rgba(178,58,46,0.08);border:1px solid rgba(178,58,46,0.3);border-radius:4px;padding:8px 10px">⚠ Attenzione: esiste già una US reale con numero ≥ 1200 (massimo trovato: ${maxReale}). Verifica che non ci sia sovrapposizione prima di confermare.</div>`;
+    } else {
+      warnBox.style.display = 'none';
+    }
+
+    previewList.innerHTML = _previewItems.map(it => {
+      if (it.stato === 'ok') {
+        return `<div style="border-top:1px solid var(--border);padding:9px 0;font-size:0.8rem">
+          <b>Tomba ${it.numTomba}</b> — scheletro US ${it.numScheletro}<br>
+          <span style="color:var(--earth)">✓ Taglio US ${it.numTaglio}</span> · <span style="color:var(--earth)">Riempimento US ${it.numRiempimento}</span>
+          <div style="font-size:0.7rem;color:var(--muted);margin-top:2px">Area ${it.schedaScheletro.area||'—'} · Anno ${it.schedaScheletro.anno||'—'}</div>
+        </div>`;
+      }
+      if (it.stato === 'skip') {
+        return `<div style="border-top:1px solid var(--border);padding:9px 0;font-size:0.8rem;color:var(--muted)">
+          <b>Tomba ${it.numTomba}</b> — ⏭ saltata: ${it.msg}
+        </div>`;
+      }
+      return `<div style="border-top:1px solid var(--border);padding:9px 0;font-size:0.8rem;color:#b23a2e">
+        <b>Tomba ${it.numTomba}</b> — ⚠ ${it.msg}
+      </div>`;
+    }).join('');
+
+    const nOk = _previewItems.filter(i => i.stato === 'ok').length;
+    bConfirm.disabled = nOk === 0;
+    bConfirm.style.opacity = nOk === 0 ? '0.5' : '1';
+    bConfirm.textContent = nOk ? `✓ Conferma e crea (${nOk} tomb${nOk===1?'a':'e'} · ${nOk*2} US)` : '✓ Conferma e crea';
+  };
+
+  bConfirm.onclick = async () => {
+    if (isOffline()) { showToast('⚠ Offline — impossibile procedere'); return; }
+    const nOk = _previewItems.filter(i => i.stato === 'ok').length;
+    if (!nOk) return;
+    const ok = await showConfirm({
+      icon: '🏗️',
+      title: 'Confermi la creazione?',
+      message: `Verranno create ${nOk*2} US (${nOk} Taglio + ${nOk} Riempimento) nella linguetta "us da rielaborazione" e aggiornate ${nOk} schede Tomba.`,
+      detail: 'L\'operazione scrive sul foglio Google condiviso.',
+      okLabel: '🏗️ Crea', okClass: 'btn-primary'
+    });
+    if (!ok) return;
+    bConfirm.disabled = true; bConfirm.textContent = 'Creazione in corso…';
+    await confermaCreazioneRielab(_previewItems);
+    overlay.remove();
+  };
+
+  box.appendChild(head); box.appendChild(sub); box.appendChild(inputWrap);
+  box.appendChild(previewBtn); box.appendChild(warnBox); box.appendChild(previewList); box.appendChild(foot);
+  overlay.appendChild(box); document.body.appendChild(overlay);
+  setTimeout(() => textarea.focus(), 100);
 }
 
 // Chiede il nome operatore a ogni accesso (tracciabilità). Pre-compila con
@@ -3844,13 +4219,19 @@ async function saveScheda() {
   }
 
   const isNew = !editingId;
+  // v102: una scheda in modifica che appartiene alla linguetta "us da
+  // rielaborazione" va risalvata lì, non su SchedeUS. Le schede nuove
+  // (isNew) sono sempre US reali: si creano solo dal bottone "+ Nuova US".
+  const _origScheda = editingId ? schede.find(x => x.id === editingId) : null;
+  const isRielab = !!(_origScheda && _origScheda._src === 'rielab');
+  if (isRielab) scheda._src = 'rielab';
 
   const _schedeBackup = schede;                       // snapshot per rollback se la rete cade
   if (editingId) schede = schede.map(s => s.id === editingId ? scheda : s);
   else schede = [...schede, scheda];
 
   try {
-    await saveSchedaToSheets(scheda, isNew);
+    await (isRielab ? saveSchedaRielabToSheets(scheda, isNew) : saveSchedaToSheets(scheda, isNew));
     _loadedLastModified = now; // aggiorna il lock locale dopo salvataggio ok
     // Cancella la bozza locale: il dato è ora sul cloud
     _clearDraft(isNew ? DRAFT_KEY_NEW : _draftKeyEdit(scheda.id));
@@ -3885,7 +4266,7 @@ async function saveScheda() {
           // Forza sovrascrittura: azzera il lock e risalva
           _loadedLastModified = null;
           try {
-            await saveSchedaToSheets(scheda, false); // sempre false: è una scheda esistente
+            await (isRielab ? saveSchedaRielabToSheets(scheda, false) : saveSchedaToSheets(scheda, false)); // sempre false: è una scheda esistente
             _loadedLastModified = now;
             setSyncStatus('ok', 'Sincronizzato');
             showToast('☁ US ' + numero + ' sovrascritta');
@@ -4375,7 +4756,7 @@ function openUSModal(id) {
   const s = schede.find(x => x.id === id) || schede.find(x => sameNum(x.numero, id));
   if (!s) { showToast('⚠ Scheda US non trovata'); return; }
 
-  document.getElementById('us-modal-title').textContent = `Scheda US ${s.numero}`;
+  document.getElementById('us-modal-title').textContent = (s._src === 'rielab' ? '🛠 ' : '') + `Scheda US ${s.numero}`;
 
   const fmtNum = n => { const f = parseFloat(n); return isNaN(f) ? (n||'') : f.toFixed(2); };
   const fmtRap = r => {
@@ -4599,10 +4980,11 @@ async function deleteScheda() {
   });
   if (!okDel) return;
   const deletingId = editingId;
+  const _eraRielab = s._src === 'rielab';
   schede = schede.filter(x => x.id !== deletingId);
   setSyncStatus('syncing', 'Eliminazione…');
   try {
-    await deleteSchedaFromSheets(deletingId);
+    await (_eraRielab ? deleteSchedaRielabFromSheets(deletingId) : deleteSchedaFromSheets(deletingId));
     setSyncStatus('ok', 'Sincronizzato');
     showToast('🗑 US ' + s.numero + ' eliminata');
     editingId = null;
@@ -8527,6 +8909,7 @@ function renderMatrix() {
     rect.setAttribute('fill', fillCol);
     rect.setAttribute('stroke', strokeCol);
     rect.setAttribute('stroke-width', isConflict ? '2' : '1.5');
+    if (s._src === 'rielab') rect.setAttribute('stroke-dasharray', '3 2'); // v102: US di rielaborazione
 
     // Numero US
     const tNum = grp.appendChild(document.createElementNS(ns, 'text'));
@@ -8814,9 +9197,9 @@ function showToast(msg) {
   <script>
     if ('serviceWorker' in navigator && !location.hostname.includes('claudeusercontent.com')) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./service-worker.js?v=101')
+        navigator.serviceWorker.register('./service-worker.js?v=102')
           .then(reg => {
-            console.log('SW registrato v101:', reg.scope);
+            console.log('SW registrato v102:', reg.scope);
             // Forza aggiornamento immediato se c'è una nuova versione
             reg.update();
           })

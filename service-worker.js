@@ -1,8 +1,8 @@
 // ─────────────────────────────────────────────────────────────────
 // SMP Scavo — Service Worker
-// v101 — foto diari: permesso pubblico automatico dopo upload Drive
+// v102 — creazione massiva US taglio/riempimento (linguetta "us da rielaborazione")
 // ─────────────────────────────────────────────────────────────────
-const CACHE_NAME = 'smp-scavo-v101';
+const CACHE_NAME = 'smp-scavo-v102';
 
 // Shell dell'app da rendere disponibile offline.
 const APP_SHELL = [
