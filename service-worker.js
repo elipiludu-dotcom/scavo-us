@@ -1,9 +1,11 @@
 // ─────────────────────────────────────────────────────────────────
 // SMP Scavo — Service Worker
-// v103 — creazione US taglio/riempimento: robustezza (timeout/ritentativi,
-// avanzamento e resoconto persistente) + scelta taglio/riempimento/entrambi
+// v104 — creazione US taglio/riempimento: la finestra di conferma ora
+// arriva SEMPRE a un esito visibile (successo o errore), anche se qualcosa
+// va storto in modo imprevisto durante la scrittura sul foglio — prima
+// poteva restare bloccata su "Creazione in corso" senza mostrare nulla.
 // ─────────────────────────────────────────────────────────────────
-const CACHE_NAME = 'smp-scavo-v103';
+const CACHE_NAME = 'smp-scavo-v104';
 
 // Shell dell'app da rendere disponibile offline.
 const APP_SHELL = [

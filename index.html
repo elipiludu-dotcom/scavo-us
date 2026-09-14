@@ -5,7 +5,7 @@
   <!-- PWA -->
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#C9963A">
-  <meta name="app-version" content="103">
+  <meta name="app-version" content="104">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="SMP Scavo">
@@ -3991,21 +3991,43 @@ function apriCreazioneUSRielaborazione() {
     });
     if (!ok) return;
 
-    // Blocca i controlli e mostra il pannello di avanzamento (resta a schermo)
-    previewBtn.disabled = true;
-    modoWrap.querySelectorAll('input').forEach(r => r.disabled = true);
-    textarea.disabled = true;
-    bConfirm.disabled = true; bConfirm.textContent = '⏳ Creazione in corso…'; bConfirm.style.opacity = '0.6';
-    progressBox.style.display = 'block';
+    // v104: nasconde TUTTO il resto (scelta modalità, testo, anteprima) e
+    // lascia SOLO il pannello di avanzamento a piena larghezza — prima
+    // conviveva con l'anteprima in uno spazio compresso e su alcuni schermi
+    // poteva non essere visibile pur aggiornandosi correttamente.
+    modoWrap.style.display = 'none';
+    inputWrap.style.display = 'none';
+    previewBtn.style.display = 'none';
+    warnBox.style.display = 'none';
+    previewList.style.display = 'none';
+    progressBox.style.cssText += ';display:block;flex:1;min-height:160px';
     progressBox.textContent = '';
-    const scriviLog = (riga) => { progressBox.textContent += riga + '\n'; progressBox.scrollTop = progressBox.scrollHeight; };
+    bConfirm.disabled = true; bConfirm.textContent = '⏳ Creazione in corso…'; bConfirm.style.opacity = '0.6';
+    bClose.disabled = true; bClose.style.opacity = '0.5'; // evita chiusure premature mentre scrive sul foglio
 
-    const { risultati, creati, errori } = await confermaCreazioneRielab(_previewItems, scriviLog);
+    const scriviLog = (riga) => { progressBox.textContent += riga + '\n'; progressBox.scrollTop = progressBox.scrollHeight; };
+    scriviLog('🏗️ Avvio…');
+    showToast('🏗️ Creazione avviata — resta su questa pagina');
+
+    // v104: qualunque cosa succeda (anche un errore imprevisto e non
+    // previsto qui sotto) l'interfaccia deve SEMPRE arrivare a un esito
+    // visibile — mai più restare bloccata su "Creazione in corso" senza che
+    // tu debba chiudere la finestra per scoprire se ha funzionato.
+    let creati = 0, errori = 0;
+    try {
+      const esito = await confermaCreazioneRielab(_previewItems, scriviLog);
+      creati = esito.creati; errori = esito.errori;
+    } catch (e) {
+      console.error('Creazione US rielaborazione — errore imprevisto:', e);
+      errori = nOk;
+      scriviLog('✖ Errore imprevisto: ' + ((e && e.message) || String(e)));
+    }
 
     scriviLog('');
     scriviLog(errori ? `⚠ Fatto con errori: ${creati} tomb${creati===1?'a':'e'} completate, ${errori} con problemi (vedi sopra).`
                       : `✅ Fatto: ${creati} tomb${creati===1?'a':'e'} completate senza errori.`);
     bConfirm.style.display = 'none';
+    bClose.disabled = false; bClose.style.opacity = '1';
     bClose.textContent = 'Chiudi';
     bClose.className = errori ? 'btn btn-danger' : 'btn btn-primary';
     showToast(errori ? `⚠ Completato con ${errori} errori` : `✅ ${creati} tomb${creati===1?'a':'e'} completate`);
@@ -9355,9 +9377,9 @@ function showToast(msg) {
   <script>
     if ('serviceWorker' in navigator && !location.hostname.includes('claudeusercontent.com')) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./service-worker.js?v=103')
+        navigator.serviceWorker.register('./service-worker.js?v=104')
           .then(reg => {
-            console.log('SW registrato v103:', reg.scope);
+            console.log('SW registrato v104:', reg.scope);
             // Forza aggiornamento immediato se c'è una nuova versione
             reg.update();
           })
