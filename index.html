@@ -5,7 +5,7 @@
   <!-- PWA -->
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#C9963A">
-  <meta name="app-version" content="104">
+  <meta name="app-version" content="105">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="SMP Scavo">
@@ -3878,8 +3878,9 @@ function apriCreazioneUSRielaborazione() {
   box.style.cssText = 'background:var(--parchment);border:1px solid var(--border);border-radius:6px;max-width:640px;width:100%;max-height:88vh;display:flex;flex-direction:column;box-shadow:0 8px 32px rgba(0,0,0,0.3)';
 
   const head = document.createElement('div');
-  head.style.cssText = 'padding:18px 20px 6px;font-family:"Space Mono",monospace;font-size:0.85rem;color:var(--earth);font-weight:700';
-  head.textContent = '🏗️ Crea US taglio/riempimento (rielaborazione)';
+  head.style.cssText = 'padding:18px 20px 6px;font-family:"Space Mono",monospace;font-size:0.85rem;color:var(--earth);font-weight:700;display:flex;align-items:center;justify-content:space-between;gap:10px';
+  const appVer = (document.querySelector('meta[name="app-version"]') || {}).content || '?';
+  head.innerHTML = `<span>🏗️ Crea US taglio/riempimento (rielaborazione)</span><span style="font-size:0.65rem;color:var(--muted);font-weight:400;white-space:nowrap">v${appVer}</span>`;
 
   const sub = document.createElement('div');
   sub.style.cssText = 'padding:0 20px 10px;font-size:0.73rem;color:var(--muted);line-height:1.45';
@@ -9377,9 +9378,9 @@ function showToast(msg) {
   <script>
     if ('serviceWorker' in navigator && !location.hostname.includes('claudeusercontent.com')) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./service-worker.js?v=104')
+        navigator.serviceWorker.register('./service-worker.js?v=105')
           .then(reg => {
-            console.log('SW registrato v104:', reg.scope);
+            console.log('SW registrato v105:', reg.scope);
             // Forza aggiornamento immediato se c'è una nuova versione
             reg.update();
           })

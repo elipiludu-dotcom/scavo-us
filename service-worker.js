@@ -1,11 +1,17 @@
 // ─────────────────────────────────────────────────────────────────
 // SMP Scavo — Service Worker
-// v104 — creazione US taglio/riempimento: la finestra di conferma ora
-// arriva SEMPRE a un esito visibile (successo o errore), anche se qualcosa
-// va storto in modo imprevisto durante la scrittura sul foglio — prima
-// poteva restare bloccata su "Creazione in corso" senza mostrare nulla.
+// v105 — CORREZIONE IMPORTANTE: quando si apre/ricarica la pagina, il
+// service worker va sempre a scaricare index.html "di sua iniziativa" dalla
+// rete. Finora questo scaricamento poteva restituire una copia già in
+// cache del BROWSER (non della nostra cache app) anche dopo un refresh
+// forzato, perché una richiesta di rete fatta da dentro il service worker
+// non eredita automaticamente la richiesta "senza cache" della pagina.
+// Risultato pratico: dopo aver caricato una versione nuova su GitHub, a
+// volte l'app continuava a mostrare quella vecchia anche ricaricando più
+// volte. Ora ogni apertura della pagina scarica index.html con un
+// parametro sempre diverso, così è impossibile ricevere una copia vecchia.
 // ─────────────────────────────────────────────────────────────────
-const CACHE_NAME = 'smp-scavo-v104';
+const CACHE_NAME = 'smp-scavo-v105';
 
 // Shell dell'app da rendere disponibile offline.
 const APP_SHELL = [
@@ -50,9 +56,14 @@ self.addEventListener('fetch', event => {
 
   // Navigazioni (apertura/refresh della pagina): network-first con
   // fallback alla shell in cache quando manca rete.
+  // v105: la richiesta di rete usa un URL con parametro sempre diverso
+  // (cache-busting) per essere certi di ricevere SEMPRE l'ultima versione
+  // pubblicata, mai una copia salvata dal browser.
   if (req.mode === 'navigate') {
+    const freshUrl = new URL('./index.html', self.location.href);
+    freshUrl.searchParams.set('_sw', Date.now().toString());
     event.respondWith(
-      fetch(req)
+      fetch(freshUrl.toString())
         .then(res => {
           const copy = res.clone();
           caches.open(CACHE_NAME).then(c => c.put('./index.html', copy)).catch(() => {});
