@@ -1,8 +1,9 @@
 // ─────────────────────────────────────────────────────────────────
 // SMP Scavo — Service Worker
-// v102 — creazione massiva US taglio/riempimento (linguetta "us da rielaborazione")
+// v103 — creazione US taglio/riempimento: robustezza (timeout/ritentativi,
+// avanzamento e resoconto persistente) + scelta taglio/riempimento/entrambi
 // ─────────────────────────────────────────────────────────────────
-const CACHE_NAME = 'smp-scavo-v102';
+const CACHE_NAME = 'smp-scavo-v103';
 
 // Shell dell'app da rendere disponibile offline.
 const APP_SHELL = [

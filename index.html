@@ -5,7 +5,7 @@
   <!-- PWA -->
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#C9963A">
-  <meta name="app-version" content="102">
+  <meta name="app-version" content="103">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="SMP Scavo">
@@ -3638,11 +3638,58 @@ function _maxRealUSNumber() {
   return max;
 }
 
+function _trovaSchedaPerNumero(numero) {
+  if (!numero) return null;
+  return schede.find(s => sameNum(s.numero, numero)) || null;
+}
+
+// v103 — Esegue una Promise-factory con un tetto massimo di attesa: se non
+// risponde entro `ms` la consideriamo fallita invece di restare bloccata per
+// sempre. Serve a smascherare i blocchi silenziosi osservati sul campo (per
+// esempio il refresh del token OAuth che su Safari/iOS può non rispondere mai
+// se la pagina va in background) trasformandoli in un errore gestibile.
+function _conTimeout(promiseFactory, ms, etichetta) {
+  return new Promise((resolve, reject) => {
+    let deciso = false;
+    const timer = setTimeout(() => {
+      if (deciso) return;
+      deciso = true;
+      reject(new Error(`Nessuna risposta da Google entro ${Math.round(ms / 1000)}s (${etichetta || 'operazione'})`));
+    }, ms);
+    Promise.resolve().then(promiseFactory).then(
+      v => { if (deciso) return; deciso = true; clearTimeout(timer); resolve(v); },
+      e => { if (deciso) return; deciso = true; clearTimeout(timer); reject(e); }
+    );
+  });
+}
+
+// Ritenta un'operazione asincrona con un piccolo backoff, per assorbire gli
+// intoppi di rete transitori tipici di una connessione da campo. Ogni singolo
+// tentativo è comunque limitato da _conTimeout, quindi la funzione termina
+// sempre (con successo o con un errore chiaro) invece di restare in sospeso.
+async function _conRitentativo(fn, opts = {}) {
+  const { tentativi = 2, timeoutMs = 20000, etichetta = 'operazione' } = opts;
+  let ultimoErrore;
+  for (let i = 1; i <= tentativi; i++) {
+    try {
+      return await _conTimeout(fn, timeoutMs, etichetta);
+    } catch (e) {
+      ultimoErrore = e;
+      if (i < tentativi) await new Promise(r => setTimeout(r, 1200 * i));
+    }
+  }
+  throw ultimoErrore;
+}
+
 // Calcola l'anteprima per una lista di numeri tomba (stringa separata da
-// virgole). Per ciascuna tomba determina se si può procedere (ok), se va
-// saltata (già documentata) o se c'è un errore (tomba/scheletro non trovati).
-// Assegna la numerazione sequenziale solo alle voci 'ok', nell'ordine dato.
-function calcolaAnteprimaRielab(input) {
+// virgole), secondo la modalità scelta:
+//  - 'entrambi'         → crea quello che manca (taglio e/o riempimento);
+//                         salta solo se sono già presenti entrambi.
+//  - 'solo_taglio'       → crea solo il Taglio; salta se il taglio c'è già.
+//  - 'solo_riempimento'  → crea solo il Riempimento; salta se c'è già.
+// Se un pezzo non viene creato perché già esistente, il pezzo nuovo si
+// collega comunque ad esso con i rapporti reciproci (vedi _costruisciSchedeRielab).
+function calcolaAnteprimaRielab(input, modalita = 'entrambi') {
   const numeri = [...new Set(String(input || '').split(',').map(x => x.trim()).filter(Boolean))];
   const items = [];
   numeri.forEach(numTomba => {
@@ -3650,29 +3697,43 @@ function calcolaAnteprimaRielab(input) {
     if (!tomba) { items.push({ numTomba, stato: 'errore', msg: 'Tomba non trovata' }); return; }
     const hasTaglio = String(tomba.us_taglio || '').trim();
     const hasRiemp  = String(tomba.us_riempimento || '').trim();
-    if (hasTaglio || hasRiemp) {
-      items.push({ numTomba, stato: 'skip',
-        msg: `Tomba già documentata (taglio: ${hasTaglio || '—'}, riempimento: ${hasRiemp || '—'})`, tomba });
+
+    const vuoleTaglio = modalita !== 'solo_riempimento';
+    const vuoleRiemp  = modalita !== 'solo_taglio';
+    const creaTaglio  = vuoleTaglio && !hasTaglio;
+    const creaRiemp   = vuoleRiemp && !hasRiemp;
+
+    if (!creaTaglio && !creaRiemp) {
+      const perche = modalita === 'solo_taglio' ? `il taglio è già presente (US ${hasTaglio})`
+        : modalita === 'solo_riempimento' ? `il riempimento è già presente (US ${hasRiemp})`
+        : `già documentata (taglio: ${hasTaglio || '—'}, riempimento: ${hasRiemp || '—'})`;
+      items.push({ numTomba, stato: 'skip', msg: 'Tomba saltata — ' + perche, tomba });
       return;
     }
     const numScheletro = String(tomba.us_scheletro || '').trim();
     if (!numScheletro) { items.push({ numTomba, stato: 'errore', msg: 'Tomba senza US scheletro collegata', tomba }); return; }
     const schedaScheletro = schede.find(s => sameNum(s.numero, numScheletro) && s._src !== 'rielab');
     if (!schedaScheletro) { items.push({ numTomba, stato: 'errore', msg: `US scheletro ${numScheletro} non trovata in archivio`, tomba }); return; }
-    items.push({ numTomba, stato: 'ok', tomba, schedaScheletro, numScheletro });
+
+    items.push({
+      numTomba, stato: 'ok', tomba, schedaScheletro, numScheletro,
+      creaTaglio, creaRiempimento: creaRiemp,
+      taglioEsistente: hasTaglio || '', riempimentoEsistente: hasRiemp || '',
+    });
   });
   let counter = _nextRielabCounter();
   items.forEach(it => {
     if (it.stato !== 'ok') return;
-    it.numTaglio = '-' + counter; counter++;
-    it.numRiempimento = String(counter); counter++;
+    if (it.creaTaglio)      { it.numTaglio = '-' + counter; counter++; }
+    if (it.creaRiempimento) { it.numRiempimento = String(counter); counter++; }
   });
   return items;
 }
 
-// Costruisce le due schede (Taglio + Riempimento) per una voce 'ok'
-// dell'anteprima, con campi ereditati dalla scheda scheletro e rapporti
-// stratigrafici reciproci già impostati (schema concordato).
+// Costruisce le schede da creare per una voce 'ok' dell'anteprima (solo
+// Taglio, solo Riempimento, o entrambi a seconda di creaTaglio/creaRiempimento),
+// con campi ereditati dalla scheda scheletro e i rapporti reciproci già
+// impostati — collegando anche a un pezzo già esistente, se presente.
 function _costruisciSchedeRielab(item) {
   const oggi = new Date().toISOString().slice(0,10);
   const now = new Date().toISOString();
@@ -3703,49 +3764,108 @@ function _costruisciSchedeRielab(item) {
     foto1_drive_id: '', foto2_drive_id: '',
     _src: 'rielab',
   });
-  const schedaTaglio = mk(item.numTaglio, 'Taglio', 'Taglio di fossa', 'Negativa');
-  const schedaRiempimento = mk(item.numRiempimento, 'Riempimento', 'Riempimento di fossa', 'Positiva');
-  // Rapporti reciproci: riempimento riempie il taglio, riempimento copre lo scheletro.
-  // Il reciproco "coperto da" sulla scheda scheletro (US reale) viene scritto a parte.
-  schedaRiempimento.rapporti = [{ tipo: 'riempie', us: item.numTaglio }, { tipo: 'copre', us: item.numScheletro }];
-  schedaTaglio.rapporti = [{ tipo: 'riempito_da', us: item.numRiempimento }];
-  return { schedaTaglio, schedaRiempimento };
+
+  const numTaglioFinale = item.creaTaglio ? item.numTaglio : item.taglioEsistente;
+  const numRiempFinale  = item.creaRiempimento ? item.numRiempimento : item.riempimentoEsistente;
+
+  const risultato = {};
+  if (item.creaTaglio) {
+    const schedaTaglio = mk(item.numTaglio, 'Taglio', 'Taglio di fossa', 'Negativa');
+    if (numRiempFinale) schedaTaglio.rapporti = [{ tipo: 'riempito_da', us: numRiempFinale }];
+    risultato.schedaTaglio = schedaTaglio;
+  }
+  if (item.creaRiempimento) {
+    const schedaRiempimento = mk(item.numRiempimento, 'Riempimento', 'Riempimento di fossa', 'Positiva');
+    const rap = [{ tipo: 'copre', us: item.numScheletro }];
+    if (numTaglioFinale) rap.unshift({ tipo: 'riempie', us: numTaglioFinale });
+    schedaRiempimento.rapporti = rap;
+    risultato.schedaRiempimento = schedaRiempimento;
+  }
+  return risultato;
 }
 
-// Esegue la creazione per tutte le voci 'ok' dell'anteprima: crea le due US
-// di rielaborazione, aggiunge il reciproco "coperto da" sulla scheda US
-// reale dello scheletro (scrittura chirurgica, stessa tecnica sicura di
-// modificaRapportoSuFoglio) e aggiorna la Tomba con i nuovi riferimenti.
-// Ogni tomba è indipendente: un errore su una non blocca le altre.
-async function confermaCreazioneRielab(items) {
+// Esegue la creazione per tutte le voci 'ok' dell'anteprima. Ogni chiamata al
+// foglio è protetta da timeout + ritentativo (v103), e ogni tomba è
+// indipendente: un errore su una non blocca le altre. onProgress (opzionale)
+// riceve una riga di log ad ogni passo, per mostrare avanzamento dal vivo
+// invece di un unico messaggio finale che può sparire senza essere letto.
+async function confermaCreazioneRielab(items, onProgress) {
   const okItems = items.filter(i => i.stato === 'ok');
-  if (!okItems.length) { showToast('⚠ Nessuna US da creare'); return; }
-  showToast('🏗️ Creazione in corso…');
+  const log = (msg) => { if (onProgress) onProgress(msg); };
+  if (!okItems.length) return { risultati: [], creati: 0, errori: 0 };
+
+  const risultati = [];
   let creati = 0, errori = 0;
-  for (const it of okItems) {
+
+  for (let idx = 0; idx < okItems.length; idx++) {
+    const it = okItems[idx];
+    const tag = `Tomba ${it.numTomba} (${idx + 1}/${okItems.length})`;
+
+    if (isOffline()) {
+      errori++;
+      risultati.push({ numTomba: it.numTomba, ok: false, msg: 'Offline — saltata' });
+      log(`✖ ${tag}: offline, saltata`);
+      continue;
+    }
+
     try {
       const { schedaTaglio, schedaRiempimento } = _costruisciSchedeRielab(it);
-      await saveSchedaRielabToSheets(schedaTaglio, true);
-      schede.push(schedaTaglio);
-      await saveSchedaRielabToSheets(schedaRiempimento, true);
-      schede.push(schedaRiempimento);
+      const pezzi = [];
 
-      await modificaRapportoSuFoglio(it.numScheletro, { tipo: 'coperto_da', us: it.numRiempimento }, 'add');
+      if (schedaTaglio) {
+        log(`⏳ ${tag}: creo Taglio US ${schedaTaglio.numero}…`);
+        await _conRitentativo(() => saveSchedaRielabToSheets(schedaTaglio, true), { etichetta: 'creazione Taglio US ' + schedaTaglio.numero });
+        schede.push(schedaTaglio);
+        pezzi.push('Taglio US ' + schedaTaglio.numero);
+      }
+      if (schedaRiempimento) {
+        log(`⏳ ${tag}: creo Riempimento US ${schedaRiempimento.numero}…`);
+        await _conRitentativo(() => saveSchedaRielabToSheets(schedaRiempimento, true), { etichetta: 'creazione Riempimento US ' + schedaRiempimento.numero });
+        schede.push(schedaRiempimento);
+        pezzi.push('Riempimento US ' + schedaRiempimento.numero);
+      }
 
-      const tombaAggiornata = { ...it.tomba, us_taglio: it.numTaglio, us_riempimento: it.numRiempimento };
-      await saveTombaToSheets(tombaAggiornata);
+      const numTaglioFinale = it.creaTaglio ? it.numTaglio : it.taglioEsistente;
+      const numRiempFinale  = it.creaRiempimento ? it.numRiempimento : it.riempimentoEsistente;
+
+      // Se il Riempimento è nuovo ma il Taglio esisteva già, scrive il reciproco su quel Taglio
+      if (schedaRiempimento && !it.creaTaglio && numTaglioFinale) {
+        log(`⏳ ${tag}: collego al Taglio US ${numTaglioFinale} già esistente…`);
+        await _conRitentativo(() => modificaRapportoSuFoglio(numTaglioFinale, { tipo: 'riempito_da', us: numRiempFinale }, 'add'), { etichetta: 'reciproco su Taglio ' + numTaglioFinale });
+      }
+      // Se il Taglio è nuovo ma il Riempimento esisteva già, scrive il reciproco su quel Riempimento
+      if (schedaTaglio && !it.creaRiempimento && numRiempFinale) {
+        log(`⏳ ${tag}: collego al Riempimento US ${numRiempFinale} già esistente…`);
+        await _conRitentativo(() => modificaRapportoSuFoglio(numRiempFinale, { tipo: 'riempie', us: numTaglioFinale }, 'add'), { etichetta: 'reciproco su Riempimento ' + numRiempFinale });
+      }
+      // Il reciproco "coperto da" sullo scheletro si scrive solo se il Riempimento è stato creato ora
+      if (schedaRiempimento) {
+        log(`⏳ ${tag}: collego allo scheletro US ${it.numScheletro}…`);
+        await _conRitentativo(() => modificaRapportoSuFoglio(it.numScheletro, { tipo: 'coperto_da', us: numRiempFinale }, 'add'), { etichetta: 'reciproco su scheletro ' + it.numScheletro });
+      }
+
+      const tombaAggiornata = { ...it.tomba };
+      if (schedaTaglio) tombaAggiornata.us_taglio = numTaglioFinale;
+      if (schedaRiempimento) tombaAggiornata.us_riempimento = numRiempFinale;
+      log(`⏳ ${tag}: aggiorno la scheda Tomba…`);
+      await _conRitentativo(() => saveTombaToSheets(tombaAggiornata), { etichetta: 'aggiornamento Tomba ' + it.numTomba });
       const idxT = tombe.findIndex(t => t.id === it.tomba.id);
       if (idxT !== -1) tombe[idxT] = tombaAggiornata;
 
       creati++;
+      const msg = pezzi.join(' + ');
+      risultati.push({ numTomba: it.numTomba, ok: true, msg });
+      log(`✅ ${tag}: ${msg}`);
     } catch (e) {
       console.warn('Creazione US rielaborazione: errore su tomba', it.numTomba, e);
       errori++;
+      const msg = 'Errore: ' + ((e && e.message) || (e && e.type) || 'sconosciuto');
+      risultati.push({ numTomba: it.numTomba, ok: false, msg });
+      log(`✖ ${tag}: ${msg}`);
     }
   }
   renderList(); renderStats(); renderTombe();
-  if (errori) showToast(`⚠ Create le US per ${creati} tomb${creati===1?'a':'e'}, ${errori} errori — controlla e riprova`);
-  else showToast(`✅ Create ${creati*2} US di rielaborazione per ${creati} tomb${creati===1?'a':'e'}`);
+  return { risultati, creati, errori };
 }
 
 // Pannello Strumenti → apre il tool di creazione massiva US taglio/riempimento.
@@ -3755,7 +3875,7 @@ function apriCreazioneUSRielaborazione() {
   overlay.id = 'rielabOverlay';
   overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px';
   const box = document.createElement('div');
-  box.style.cssText = 'background:var(--parchment);border:1px solid var(--border);border-radius:6px;max-width:620px;width:100%;max-height:88vh;display:flex;flex-direction:column;box-shadow:0 8px 32px rgba(0,0,0,0.3)';
+  box.style.cssText = 'background:var(--parchment);border:1px solid var(--border);border-radius:6px;max-width:640px;width:100%;max-height:88vh;display:flex;flex-direction:column;box-shadow:0 8px 32px rgba(0,0,0,0.3)';
 
   const head = document.createElement('div');
   head.style.cssText = 'padding:18px 20px 6px;font-family:"Space Mono",monospace;font-size:0.85rem;color:var(--earth);font-weight:700';
@@ -3763,7 +3883,15 @@ function apriCreazioneUSRielaborazione() {
 
   const sub = document.createElement('div');
   sub.style.cssText = 'padding:0 20px 10px;font-size:0.73rem;color:var(--muted);line-height:1.45';
-  sub.textContent = 'Per ogni numero di tomba, crea una US Taglio e una US Riempimento nella linguetta "us da rielaborazione", collega i rapporti stratigrafici e aggiorna la scheda Tomba. Le tombe già documentate (taglio/riempimento già presenti) vengono saltate automaticamente.';
+  sub.textContent = 'Per ogni numero di tomba, crea le US mancanti nella linguetta "us da rielaborazione", collega i rapporti stratigrafici e aggiorna la scheda Tomba. Le tombe già a posto vengono saltate automaticamente.';
+
+  const modoWrap = document.createElement('div');
+  modoWrap.style.cssText = 'padding:0 20px 10px;display:flex;gap:16px;flex-wrap:wrap;font-size:0.8rem;color:var(--ink)';
+  modoWrap.innerHTML = `
+    <label style="display:flex;align-items:center;gap:6px;cursor:pointer"><input type="radio" name="rielabModo" value="entrambi" checked> Taglio + Riempimento</label>
+    <label style="display:flex;align-items:center;gap:6px;cursor:pointer"><input type="radio" name="rielabModo" value="solo_taglio"> Solo Taglio</label>
+    <label style="display:flex;align-items:center;gap:6px;cursor:pointer"><input type="radio" name="rielabModo" value="solo_riempimento"> Solo Riempimento</label>
+  `;
 
   const inputWrap = document.createElement('div');
   inputWrap.style.cssText = 'padding:0 20px 12px';
@@ -3787,6 +3915,10 @@ function apriCreazioneUSRielaborazione() {
   const previewList = document.createElement('div');
   previewList.style.cssText = 'padding:0 20px;overflow-y:auto;flex:1';
 
+  // Pannello di avanzamento/risultato — resta a schermo, non sparisce da solo.
+  const progressBox = document.createElement('div');
+  progressBox.style.cssText = 'display:none;margin:0 20px 10px;padding:8px 10px;border:1px solid var(--border);border-radius:4px;background:var(--parchment-light);max-height:220px;overflow-y:auto;font-family:"Space Mono",monospace;font-size:0.68rem;line-height:1.6;white-space:pre-wrap';
+
   const foot = document.createElement('div');
   foot.style.cssText = 'padding:12px 20px;border-top:1px solid var(--border);display:flex;justify-content:space-between;gap:10px';
   const bClose = document.createElement('button');
@@ -3799,11 +3931,12 @@ function apriCreazioneUSRielaborazione() {
   foot.appendChild(bClose); foot.appendChild(bConfirm);
 
   let _previewItems = [];
+  const getModo = () => (document.querySelector('input[name="rielabModo"]:checked') || {}).value || 'entrambi';
 
-  previewBtn.onclick = () => {
+  function generaAnteprima() {
     const val = textarea.value || '';
     if (!val.trim()) { showToast('⚠ Inserisci almeno un numero tomba'); return; }
-    _previewItems = calcolaAnteprimaRielab(val);
+    _previewItems = calcolaAnteprimaRielab(val, getModo());
 
     const maxReale = _maxRealUSNumber();
     if (maxReale >= 1200) {
@@ -3815,15 +3948,19 @@ function apriCreazioneUSRielaborazione() {
 
     previewList.innerHTML = _previewItems.map(it => {
       if (it.stato === 'ok') {
+        const pezziTxt = [
+          it.creaTaglio ? `<span style="color:var(--earth)">✓ Taglio US ${it.numTaglio}</span>` : (it.taglioEsistente ? `Taglio già US ${it.taglioEsistente} (collegato)` : ''),
+          it.creaRiempimento ? `<span style="color:var(--earth)">✓ Riempimento US ${it.numRiempimento}</span>` : (it.riempimentoEsistente ? `Riempimento già US ${it.riempimentoEsistente} (collegato)` : ''),
+        ].filter(Boolean).join(' · ');
         return `<div style="border-top:1px solid var(--border);padding:9px 0;font-size:0.8rem">
           <b>Tomba ${it.numTomba}</b> — scheletro US ${it.numScheletro}<br>
-          <span style="color:var(--earth)">✓ Taglio US ${it.numTaglio}</span> · <span style="color:var(--earth)">Riempimento US ${it.numRiempimento}</span>
+          ${pezziTxt}
           <div style="font-size:0.7rem;color:var(--muted);margin-top:2px">Area ${it.schedaScheletro.area||'—'} · Anno ${it.schedaScheletro.anno||'—'}</div>
         </div>`;
       }
       if (it.stato === 'skip') {
         return `<div style="border-top:1px solid var(--border);padding:9px 0;font-size:0.8rem;color:var(--muted)">
-          <b>Tomba ${it.numTomba}</b> — ⏭ saltata: ${it.msg}
+          <b>Tomba ${it.numTomba}</b> — ⏭ ${it.msg}
         </div>`;
       }
       return `<div style="border-top:1px solid var(--border);padding:9px 0;font-size:0.8rem;color:#b23a2e">
@@ -3834,8 +3971,12 @@ function apriCreazioneUSRielaborazione() {
     const nOk = _previewItems.filter(i => i.stato === 'ok').length;
     bConfirm.disabled = nOk === 0;
     bConfirm.style.opacity = nOk === 0 ? '0.5' : '1';
-    bConfirm.textContent = nOk ? `✓ Conferma e crea (${nOk} tomb${nOk===1?'a':'e'} · ${nOk*2} US)` : '✓ Conferma e crea';
-  };
+    bConfirm.textContent = nOk ? `✓ Conferma e crea (${nOk} tomb${nOk===1?'a':'e'})` : '✓ Conferma e crea';
+  }
+  previewBtn.onclick = generaAnteprima;
+  modoWrap.querySelectorAll('input[name="rielabModo"]').forEach(r => r.addEventListener('change', () => {
+    if (_previewItems.length) generaAnteprima(); // ricalcola se l'anteprima era già stata generata
+  }));
 
   bConfirm.onclick = async () => {
     if (isOffline()) { showToast('⚠ Offline — impossibile procedere'); return; }
@@ -3844,18 +3985,35 @@ function apriCreazioneUSRielaborazione() {
     const ok = await showConfirm({
       icon: '🏗️',
       title: 'Confermi la creazione?',
-      message: `Verranno create ${nOk*2} US (${nOk} Taglio + ${nOk} Riempimento) nella linguetta "us da rielaborazione" e aggiornate ${nOk} schede Tomba.`,
-      detail: 'L\'operazione scrive sul foglio Google condiviso.',
+      message: `Verranno create/collegate le US mancanti per ${nOk} tomb${nOk===1?'a':'e'} nella linguetta "us da rielaborazione".`,
+      detail: 'L\'operazione scrive sul foglio Google condiviso, una tomba alla volta.',
       okLabel: '🏗️ Crea', okClass: 'btn-primary'
     });
     if (!ok) return;
-    bConfirm.disabled = true; bConfirm.textContent = 'Creazione in corso…';
-    await confermaCreazioneRielab(_previewItems);
-    overlay.remove();
+
+    // Blocca i controlli e mostra il pannello di avanzamento (resta a schermo)
+    previewBtn.disabled = true;
+    modoWrap.querySelectorAll('input').forEach(r => r.disabled = true);
+    textarea.disabled = true;
+    bConfirm.disabled = true; bConfirm.textContent = '⏳ Creazione in corso…'; bConfirm.style.opacity = '0.6';
+    progressBox.style.display = 'block';
+    progressBox.textContent = '';
+    const scriviLog = (riga) => { progressBox.textContent += riga + '\n'; progressBox.scrollTop = progressBox.scrollHeight; };
+
+    const { risultati, creati, errori } = await confermaCreazioneRielab(_previewItems, scriviLog);
+
+    scriviLog('');
+    scriviLog(errori ? `⚠ Fatto con errori: ${creati} tomb${creati===1?'a':'e'} completate, ${errori} con problemi (vedi sopra).`
+                      : `✅ Fatto: ${creati} tomb${creati===1?'a':'e'} completate senza errori.`);
+    bConfirm.style.display = 'none';
+    bClose.textContent = 'Chiudi';
+    bClose.className = errori ? 'btn btn-danger' : 'btn btn-primary';
+    showToast(errori ? `⚠ Completato con ${errori} errori` : `✅ ${creati} tomb${creati===1?'a':'e'} completate`);
   };
 
-  box.appendChild(head); box.appendChild(sub); box.appendChild(inputWrap);
-  box.appendChild(previewBtn); box.appendChild(warnBox); box.appendChild(previewList); box.appendChild(foot);
+  box.appendChild(head); box.appendChild(sub); box.appendChild(modoWrap); box.appendChild(inputWrap);
+  box.appendChild(previewBtn); box.appendChild(warnBox); box.appendChild(previewList);
+  box.appendChild(progressBox); box.appendChild(foot);
   overlay.appendChild(box); document.body.appendChild(overlay);
   setTimeout(() => textarea.focus(), 100);
 }
@@ -9197,9 +9355,9 @@ function showToast(msg) {
   <script>
     if ('serviceWorker' in navigator && !location.hostname.includes('claudeusercontent.com')) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./service-worker.js?v=102')
+        navigator.serviceWorker.register('./service-worker.js?v=103')
           .then(reg => {
-            console.log('SW registrato v102:', reg.scope);
+            console.log('SW registrato v103:', reg.scope);
             // Forza aggiornamento immediato se c'è una nuova versione
             reg.update();
           })
