@@ -1,12 +1,11 @@
 // ─────────────────────────────────────────────────────────────────
 // SMP Scavo — Service Worker
-// v106 — Matrix: i messaggi di ciclo stratigrafico impossibile ora
-// mostrano il tipo di rapporto su ogni freccia del ciclo (es. "US 45
-// —copre→ US 46 —taglia→ US 47 —copre→ US 45") invece dei soli numeri, e
-// ogni conflitto in elenco (cicli e contraddizioni) è cliccabile per
-// aprire direttamente la scheda US coinvolta.
+// v107 — Matrix: nuovo risolutore guidato dei conflitti ("🛠 Risolvi
+// conflitti"), che mostra un conflitto alla volta con i pulsanti per
+// correggerlo (Correggi/Rimuovi/Inverti) e scrive direttamente sul foglio,
+// passando da solo al prossimo conflitto dopo ogni correzione riuscita.
 // ─────────────────────────────────────────────────────────────────
-const CACHE_NAME = 'smp-scavo-v106';
+const CACHE_NAME = 'smp-scavo-v107';
 
 // Shell dell'app da rendere disponibile offline.
 const APP_SHELL = [

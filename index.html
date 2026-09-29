@@ -5,7 +5,7 @@
   <!-- PWA -->
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#C9963A">
-  <meta name="app-version" content="106">
+  <meta name="app-version" content="107">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="SMP Scavo">
@@ -1737,6 +1737,7 @@
           <span id="matrix-info" style="font-size:0.72rem;color:var(--muted);font-family:'Space Mono',monospace;white-space:nowrap"></span>
           <button class="btn btn-secondary" onclick="exportMatrixSVG()" style="font-size:0.72rem;padding:5px 10px;white-space:nowrap">⬇ SVG</button>
           <button class="btn btn-secondary" onclick="exportMatrixPDF()" style="font-size:0.72rem;padding:5px 10px;white-space:nowrap">⬇ PDF</button>
+          <button class="btn btn-primary" onclick="apriRisolutoreConflitti()" id="btn-risolvi-conflitti" style="font-size:0.72rem;padding:5px 10px;white-space:nowrap;display:none">🛠 Risolvi conflitti</button>
           <button class="btn btn-secondary" onclick="printMatrixConflicts()" id="btn-print-conflicts" style="font-size:0.72rem;padding:5px 10px;white-space:nowrap;display:none">🖨 Report conflitti</button>
           <button class="btn btn-secondary" onclick="aggiornaMatrix()" title="Ricarica le modifiche senza uscire dalla sezione" style="font-size:0.72rem;padding:5px 10px;white-space:nowrap">🔄 Aggiorna</button>
           <button class="btn btn-secondary" onclick="showView('list')" style="font-size:0.72rem;padding:5px 10px;white-space:nowrap">← Home</button>
@@ -3364,6 +3365,41 @@ async function modificaRapportoSuFoglio(numScheda, rapporto, azione) {
   const mem = schede.find(x => sameNum(x.numero, numScheda));
   if (mem) mem.rapporti = arr;
   return { ok: true, reason: azione };
+}
+
+// v107: gemella di modificaRapportoSuFoglio, ma per SOSTITUIRE un rapporto
+// sbagliato con quello corretto in un solo giro di lettura/scrittura (invece
+// di due chiamate separate rimuovi+aggiungi, più lente e più a rischio in
+// caso di errore a metà). Usata dal risolutore guidato dei conflitti Matrix
+// per "Correggi" (contraddizioni) e "Inverti verso" (cicli).
+async function sostituisciRapportoSuFoglio(numScheda, rapVecchio, rapNuovo) {
+  const numColIdx = HEADERS.indexOf('numero');
+  const rapColIdx = HEADERS.indexOf('rapporti');
+  const colNumero = _colLetter(numColIdx + 1);
+  const colRap    = _colLetter(rapColIdx + 1);
+  async function trovaRiga(sheetName) {
+    const data = await sheetsGet(`${sheetName}!A2:${colNumero}10000`);
+    const rows = data.values || [];
+    return rows.findIndex(r => sameNum(r[numColIdx], numScheda));
+  }
+  let sheetName = SHEET_NAME;
+  let rowIndex = await trovaRiga(sheetName);
+  if (rowIndex < 0) {
+    sheetName = SHEET_RIELAB;
+    rowIndex = await trovaRiga(sheetName);
+  }
+  if (rowIndex < 0) return { ok: false, reason: 'notfound' };
+  const sheetRow = rowIndex + 2;
+  const cell = await sheetsGet(`${sheetName}!${colRap}${sheetRow}`);
+  let arr = [];
+  try { arr = JSON.parse((cell.values && cell.values[0] && cell.values[0][0]) || '[]') || []; } catch(e) { arr = []; }
+  arr = arr.filter(x => !(x.tipo === rapVecchio.tipo && String(x.us) === String(rapVecchio.us)));
+  const giaPresente = arr.some(x => x.tipo === rapNuovo.tipo && String(x.us) === String(rapNuovo.us));
+  if (!giaPresente) arr.push({ tipo: rapNuovo.tipo, us: String(rapNuovo.us) });
+  await sheetsUpdate(`${sheetName}!${colRap}${sheetRow}`, [[ JSON.stringify(arr) ]]);
+  const mem = schede.find(x => sameNum(x.numero, numScheda));
+  if (mem) mem.rapporti = arr;
+  return { ok: true };
 }
 
 // Dialogo di riconciliazione: per ogni asimmetria, tre scelte (Aggiungi/Rimuovi/Salta).
@@ -8399,10 +8435,22 @@ function validateMatrixConflicts(sel) {
             const label = tipoRapportoLabel(r.tipo);
             const labelB = tipoRapportoLabel(bTipo);
             const labelExpected = tipoRapportoLabel(expectedFromB);
+            // v107: due possibili correzioni, una per lato — il risolutore
+            // guidato le propone entrambe, l'utente sceglie quale US va
+            // corretta in base a cosa sa davvero dello scavo.
+            const expectedFromA = INVERSE[bTipo];
             conflicts.push({
               type: 'contradiction',
               msg: `US ${a} dichiara "${label}" US ${b} — ma US ${b} dichiara "${labelB}" US ${a} (atteso: "${labelExpected}")`,
-              nodes: [a, b]
+              nodes: [a, b],
+              fixA: expectedFromA ? {
+                onScheda: a, oldRap: { tipo: r.tipo, us: b }, newRap: { tipo: expectedFromA, us: b },
+                label: `Correggi US ${a} → "${tipoRapportoLabel(expectedFromA)}" US ${b}`
+              } : null,
+              fixB: {
+                onScheda: b, oldRap: { tipo: bTipo, us: a }, newRap: { tipo: expectedFromB, us: a },
+                label: `Correggi US ${b} → "${labelExpected}" US ${a}`
+              }
             });
           }
         });
@@ -8449,7 +8497,7 @@ function validateMatrixConflicts(sel) {
           const hops = cycle.map((n, i) => {
             const next = cycle[(i + 1) % cycle.length];
             const meta = (edgeMeta[n] || {})[next] || {};
-            return { from: n, to: next, tipo: meta.tipo || '?', declaredOn: meta.declaredOn || n };
+            return { from: n, to: next, tipo: meta.tipo || '?', literal: meta.literal || null };
           });
           const testoCiclo = hops.map(h => `US ${h.from} —${h.tipo}→`).join(' ') + ` US ${cycle[0]}`;
           conflicts.push({
@@ -8495,12 +8543,16 @@ function buildSuccGraph(sel, usSet) {
       const a = String(s.numero), b = String(r.us);
       if (!usSet.has(b)) return;
       // Solo relazioni che implicano ordine temporale (non lega/appoggia/uguale)
+      // v107: "literal" registra il rapporto ESATTAMENTE come scritto (su
+      // quale scheda, con quale tipo, verso quale US) — serve al risolutore
+      // guidato per sapere cosa rimuovere/invertire davvero sul foglio.
+      const literal = { onScheda: a, tipo: r.tipo, us: b };
       if (['copre', 'taglia', 'riempie'].includes(r.tipo)) {
         if (!succ[a].includes(b)) succ[a].push(b);
-        if (!edgeMeta[a][b]) edgeMeta[a][b] = { tipo: FORWARD_LABEL[r.tipo], declaredOn: a };
+        if (!edgeMeta[a][b]) edgeMeta[a][b] = { tipo: FORWARD_LABEL[r.tipo], literal };
       } else if (['coperto_da', 'tagliato_da', 'riempito_da'].includes(r.tipo)) {
         if (!succ[b].includes(a)) succ[b].push(a);
-        if (!edgeMeta[b][a]) edgeMeta[b][a] = { tipo: FORWARD_LABEL[r.tipo], declaredOn: a };
+        if (!edgeMeta[b][a]) edgeMeta[b][a] = { tipo: FORWARD_LABEL[r.tipo], literal };
       }
     });
   });
@@ -8707,9 +8759,11 @@ function renderMatrix() {
     warnBody.style.display = 'none';
     warnToggle.textContent = '▼ mostra';
     document.getElementById('btn-print-conflicts').style.display = 'inline-block';
+    document.getElementById('btn-risolvi-conflitti').style.display = 'inline-block';
   } else {
     warnPanel.style.display = 'none';
     document.getElementById('btn-print-conflicts').style.display = 'none';
+    document.getElementById('btn-risolvi-conflitti').style.display = 'none';
   }
 
   // ── 2. UNION-FIND per gruppi uguale_a ───────────────────────────
@@ -9329,6 +9383,167 @@ function printMatrixConflicts() {
   w.print();
 }
 
+// v107 — Risolutore guidato dei conflitti Matrix: mostra UN conflitto alla
+// volta (con un contatore "Conflitto X di Y") invece dell'intero elenco
+// insieme, per non affastellare troppi pulsanti a schermo. Per ogni
+// conflitto propone le correzioni possibili — l'utente sceglie quale
+// applicare, il click scrive sul foglio con le stesse funzioni chirurgiche
+// già usate da "Reciproci rapporti" (aggiungi/rimuovi) più una nuova
+// gemella per "sostituisci" — e dopo una scrittura riuscita ricontrolla
+// tutto e passa al prossimo conflitto ancora aperto.
+function _matrixSelCorrente() {
+  const settore = document.getElementById('matrix-settore')?.value || '';
+  const anno    = document.getElementById('matrix-anno')?.value || '';
+  return schede.filter(s => {
+    if (settore && s.saggio !== settore) return false;
+    if (anno    && s.anno   !== anno)    return false;
+    return true;
+  });
+}
+
+function apriRisolutoreConflitti() {
+  const ex = document.getElementById('risolutoreOverlay'); if (ex) ex.remove();
+  const overlay = document.createElement('div');
+  overlay.id = 'risolutoreOverlay';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px';
+  const box = document.createElement('div');
+  box.style.cssText = 'background:var(--parchment);border:1px solid var(--border);border-radius:6px;max-width:600px;width:100%;max-height:88vh;display:flex;flex-direction:column;box-shadow:0 8px 32px rgba(0,0,0,0.3)';
+
+  const head = document.createElement('div');
+  head.style.cssText = 'padding:18px 20px 2px;font-family:"Space Mono",monospace;font-size:0.85rem;color:var(--earth);font-weight:700;display:flex;justify-content:space-between;align-items:center;gap:10px';
+  const appVer = (document.querySelector('meta[name="app-version"]') || {}).content || '?';
+  head.innerHTML = `<span>🛠 Risolvi conflitti Matrix</span><span style="font-size:0.65rem;color:var(--muted);font-weight:400">v${appVer}</span>`;
+
+  const counter = document.createElement('div');
+  counter.style.cssText = 'padding:2px 20px 10px;font-size:0.72rem;color:var(--muted);font-family:"Space Mono",monospace';
+
+  const body = document.createElement('div');
+  body.style.cssText = 'padding:4px 20px 14px;overflow-y:auto;flex:1';
+
+  const foot = document.createElement('div');
+  foot.style.cssText = 'padding:12px 20px;border-top:1px solid var(--border);display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap';
+  const bPrev = document.createElement('button');
+  bPrev.className = 'btn btn-secondary'; bPrev.textContent = '◀ Precedente'; bPrev.style.cssText = 'font-size:0.75rem';
+  const navRight = document.createElement('div');
+  navRight.style.cssText = 'display:flex;gap:8px;flex-wrap:wrap';
+  const bSkip = document.createElement('button');
+  bSkip.className = 'btn btn-secondary'; bSkip.textContent = 'Salta'; bSkip.style.cssText = 'font-size:0.75rem';
+  const bNext = document.createElement('button');
+  bNext.className = 'btn btn-secondary'; bNext.textContent = 'Successivo ▶'; bNext.style.cssText = 'font-size:0.75rem';
+  const bClose = document.createElement('button');
+  bClose.className = 'btn btn-primary'; bClose.textContent = 'Chiudi'; bClose.style.cssText = 'font-size:0.75rem';
+  navRight.appendChild(bSkip); navRight.appendChild(bNext); navRight.appendChild(bClose);
+  foot.appendChild(bPrev); foot.appendChild(navRight);
+
+  box.appendChild(head); box.appendChild(counter); box.appendChild(body); box.appendChild(foot);
+  overlay.appendChild(box); document.body.appendChild(overlay);
+
+  let idx = 0;
+  let conflictsCorrenti = [];
+
+  function ricarica() {
+    const sel = _matrixSelCorrente();
+    const { conflicts } = validateMatrixConflicts(sel);
+    conflictsCorrenti = conflicts;
+    idx = 0;
+    render();
+    // Aggiorna anche il matrix e il pannello riepilogo dietro la finestra.
+    if (typeof renderMatrix === 'function') renderMatrix();
+  }
+
+  function rigaAzione(azioni, labelBtn, onClick, cls) {
+    const wrap = document.createElement('div');
+    wrap.style.cssText = 'display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:4px';
+    const b = document.createElement('button');
+    b.className = cls || 'btn btn-secondary'; b.style.cssText = 'font-size:0.75rem;padding:6px 10px';
+    b.textContent = labelBtn;
+    b.onclick = async () => {
+      azioni.querySelectorAll('button').forEach(x => x.disabled = true);
+      b.textContent = '…';
+      try {
+        await onClick();
+        showToast('✓ Corretto — passo al prossimo conflitto');
+        ricarica();
+      } catch (e) {
+        azioni.querySelectorAll('button').forEach(x => x.disabled = false);
+        b.textContent = labelBtn;
+        showToast('⚠ ' + (navigator.onLine === false ? 'Offline — riprova con la rete' : 'Errore di scrittura, riprova'));
+      }
+    };
+    wrap.appendChild(b);
+    azioni.appendChild(wrap);
+  }
+
+  function render() {
+    if (!conflictsCorrenti.length) {
+      counter.textContent = '';
+      body.innerHTML = `<div style="text-align:center;padding:30px 10px;color:var(--earth);font-size:0.95rem;font-weight:700">✅ Tutti i conflitti sono stati risolti!</div>`;
+      bPrev.disabled = true; bNext.disabled = true; bSkip.disabled = true;
+      return;
+    }
+    bPrev.disabled = false; bNext.disabled = false; bSkip.disabled = false;
+    counter.textContent = `Conflitto ${idx + 1} di ${conflictsCorrenti.length}`;
+    const c = conflictsCorrenti[idx];
+    body.innerHTML = '';
+
+    const msg = document.createElement('div');
+    msg.style.cssText = 'font-size:0.82rem;color:var(--ink);line-height:1.5;margin-bottom:14px';
+    msg.innerHTML = `<span style="margin-right:6px">${c.type === 'cycle' ? '🔄' : '⚡'}</span>${c.msg}`;
+    body.appendChild(msg);
+
+    const azioni = document.createElement('div');
+    azioni.style.cssText = 'display:flex;flex-direction:column;gap:6px';
+
+    if (c.type === 'contradiction') {
+      if (c.fixA) rigaAzione(azioni, c.fixA.label, () => sostituisciRapportoSuFoglio(c.fixA.onScheda, c.fixA.oldRap, c.fixA.newRap), 'btn btn-primary');
+      if (c.fixB) rigaAzione(azioni, c.fixB.label, () => sostituisciRapportoSuFoglio(c.fixB.onScheda, c.fixB.oldRap, c.fixB.newRap), 'btn btn-primary');
+    } else if (c.type === 'cycle') {
+      (c.hops || []).forEach(h => {
+        if (!h.literal) return;
+        const riga = document.createElement('div');
+        riga.style.cssText = 'border-top:1px solid var(--border);padding:9px 0 2px';
+        const titolo = document.createElement('div');
+        titolo.style.cssText = 'font-size:0.76rem;color:var(--muted);margin-bottom:6px';
+        titolo.textContent = `US ${h.from} —${h.tipo}→ US ${h.to}`;
+        riga.appendChild(titolo);
+        const inner = document.createElement('div');
+        inner.style.cssText = 'display:flex;gap:8px;flex-wrap:wrap';
+        rigaAzione(inner, '− Rimuovi questo rapporto',
+          () => modificaRapportoSuFoglio(h.literal.onScheda, { tipo: h.literal.tipo, us: h.literal.us }, 'remove'));
+        const inverso = RAPPORTI_INVERSI[h.literal.tipo];
+        if (inverso) {
+          rigaAzione(inner, '⇄ Inverti verso',
+            () => sostituisciRapportoSuFoglio(h.literal.onScheda, { tipo: h.literal.tipo, us: h.literal.us }, { tipo: inverso, us: h.literal.us }));
+        }
+        riga.appendChild(inner);
+        azioni.appendChild(riga);
+      });
+    }
+
+    body.appendChild(azioni);
+
+    // Link rapidi alle schede coinvolte, come nel pannello riepilogo.
+    const numToId = {};
+    _matrixSelCorrente().forEach(s => { numToId[String(s.numero)] = s.id; });
+    const chips = (c.nodes || []).map(n => {
+      const id = numToId[n];
+      return id ? `<span onclick="openUSModal('${id}')" title="Apri scheda US ${n}" style="cursor:pointer;text-decoration:underline;text-underline-offset:2px;opacity:0.85;margin-right:10px">🔍 US ${n}</span>` : '';
+    }).join('');
+    if (chips) {
+      const chipsWrap = document.createElement('div');
+      chipsWrap.style.cssText = 'margin-top:14px;padding-top:10px;border-top:1px solid var(--border);font-size:0.7rem';
+      chipsWrap.innerHTML = chips;
+      body.appendChild(chipsWrap);
+    }
+  }
+
+  bPrev.onclick = () => { if (!conflictsCorrenti.length) return; idx = (idx - 1 + conflictsCorrenti.length) % conflictsCorrenti.length; render(); };
+  bNext.onclick = () => { if (!conflictsCorrenti.length) return; idx = (idx + 1) % conflictsCorrenti.length; render(); };
+  bSkip.onclick = () => bNext.onclick();
+  bClose.onclick = () => { overlay.remove(); if (typeof renderMatrix === 'function') renderMatrix(); };
+
+  ricarica();
+}
 
 function toggleDropdown(id) {
   const dd = document.getElementById(id);
@@ -9413,9 +9628,9 @@ function showToast(msg) {
   <script>
     if ('serviceWorker' in navigator && !location.hostname.includes('claudeusercontent.com')) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./service-worker.js?v=106')
+        navigator.serviceWorker.register('./service-worker.js?v=107')
           .then(reg => {
-            console.log('SW registrato v106:', reg.scope);
+            console.log('SW registrato v107:', reg.scope);
             // Forza aggiornamento immediato se c'è una nuova versione
             reg.update();
           })
