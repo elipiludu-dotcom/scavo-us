@@ -1,17 +1,12 @@
 // ─────────────────────────────────────────────────────────────────
 // SMP Scavo — Service Worker
-// v105 — CORREZIONE IMPORTANTE: quando si apre/ricarica la pagina, il
-// service worker va sempre a scaricare index.html "di sua iniziativa" dalla
-// rete. Finora questo scaricamento poteva restituire una copia già in
-// cache del BROWSER (non della nostra cache app) anche dopo un refresh
-// forzato, perché una richiesta di rete fatta da dentro il service worker
-// non eredita automaticamente la richiesta "senza cache" della pagina.
-// Risultato pratico: dopo aver caricato una versione nuova su GitHub, a
-// volte l'app continuava a mostrare quella vecchia anche ricaricando più
-// volte. Ora ogni apertura della pagina scarica index.html con un
-// parametro sempre diverso, così è impossibile ricevere una copia vecchia.
+// v106 — Matrix: i messaggi di ciclo stratigrafico impossibile ora
+// mostrano il tipo di rapporto su ogni freccia del ciclo (es. "US 45
+// —copre→ US 46 —taglia→ US 47 —copre→ US 45") invece dei soli numeri, e
+// ogni conflitto in elenco (cicli e contraddizioni) è cliccabile per
+// aprire direttamente la scheda US coinvolta.
 // ─────────────────────────────────────────────────────────────────
-const CACHE_NAME = 'smp-scavo-v105';
+const CACHE_NAME = 'smp-scavo-v106';
 
 // Shell dell'app da rendere disponibile offline.
 const APP_SHELL = [

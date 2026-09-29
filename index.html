@@ -5,7 +5,7 @@
   <!-- PWA -->
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#C9963A">
-  <meta name="app-version" content="105">
+  <meta name="app-version" content="106">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="SMP Scavo">
@@ -8411,7 +8411,7 @@ function validateMatrixConflicts(sel) {
   });
 
   // Rilevamento cicli con DFS
-  const succ = buildSuccGraph(sel, usSet);
+  const { succ, edgeMeta } = buildSuccGraph(sel, usSet);
   const visited = {}, inStack = {};
   sel.forEach(s => { visited[s.numero] = false; inStack[s.numero] = false; });
 
@@ -8442,10 +8442,21 @@ function validateMatrixConflicts(sel) {
         if (!reportedCycles.has(key)) {
           reportedCycles.add(key);
           cycle.forEach(n => conflictNodes.add(n));
+          // v106: per ogni tratto del ciclo (compreso quello di chiusura,
+          // dall'ultimo US di nuovo al primo) recupera il tipo di rapporto
+          // che lo determina, così il messaggio mostra ESATTAMENTE quale
+          // rapporto dichiarato crea ogni collegamento del ciclo.
+          const hops = cycle.map((n, i) => {
+            const next = cycle[(i + 1) % cycle.length];
+            const meta = (edgeMeta[n] || {})[next] || {};
+            return { from: n, to: next, tipo: meta.tipo || '?', declaredOn: meta.declaredOn || n };
+          });
+          const testoCiclo = hops.map(h => `US ${h.from} —${h.tipo}→`).join(' ') + ` US ${cycle[0]}`;
           conflicts.push({
             type: 'cycle',
-            msg: `Ciclo stratigrafico impossibile: US ${cycle.join(' → US ')}`,
-            nodes: cycle
+            msg: `Ciclo stratigrafico impossibile: ${testoCiclo}`,
+            nodes: cycle,
+            hops
           });
         }
       }
@@ -8468,7 +8479,15 @@ function tipoRapportoLabel(tipo) {
 
 function buildSuccGraph(sel, usSet) {
   const succ = {};
-  sel.forEach(s => { succ[s.numero] = []; });
+  // v106: edgeMeta[a][b] registra CON QUALE rapporto e su quale scheda è
+  // stato dichiarato l'arco a→b, così chi legge un ciclo può vedere subito
+  // il tipo di rapporto invece di dover riaprire le schede per scoprirlo.
+  // La label è sempre nel verso della freccia (es. arco a→b da "coperto_da"
+  // dichiarato su a diventa, in avanti, "copre" da b verso a — vedi mappa).
+  const FORWARD_LABEL = { copre: 'copre', taglia: 'taglia', riempie: 'riempie',
+    coperto_da: 'copre', tagliato_da: 'taglia', riempito_da: 'riempie' };
+  const edgeMeta = {};
+  sel.forEach(s => { succ[s.numero] = []; edgeMeta[s.numero] = {}; });
   sel.forEach(s => {
     const raps = Array.isArray(s.rapporti) ? s.rapporti :
       (() => { try { return JSON.parse(s.rapporti || '[]'); } catch { return []; } })();
@@ -8478,12 +8497,14 @@ function buildSuccGraph(sel, usSet) {
       // Solo relazioni che implicano ordine temporale (non lega/appoggia/uguale)
       if (['copre', 'taglia', 'riempie'].includes(r.tipo)) {
         if (!succ[a].includes(b)) succ[a].push(b);
+        if (!edgeMeta[a][b]) edgeMeta[a][b] = { tipo: FORWARD_LABEL[r.tipo], declaredOn: a };
       } else if (['coperto_da', 'tagliato_da', 'riempito_da'].includes(r.tipo)) {
         if (!succ[b].includes(a)) succ[b].push(a);
+        if (!edgeMeta[b][a]) edgeMeta[b][a] = { tipo: FORWARD_LABEL[r.tipo], declaredOn: a };
       }
     });
   });
-  return succ;
+  return { succ, edgeMeta };
 }
 
 function toggleMatrixWarnings() {
@@ -8666,11 +8687,22 @@ function renderMatrix() {
   if (conflicts.length > 0) {
     warnPanel.style.display = 'block';
     warnTitle.textContent = `${conflicts.length} conflitt${conflicts.length === 1 ? 'o' : 'i'} stratigrafico${conflicts.length === 1 ? '' : 'i'} rilevat${conflicts.length === 1 ? 'o' : 'i'} — correggi le schede US prima di usare questo matrix`;
-    warnList.innerHTML = conflicts.map(c =>
-      `<li style="font-family:'Space Mono',monospace;font-size:0.65rem;color:${c.type === 'cycle' ? '#e8a020' : '#d94f30'};padding:3px 0;border-bottom:1px solid rgba(255,255,255,0.05);line-height:1.5">
-        <span style="margin-right:6px">${c.type === 'cycle' ? '🔄' : '⚡'}</span>${c.msg}
-      </li>`
-    ).join('');
+    // v106: mappa numero US → id scheda, per rendere ogni conflitto
+    // cliccabile e aprire direttamente la scheda coinvolta (stessa funzione
+    // già usata cliccando un nodo del matrix, nessun codice nuovo di apertura).
+    const numToId = {};
+    sel.forEach(s => { numToId[String(s.numero)] = s.id; });
+    warnList.innerHTML = conflicts.map(c => {
+      const chips = (c.nodes || []).map(n => {
+        const id = numToId[n];
+        if (!id) return '';
+        return `<span onclick="openUSModal('${id}')" title="Apri scheda US ${n}" style="cursor:pointer;text-decoration:underline;text-underline-offset:2px;opacity:0.85;margin-right:10px">🔍 US ${n}</span>`;
+      }).join('');
+      return `<li style="font-family:'Space Mono',monospace;font-size:0.65rem;color:${c.type === 'cycle' ? '#e8a020' : '#d94f30'};padding:3px 0;border-bottom:1px solid rgba(255,255,255,0.05);line-height:1.5">
+        <div class="cf-msg"><span style="margin-right:6px">${c.type === 'cycle' ? '🔄' : '⚡'}</span>${c.msg}</div>
+        ${chips ? `<div class="cf-chips" style="margin-top:3px;font-size:0.62rem">${chips}</div>` : ''}
+      </li>`;
+    }).join('');
     // Chiuso di default — l'utente lo apre se serve
     warnBody.style.display = 'none';
     warnToggle.textContent = '▼ mostra';
@@ -9252,8 +9284,11 @@ function printMatrixConflicts() {
 
   const oggi = new Date().toLocaleDateString('it-IT', { day:'2-digit', month:'long', year:'numeric' });
   const righe = Array.from(listEl.children).map(li => {
-    const icon = li.textContent.trim().startsWith('🔄') ? '🔄' : '⚡';
-    const testo = li.textContent.trim().replace(/^[🔄⚡]\s*/, '');
+    // v106: legge solo il testo del messaggio (.cf-msg), escludendo i "🔍 US n"
+    // cliccabili aggiunti a schermo, così il report stampato resta pulito.
+    const msgEl = li.querySelector('.cf-msg') || li;
+    const icon = msgEl.textContent.trim().startsWith('🔄') ? '🔄' : '⚡';
+    const testo = msgEl.textContent.trim().replace(/^[🔄⚡]\s*/, '');
     const colore = icon === '🔄' ? '#b07010' : '#c03020';
     return `<tr>
       <td style="padding:6px 10px;font-size:13px;color:${colore};border-bottom:1px solid #e0d8cc;vertical-align:top">${icon}</td>
@@ -9378,9 +9413,9 @@ function showToast(msg) {
   <script>
     if ('serviceWorker' in navigator && !location.hostname.includes('claudeusercontent.com')) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./service-worker.js?v=105')
+        navigator.serviceWorker.register('./service-worker.js?v=106')
           .then(reg => {
-            console.log('SW registrato v105:', reg.scope);
+            console.log('SW registrato v106:', reg.scope);
             // Forza aggiornamento immediato se c'è una nuova versione
             reg.update();
           })
