@@ -5,7 +5,7 @@
   <!-- PWA -->
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#C9963A">
-  <meta name="app-version" content="108">
+  <meta name="app-version" content="109">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="SMP Scavo">
@@ -8471,12 +8471,18 @@ function validateMatrixConflicts(sel) {
     for (const nb of (succ[node] || [])) {
       if (!visited[nb]) {
         const cycle = dfsCycle(nb, [...path, nb]);
-        if (cycle) return cycle;
+        // v108: prima di uscire con un ciclo trovato, azzera SEMPRE il
+        // marcatore "in pila" di questo nodo. Prima restava acceso e le
+        // ricerche successive scambiavano nodi già visitati per parte di un
+        // ciclo, segnalando cicli inesistenti (con un "?" nel rapporto).
+        if (cycle) { inStack[node] = false; return cycle; }
       } else if (inStack[nb]) {
         // Trovato ciclo: estrai il loop
         const cycleStart = path.indexOf(String(nb));
-        const loop = cycleStart >= 0 ? path.slice(cycleStart) : [...path, String(nb)];
-        return loop;
+        if (cycleStart >= 0) {
+          inStack[node] = false;
+          return path.slice(cycleStart);
+        }
       }
     }
     inStack[node] = false;
@@ -9791,9 +9797,9 @@ function showToast(msg) {
   <script>
     if ('serviceWorker' in navigator && !location.hostname.includes('claudeusercontent.com')) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./service-worker.js?v=108')
+        navigator.serviceWorker.register('./service-worker.js?v=109')
           .then(reg => {
-            console.log('SW registrato v108:', reg.scope);
+            console.log('SW registrato v109:', reg.scope);
             // Forza aggiornamento immediato se c'è una nuova versione
             reg.update();
           })

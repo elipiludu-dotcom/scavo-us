@@ -1,12 +1,11 @@
 // ─────────────────────────────────────────────────────────────────
 // SMP Scavo — Service Worker
-// v108 — Risolutore conflitti Matrix: su PC è un pannello flottante
-// trascinabile (le schede si aprono sopra); su schermi stretti si nasconde
-// quando si apre una scheda. Dopo ogni correzione: stato "scrivo/aggiorno",
-// riquadro verde di conferma, dati riletti dal foglio, e il conflitto
-// successivo compare solo dopo il click su "Vai al prossimo".
+// v109 — Matrix: corretto il rilevamento dei cicli, che segnalava cicli
+// inesistenti (con "—?→" nel messaggio) passando per US già coinvolte in un
+// ciclo vero. Include il risolutore conflitti v108 (pannello flottante,
+// conferma verde dopo ogni correzione, aggiornamento dati automatico).
 // ─────────────────────────────────────────────────────────────────
-const CACHE_NAME = 'smp-scavo-v108';
+const CACHE_NAME = 'smp-scavo-v109';
 
 // Shell dell'app da rendere disponibile offline.
 const APP_SHELL = [
