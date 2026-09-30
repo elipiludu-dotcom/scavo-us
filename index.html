@@ -5,7 +5,7 @@
   <!-- PWA -->
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#C9963A">
-  <meta name="app-version" content="107">
+  <meta name="app-version" content="108">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="SMP Scavo">
@@ -2678,10 +2678,12 @@ async function loadFromSheets(showMsg = false, keepView = false) {
       document.querySelectorAll('.nav-tab')[0].classList.add('active');
     }
     if (showMsg) showToast('✓ Dati aggiornati (' + schede.length + ' schede)');
+    return true;
   } catch (e) {
     setSyncStatus('error', 'Errore sync');
     showToast('⚠ Errore di sincronizzazione');
     console.error(e);
+    return false;
   }
 }
 
@@ -8678,12 +8680,13 @@ function _mxInitEvents() {
 
 
 async function aggiornaMatrix() {
-  if (isOffline()) { showToast('⚠ Offline — impossibile aggiornare ora'); return; }
+  if (isOffline()) { showToast('⚠ Offline — impossibile aggiornare ora'); return false; }
   const s = document.getElementById('matrix-settore')?.value || '';
   const a = document.getElementById('matrix-anno')?.value || '';
   setSyncStatus('syncing', 'Aggiornamento…');
   try {
-    await loadFromSheets(false, true);
+    // v108: loadFromSheets segnala l'esito (true/false) invece di lanciare
+    if ((await loadFromSheets(false, true)) === false) throw new Error('Lettura dal foglio non riuscita');
     popolaFiltriMatrix();
     const selS = document.getElementById('matrix-settore');
     const selA = document.getElementById('matrix-anno');
@@ -8692,10 +8695,12 @@ async function aggiornaMatrix() {
     renderMatrix();
     setSyncStatus('ok', 'Sincronizzato');
     showToast('🔄 Matrix aggiornata');
+    return true;
   } catch(e) {
     setSyncStatus('error', 'Errore sync');
     showToast('⚠ Aggiornamento non riuscito');
     console.error(e);
+    return false;
   }
 }
 
@@ -9403,16 +9408,45 @@ function _matrixSelCorrente() {
 
 function apriRisolutoreConflitti() {
   const ex = document.getElementById('risolutoreOverlay'); if (ex) ex.remove();
+  // v108: su schermi larghi (PC) il risolutore è un pannello flottante,
+  // trascinabile, senza sfondo scuro e senza bloccare il resto dell'app;
+  // su schermi stretti (iPhone) resta una finestra a tutto schermo che si
+  // nasconde quando si apre una scheda e ricompare alla sua chiusura.
+  const flottante = window.innerWidth > 768;
+
   const overlay = document.createElement('div');
   overlay.id = 'risolutoreOverlay';
-  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px';
   const box = document.createElement('div');
-  box.style.cssText = 'background:var(--parchment);border:1px solid var(--border);border-radius:6px;max-width:600px;width:100%;max-height:88vh;display:flex;flex-direction:column;box-shadow:0 8px 32px rgba(0,0,0,0.3)';
+  if (flottante) {
+    overlay.style.cssText = 'position:fixed;inset:0;z-index:9999;pointer-events:none';
+    box.style.cssText = 'position:absolute;pointer-events:auto;width:min(560px,calc(100vw - 32px));background:var(--parchment);border:1px solid var(--border);border-radius:6px;max-height:88vh;display:flex;flex-direction:column;box-shadow:0 8px 32px rgba(0,0,0,0.35)';
+    box.style.top = '72px';
+    box.style.left = Math.max(16, window.innerWidth - 592) + 'px';
+  } else {
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px';
+    box.style.cssText = 'background:var(--parchment);border:1px solid var(--border);border-radius:6px;max-width:600px;width:100%;max-height:88vh;display:flex;flex-direction:column;box-shadow:0 8px 32px rgba(0,0,0,0.3)';
+  }
 
   const head = document.createElement('div');
-  head.style.cssText = 'padding:18px 20px 2px;font-family:"Space Mono",monospace;font-size:0.85rem;color:var(--earth);font-weight:700;display:flex;justify-content:space-between;align-items:center;gap:10px';
+  head.style.cssText = 'padding:14px 14px 4px 20px;font-family:"Space Mono",monospace;font-size:0.85rem;color:var(--earth);font-weight:700;display:flex;justify-content:space-between;align-items:center;gap:10px;touch-action:none' + (flottante ? ';cursor:move;user-select:none' : '');
   const appVer = (document.querySelector('meta[name="app-version"]') || {}).content || '?';
-  head.innerHTML = `<span>🛠 Risolvi conflitti Matrix</span><span style="font-size:0.65rem;color:var(--muted);font-weight:400">v${appVer}</span>`;
+  const titolo = document.createElement('span');
+  titolo.textContent = '🛠 Risolvi conflitti Matrix';
+  const headDx = document.createElement('span');
+  headDx.style.cssText = 'display:flex;align-items:center;gap:8px';
+  const verSpan = document.createElement('span');
+  verSpan.style.cssText = 'font-size:0.65rem;color:var(--muted);font-weight:400';
+  verSpan.textContent = 'v' + appVer;
+  headDx.appendChild(verSpan);
+  const bMin = document.createElement('button');
+  bMin.className = 'btn btn-secondary'; bMin.textContent = '▁'; bMin.title = 'Riduci a barra';
+  bMin.style.cssText = 'font-size:0.75rem;padding:2px 8px;cursor:pointer';
+  if (flottante) headDx.appendChild(bMin);
+  const bX = document.createElement('button');
+  bX.className = 'btn btn-secondary'; bX.textContent = '✕'; bX.title = 'Chiudi';
+  bX.style.cssText = 'font-size:0.75rem;padding:2px 8px;cursor:pointer';
+  headDx.appendChild(bX);
+  head.appendChild(titolo); head.appendChild(headDx);
 
   const counter = document.createElement('div');
   counter.style.cssText = 'padding:2px 20px 10px;font-size:0.72rem;color:var(--muted);font-family:"Space Mono",monospace';
@@ -9438,17 +9472,153 @@ function apriRisolutoreConflitti() {
   box.appendChild(head); box.appendChild(counter); box.appendChild(body); box.appendChild(foot);
   overlay.appendChild(box); document.body.appendChild(overlay);
 
+  // ── Trascinamento e riduzione a barra (solo PC) ──
+  if (flottante) {
+    let drag = null;
+    head.addEventListener('pointerdown', e => {
+      if (e.target.closest('button')) return;
+      const r = box.getBoundingClientRect();
+      drag = { dx: e.clientX - r.left, dy: e.clientY - r.top };
+      try { head.setPointerCapture(e.pointerId); } catch (_) {}
+      e.preventDefault();
+    });
+    head.addEventListener('pointermove', e => {
+      if (!drag) return;
+      const w = box.offsetWidth;
+      const x = Math.min(Math.max(-w + 80, e.clientX - drag.dx), window.innerWidth - 80);
+      const y = Math.min(Math.max(0, e.clientY - drag.dy), window.innerHeight - 40);
+      box.style.left = x + 'px'; box.style.top = y + 'px';
+    });
+    const fineDrag = () => { drag = null; };
+    head.addEventListener('pointerup', fineDrag);
+    head.addEventListener('pointercancel', fineDrag);
+    let ridotto = false;
+    bMin.onclick = () => {
+      ridotto = !ridotto;
+      counter.style.display = body.style.display = foot.style.display = ridotto ? 'none' : '';
+      bMin.textContent = ridotto ? '▢' : '▁';
+      bMin.title = ridotto ? 'Ripristina' : 'Riduci a barra';
+    };
+  }
+
+  // ── Apertura scheda dalla lente ──
+  // La scheda si apre SOPRA il risolutore (z-index temporaneamente alzato).
+  // Su schermi stretti il risolutore si nasconde e ricompare alla chiusura.
+  function apriScheda(id) {
+    const mo = document.getElementById('us-modal-overlay');
+    const stretto = !flottante;
+    if (stretto) overlay.style.display = 'none';
+    openUSModal(id);
+    if (!mo || mo.style.display === 'none') {
+      // scheda non trovata / non aperta: ripristina subito
+      if (stretto) overlay.style.display = 'flex';
+      return;
+    }
+    mo.style.zIndex = '10001';
+    const obs = new MutationObserver(() => {
+      if (mo.style.display === 'none') {
+        obs.disconnect();
+        mo.style.zIndex = '';
+        if (stretto && document.body.contains(overlay)) overlay.style.display = 'flex';
+      }
+    });
+    obs.observe(mo, { attributes: true, attributeFilter: ['style'] });
+  }
+
   let idx = 0;
   let conflictsCorrenti = [];
 
-  function ricarica() {
-    const sel = _matrixSelCorrente();
-    const { conflicts } = validateMatrixConflicts(sel);
+  function ricalcola() {
+    const { conflicts } = validateMatrixConflicts(_matrixSelCorrente());
     conflictsCorrenti = conflicts;
     idx = 0;
+  }
+
+  function ricarica() {
+    ricalcola();
     render();
-    // Aggiorna anche il matrix e il pannello riepilogo dietro la finestra.
     if (typeof renderMatrix === 'function') renderMatrix();
+  }
+
+  function setNav(abilitati) {
+    [bPrev, bNext, bSkip, bClose, bX].forEach(b => { b.disabled = !abilitati; });
+  }
+
+  // Riquadro di stato che sostituisce il contenuto: lavoro / ok / errore.
+  function boxStato(tipo, titoloTxt, dettaglio, bottoni) {
+    const col = {
+      lavoro: ['rgba(200,160,60,0.14)', '#c8a03c'],
+      ok:     ['rgba(60,150,90,0.18)',  '#3c9a5a'],
+      errore: ['rgba(200,70,60,0.16)',  '#c8463c']
+    }[tipo];
+    body.innerHTML = '';
+    const b = document.createElement('div');
+    b.style.cssText = `background:${col[0]};border:2px solid ${col[1]};border-radius:6px;padding:18px 16px;text-align:center`;
+    const t = document.createElement('div');
+    t.style.cssText = 'font-size:0.95rem;font-weight:700;color:var(--ink);margin-bottom:8px;line-height:1.4';
+    t.textContent = titoloTxt;
+    const d = document.createElement('div');
+    d.style.cssText = 'font-size:0.8rem;color:var(--ink);line-height:1.5;margin-bottom:' + (bottoni && bottoni.length ? '14px' : '0');
+    d.textContent = dettaglio || '';
+    b.appendChild(t); if (dettaglio) b.appendChild(d);
+    (bottoni || []).forEach(x => {
+      const bt = document.createElement('button');
+      bt.className = x.primary ? 'btn btn-primary' : 'btn btn-secondary';
+      bt.style.cssText = 'font-size:0.85rem;padding:9px 16px;margin:0 4px';
+      bt.textContent = x.label;
+      bt.onclick = x.onClick;
+      b.appendChild(bt);
+    });
+    body.appendChild(b);
+    body.scrollTop = 0;
+  }
+
+  async function aggiornaPoi() {
+    setNav(false);
+    boxStato('lavoro', '⏳ Aggiorno i dati dal foglio…', 'Attendi: il prossimo conflitto comparirà solo a fine aggiornamento.');
+    let ok = false;
+    try { ok = await aggiornaMatrix(); } catch (e) { console.error(e); ok = false; }
+    if (!ok) {
+      bClose.disabled = false; bX.disabled = false;
+      boxStato('errore', '⚠ Correzione scritta, ma aggiornamento dati non riuscito',
+        'Le schede potrebbero mostrare ancora i dati vecchi. Controlla la connessione e riprova.',
+        [{ label: '🔄 Riprova aggiornamento', primary: true, onClick: aggiornaPoi }]);
+      return;
+    }
+    ricalcola();
+    const n = conflictsCorrenti.length;
+    counter.textContent = n ? `Conflitti rimasti: ${n}` : '';
+    if (n) {
+      boxStato('ok', '✓ Fatto — correzione scritta e dati aggiornati',
+        `Ora puoi aprire le schede: mostrano già i dati nuovi. Conflitti rimasti: ${n}.`,
+        [{ label: 'Vai al prossimo conflitto ▶', primary: true, onClick: () => { setNav(true); render(); } }]);
+      bClose.disabled = false; bX.disabled = false;
+    } else {
+      bClose.disabled = false; bX.disabled = false;
+      boxStato('ok', '✅ Fatto — nessun conflitto rimasto',
+        'Correzione scritta e dati aggiornati. Tutti i conflitti sono risolti.',
+        [{ label: 'Chiudi', primary: true, onClick: () => bClose.onclick() }]);
+    }
+  }
+
+  async function eseguiCorrezione(fn) {
+    setNav(false);
+    boxStato('lavoro', '⏳ Scrivo la correzione sul foglio…', 'Attendi il messaggio verde prima di fare altro.');
+    try {
+      await fn();
+    } catch (e) {
+      console.error(e);
+      setNav(true);
+      render();
+      const err = document.createElement('div');
+      err.style.cssText = 'background:rgba(200,70,60,0.16);border:2px solid #c8463c;border-radius:6px;padding:10px 12px;margin-bottom:12px;font-size:0.8rem;color:var(--ink);line-height:1.5';
+      err.textContent = '⚠ ' + (navigator.onLine === false
+        ? 'Sei offline: correzione non scritta. Riprova quando torna la rete.'
+        : 'Scrittura non riuscita. Controlla la connessione e riprova con gli stessi pulsanti.');
+      body.insertBefore(err, body.firstChild);
+      return;
+    }
+    await aggiornaPoi();
   }
 
   function rigaAzione(azioni, labelBtn, onClick, cls) {
@@ -9457,19 +9627,7 @@ function apriRisolutoreConflitti() {
     const b = document.createElement('button');
     b.className = cls || 'btn btn-secondary'; b.style.cssText = 'font-size:0.75rem;padding:6px 10px';
     b.textContent = labelBtn;
-    b.onclick = async () => {
-      azioni.querySelectorAll('button').forEach(x => x.disabled = true);
-      b.textContent = '…';
-      try {
-        await onClick();
-        showToast('✓ Corretto — passo al prossimo conflitto');
-        ricarica();
-      } catch (e) {
-        azioni.querySelectorAll('button').forEach(x => x.disabled = false);
-        b.textContent = labelBtn;
-        showToast('⚠ ' + (navigator.onLine === false ? 'Offline — riprova con la rete' : 'Errore di scrittura, riprova'));
-      }
-    };
+    b.onclick = () => eseguiCorrezione(onClick);
     wrap.appendChild(b);
     azioni.appendChild(wrap);
   }
@@ -9502,10 +9660,10 @@ function apriRisolutoreConflitti() {
         if (!h.literal) return;
         const riga = document.createElement('div');
         riga.style.cssText = 'border-top:1px solid var(--border);padding:9px 0 2px';
-        const titolo = document.createElement('div');
-        titolo.style.cssText = 'font-size:0.76rem;color:var(--muted);margin-bottom:6px';
-        titolo.textContent = `US ${h.from} —${h.tipo}→ US ${h.to}`;
-        riga.appendChild(titolo);
+        const titoloH = document.createElement('div');
+        titoloH.style.cssText = 'font-size:0.76rem;color:var(--muted);margin-bottom:6px';
+        titoloH.textContent = `US ${h.from} —${h.tipo}→ US ${h.to}`;
+        riga.appendChild(titoloH);
         const inner = document.createElement('div');
         inner.style.cssText = 'display:flex;gap:8px;flex-wrap:wrap';
         rigaAzione(inner, '− Rimuovi questo rapporto',
@@ -9522,25 +9680,30 @@ function apriRisolutoreConflitti() {
 
     body.appendChild(azioni);
 
-    // Link rapidi alle schede coinvolte, come nel pannello riepilogo.
+    // Link rapidi alle schede coinvolte (aprono la scheda sopra il risolutore).
     const numToId = {};
     _matrixSelCorrente().forEach(s => { numToId[String(s.numero)] = s.id; });
-    const chips = (c.nodes || []).map(n => {
+    const chipsWrap = document.createElement('div');
+    chipsWrap.style.cssText = 'margin-top:14px;padding-top:10px;border-top:1px solid var(--border);font-size:0.7rem';
+    let nChips = 0;
+    (c.nodes || []).forEach(n => {
       const id = numToId[n];
-      return id ? `<span onclick="openUSModal('${id}')" title="Apri scheda US ${n}" style="cursor:pointer;text-decoration:underline;text-underline-offset:2px;opacity:0.85;margin-right:10px">🔍 US ${n}</span>` : '';
-    }).join('');
-    if (chips) {
-      const chipsWrap = document.createElement('div');
-      chipsWrap.style.cssText = 'margin-top:14px;padding-top:10px;border-top:1px solid var(--border);font-size:0.7rem';
-      chipsWrap.innerHTML = chips;
-      body.appendChild(chipsWrap);
-    }
+      if (!id) return;
+      const sp = document.createElement('span');
+      sp.style.cssText = 'cursor:pointer;text-decoration:underline;text-underline-offset:2px;opacity:0.85;margin-right:10px';
+      sp.title = 'Apri scheda US ' + n;
+      sp.textContent = '🔍 US ' + n;
+      sp.onclick = () => apriScheda(id);
+      chipsWrap.appendChild(sp); nChips++;
+    });
+    if (nChips) body.appendChild(chipsWrap);
   }
 
   bPrev.onclick = () => { if (!conflictsCorrenti.length) return; idx = (idx - 1 + conflictsCorrenti.length) % conflictsCorrenti.length; render(); };
   bNext.onclick = () => { if (!conflictsCorrenti.length) return; idx = (idx + 1) % conflictsCorrenti.length; render(); };
   bSkip.onclick = () => bNext.onclick();
   bClose.onclick = () => { overlay.remove(); if (typeof renderMatrix === 'function') renderMatrix(); };
+  bX.onclick = () => bClose.onclick();
 
   ricarica();
 }
@@ -9628,9 +9791,9 @@ function showToast(msg) {
   <script>
     if ('serviceWorker' in navigator && !location.hostname.includes('claudeusercontent.com')) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./service-worker.js?v=107')
+        navigator.serviceWorker.register('./service-worker.js?v=108')
           .then(reg => {
-            console.log('SW registrato v107:', reg.scope);
+            console.log('SW registrato v108:', reg.scope);
             // Forza aggiornamento immediato se c'è una nuova versione
             reg.update();
           })

@@ -1,11 +1,12 @@
 // ─────────────────────────────────────────────────────────────────
 // SMP Scavo — Service Worker
-// v107 — Matrix: nuovo risolutore guidato dei conflitti ("🛠 Risolvi
-// conflitti"), che mostra un conflitto alla volta con i pulsanti per
-// correggerlo (Correggi/Rimuovi/Inverti) e scrive direttamente sul foglio,
-// passando da solo al prossimo conflitto dopo ogni correzione riuscita.
+// v108 — Risolutore conflitti Matrix: su PC è un pannello flottante
+// trascinabile (le schede si aprono sopra); su schermi stretti si nasconde
+// quando si apre una scheda. Dopo ogni correzione: stato "scrivo/aggiorno",
+// riquadro verde di conferma, dati riletti dal foglio, e il conflitto
+// successivo compare solo dopo il click su "Vai al prossimo".
 // ─────────────────────────────────────────────────────────────────
-const CACHE_NAME = 'smp-scavo-v107';
+const CACHE_NAME = 'smp-scavo-v108';
 
 // Shell dell'app da rendere disponibile offline.
 const APP_SHELL = [
