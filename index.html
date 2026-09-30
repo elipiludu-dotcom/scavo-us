@@ -5,7 +5,7 @@
   <!-- PWA -->
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#C9963A">
-  <meta name="app-version" content="109">
+  <meta name="app-version" content="110">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="SMP Scavo">
@@ -8460,62 +8460,107 @@ function validateMatrixConflicts(sel) {
     });
   });
 
-  // Rilevamento cicli con DFS
+  // Rilevamento cicli.
+  // v110: ricerca esaustiva per "gruppi" di US mutuamente raggiungibili
+  // (componenti fortemente connesse, algoritmo di Tarjan). Ogni gruppo che
+  // contiene almeno un ciclo viene SEMPRE segnalato: nessun ciclo vero può
+  // restare nascosto. Dentro ogni gruppo si segnala un ciclo, poi si "toglie"
+  // (solo nel calcolo, mai sul foglio) l'arco di chiusura e si cerca il
+  // ciclo successivo, finché il gruppo non è più ciclico: il numero di
+  // segnalazioni è così una stima realistica dei rapporti da correggere.
   const { succ, edgeMeta } = buildSuccGraph(sel, usSet);
-  const visited = {}, inStack = {};
-  sel.forEach(s => { visited[s.numero] = false; inStack[s.numero] = false; });
+  const nodiTutti = sel.map(s => String(s.numero));
 
-  function dfsCycle(node, path) {
-    visited[node] = true;
-    inStack[node] = true;
-    for (const nb of (succ[node] || [])) {
-      if (!visited[nb]) {
-        const cycle = dfsCycle(nb, [...path, nb]);
-        // v108: prima di uscire con un ciclo trovato, azzera SEMPRE il
-        // marcatore "in pila" di questo nodo. Prima restava acceso e le
-        // ricerche successive scambiavano nodi già visitati per parte di un
-        // ciclo, segnalando cicli inesistenti (con un "?" nel rapporto).
-        if (cycle) { inStack[node] = false; return cycle; }
-      } else if (inStack[nb]) {
-        // Trovato ciclo: estrai il loop
-        const cycleStart = path.indexOf(String(nb));
-        if (cycleStart >= 0) {
-          inStack[node] = false;
-          return path.slice(cycleStart);
+  // Tarjan iterativo (evita limiti di ricorsione con molte US)
+  function componentiCicliche() {
+    let counter = 0;
+    const index = {}, low = {}, onSt = {}, st = [], comps = [];
+    for (const root of nodiTutti) {
+      if (index[root] !== undefined) continue;
+      const work = [[root, 0]];
+      index[root] = low[root] = counter++; st.push(root); onSt[root] = true;
+      while (work.length) {
+        const top = work[work.length - 1];
+        const v = top[0];
+        const nbs = succ[v] || [];
+        if (top[1] < nbs.length) {
+          const w = nbs[top[1]++];
+          if (index[w] === undefined) {
+            index[w] = low[w] = counter++; st.push(w); onSt[w] = true;
+            work.push([w, 0]);
+          } else if (onSt[w]) {
+            low[v] = Math.min(low[v], index[w]);
+          }
+        } else {
+          if (low[v] === index[v]) {
+            const comp = []; let w;
+            do { w = st.pop(); onSt[w] = false; comp.push(w); } while (w !== v);
+            if (comp.length > 1 || (succ[v] || []).includes(v)) comps.push(comp);
+          }
+          work.pop();
+          if (work.length) {
+            const p = work[work.length - 1][0];
+            low[p] = Math.min(low[p], low[v]);
+          }
         }
       }
     }
-    inStack[node] = false;
+    return comps;
+  }
+
+  // Trova UN ciclo dentro un gruppo, ignorando gli archi già "tolti".
+  function trovaUnCiclo(comp, tolti) {
+    const inComp = new Set(comp);
+    const stato = {}; // 1 = in pila, 2 = finito
+    for (const root of comp) {
+      if (stato[root]) continue;
+      const path = [root], iter = [0];
+      stato[root] = 1;
+      while (path.length) {
+        const v = path[path.length - 1];
+        const nbs = succ[v] || [];
+        let i = iter[iter.length - 1];
+        let avanzato = false;
+        while (i < nbs.length) {
+          const w = nbs[i++];
+          if (!inComp.has(w) || tolti.has(v + '\u0001' + w)) continue;
+          if (stato[w] === 1) {
+            iter[iter.length - 1] = i;
+            return path.slice(path.indexOf(w));
+          }
+          if (!stato[w]) {
+            iter[iter.length - 1] = i;
+            stato[w] = 1; path.push(w); iter.push(0);
+            avanzato = true; break;
+          }
+        }
+        if (!avanzato) { stato[v] = 2; path.pop(); iter.pop(); }
+      }
+    }
     return null;
   }
 
-  const reportedCycles = new Set();
-  sel.forEach(s => {
-    if (!visited[s.numero]) {
-      const cycle = dfsCycle(s.numero, [String(s.numero)]);
-      if (cycle) {
-        const key = [...cycle].sort().join(',');
-        if (!reportedCycles.has(key)) {
-          reportedCycles.add(key);
-          cycle.forEach(n => conflictNodes.add(n));
-          // v106: per ogni tratto del ciclo (compreso quello di chiusura,
-          // dall'ultimo US di nuovo al primo) recupera il tipo di rapporto
-          // che lo determina, così il messaggio mostra ESATTAMENTE quale
-          // rapporto dichiarato crea ogni collegamento del ciclo.
-          const hops = cycle.map((n, i) => {
-            const next = cycle[(i + 1) % cycle.length];
-            const meta = (edgeMeta[n] || {})[next] || {};
-            return { from: n, to: next, tipo: meta.tipo || '?', literal: meta.literal || null };
-          });
-          const testoCiclo = hops.map(h => `US ${h.from} —${h.tipo}→`).join(' ') + ` US ${cycle[0]}`;
-          conflicts.push({
-            type: 'cycle',
-            msg: `Ciclo stratigrafico impossibile: ${testoCiclo}`,
-            nodes: cycle,
-            hops
-          });
-        }
-      }
+  componentiCicliche().forEach(comp => {
+    const tolti = new Set();
+    let guardia = 0;
+    let ciclo;
+    while ((ciclo = trovaUnCiclo(comp, tolti)) && guardia++ < 200) {
+      ciclo.forEach(n => conflictNodes.add(n));
+      // v106: tipo di rapporto di ogni tratto (compreso quello di chiusura)
+      const hops = ciclo.map((n, i) => {
+        const next = ciclo[(i + 1) % ciclo.length];
+        const meta = (edgeMeta[n] || {})[next] || {};
+        return { from: n, to: next, tipo: meta.tipo || '?', literal: meta.literal || null };
+      });
+      const testoCiclo = hops.map(h => `US ${h.from} —${h.tipo}→`).join(' ') + ` US ${ciclo[0]}`;
+      conflicts.push({
+        type: 'cycle',
+        msg: `Ciclo stratigrafico impossibile: ${testoCiclo}`,
+        nodes: ciclo,
+        hops
+      });
+      const ultimo = ciclo[ciclo.length - 1];
+      tolti.add(ultimo + '\u0001' + ciclo[0]);
     }
   });
 
@@ -9797,9 +9842,9 @@ function showToast(msg) {
   <script>
     if ('serviceWorker' in navigator && !location.hostname.includes('claudeusercontent.com')) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./service-worker.js?v=109')
+        navigator.serviceWorker.register('./service-worker.js?v=110')
           .then(reg => {
-            console.log('SW registrato v109:', reg.scope);
+            console.log('SW registrato v110:', reg.scope);
             // Forza aggiornamento immediato se c'è una nuova versione
             reg.update();
           })

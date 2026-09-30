@@ -1,11 +1,11 @@
 // ─────────────────────────────────────────────────────────────────
 // SMP Scavo — Service Worker
-// v109 — Matrix: corretto il rilevamento dei cicli, che segnalava cicli
-// inesistenti (con "—?→" nel messaggio) passando per US già coinvolte in un
-// ciclo vero. Include il risolutore conflitti v108 (pannello flottante,
-// conferma verde dopo ogni correzione, aggiornamento dati automatico).
+// v110 — Matrix: rilevamento dei cicli riscritto in modo esaustivo (gruppi
+// di US mutuamente raggiungibili, algoritmo di Tarjan): nessun ciclo vero
+// resta nascosto e nessun ciclo falso viene segnalato (niente più "—?→").
+// Include il risolutore conflitti v108 e la correzione dei falsi cicli v109.
 // ─────────────────────────────────────────────────────────────────
-const CACHE_NAME = 'smp-scavo-v109';
+const CACHE_NAME = 'smp-scavo-v110';
 
 // Shell dell'app da rendere disponibile offline.
 const APP_SHELL = [
