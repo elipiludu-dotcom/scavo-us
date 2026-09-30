@@ -5,7 +5,7 @@
   <!-- PWA -->
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#C9963A">
-  <meta name="app-version" content="110">
+  <meta name="app-version" content="111">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="SMP Scavo">
@@ -9457,6 +9457,48 @@ function _matrixSelCorrente() {
   });
 }
 
+// v111 — Correzioni del risolutore che agiscono su ENTRAMBE le schede.
+// Un rapporto di sequenza (copre/taglia/riempie) è di solito scritto due volte:
+// su una US come «copre 46» e sull'altra come «coperto da 45». Il grafo del
+// Matrix considera valida la relazione se compare su UNA QUALSIASI delle due:
+// toccare una sola scheda lasciava quindi il conflitto invariato. Qui si
+// correggono entrambe, e si restituisce l'elenco di cosa è stato modificato.
+function _errRis(msg) { const e = new Error(msg); e.userMsg = msg; return e; }
+function _lblRap(t) { return tipoRapportoLabel(t).toLowerCase(); }
+
+async function rimuoviRapportoDaEntrambe(from, to, tipoFwd) {
+  const inv = RAPPORTI_INVERSI[tipoFwd];
+  if (!inv) throw _errRis('Tipo di rapporto non gestito: ' + tipoFwd);
+  const righe = [];
+  const r1 = await modificaRapportoSuFoglio(from, { tipo: tipoFwd, us: to }, 'remove');
+  if (!r1 || r1.ok === false) throw _errRis(`US ${from} non trovata sul foglio.`);
+  if (r1.reason === 'remove') righe.push(`US ${from}: rimosso «${_lblRap(tipoFwd)} US ${to}»`);
+  const r2 = await modificaRapportoSuFoglio(to, { tipo: inv, us: from }, 'remove');
+  if (!r2 || r2.ok === false) throw _errRis(`US ${to} non trovata sul foglio.`);
+  if (r2.reason === 'remove') righe.push(`US ${to}: rimosso «${_lblRap(inv)} US ${from}»`);
+  if (!righe.length) throw _errRis(`Il rapporto US ${from} «${_lblRap(tipoFwd)}» US ${to} non risulta scritto sul foglio né su US ${from} né su US ${to}. Aggiorna i dati e riprova.`);
+  return righe;
+}
+
+async function invertiRapportoSuEntrambe(from, to, tipoFwd) {
+  const inv = RAPPORTI_INVERSI[tipoFwd];
+  if (!inv) throw _errRis('Tipo di rapporto non gestito: ' + tipoFwd);
+  const r1 = await sostituisciRapportoSuFoglio(from, { tipo: tipoFwd, us: to }, { tipo: inv, us: to });
+  if (!r1 || r1.ok === false) throw _errRis(`US ${from} non trovata sul foglio.`);
+  const r2 = await sostituisciRapportoSuFoglio(to, { tipo: inv, us: from }, { tipo: tipoFwd, us: from });
+  if (!r2 || r2.ok === false) throw _errRis(`US ${to} non trovata sul foglio.`);
+  return [
+    `US ${from}: «${_lblRap(tipoFwd)} US ${to}» → «${_lblRap(inv)} US ${to}»`,
+    `US ${to}: «${_lblRap(inv)} US ${from}» → «${_lblRap(tipoFwd)} US ${from}»`
+  ];
+}
+
+async function correggiUnLato(onScheda, oldRap, newRap) {
+  const r = await sostituisciRapportoSuFoglio(onScheda, oldRap, newRap);
+  if (!r || r.ok === false) throw _errRis(`US ${onScheda} non trovata sul foglio.`);
+  return [`US ${onScheda}: «${_lblRap(oldRap.tipo)} US ${oldRap.us}» → «${_lblRap(newRap.tipo)} US ${newRap.us}»`];
+}
+
 function apriRisolutoreConflitti() {
   const ex = document.getElementById('risolutoreOverlay'); if (ex) ex.remove();
   // v108: su schermi larghi (PC) il risolutore è un pannello flottante,
@@ -9609,7 +9651,7 @@ function apriRisolutoreConflitti() {
     t.style.cssText = 'font-size:0.95rem;font-weight:700;color:var(--ink);margin-bottom:8px;line-height:1.4';
     t.textContent = titoloTxt;
     const d = document.createElement('div');
-    d.style.cssText = 'font-size:0.8rem;color:var(--ink);line-height:1.5;margin-bottom:' + (bottoni && bottoni.length ? '14px' : '0');
+    d.style.cssText = 'white-space:pre-line;font-size:0.8rem;color:var(--ink);line-height:1.5;margin-bottom:' + (bottoni && bottoni.length ? '14px' : '0');
     d.textContent = dettaglio || '';
     b.appendChild(t); if (dettaglio) b.appendChild(d);
     (bottoni || []).forEach(x => {
@@ -9624,52 +9666,63 @@ function apriRisolutoreConflitti() {
     body.scrollTop = 0;
   }
 
-  async function aggiornaPoi() {
+  async function aggiornaPoi(righe) {
+    const elenco = (righe && righe.length) ? '\n\nModificato sul foglio:\n' + righe.join('\n') : '';
     setNav(false);
-    boxStato('lavoro', '⏳ Aggiorno i dati dal foglio…', 'Attendi: il prossimo conflitto comparirà solo a fine aggiornamento.');
+    boxStato('lavoro', '⏳ Aggiorno i dati dal foglio…', 'Attendi: il prossimo conflitto comparirà solo a fine aggiornamento.' + elenco);
     let ok = false;
     try { ok = await aggiornaMatrix(); } catch (e) { console.error(e); ok = false; }
     if (!ok) {
       bClose.disabled = false; bX.disabled = false;
       boxStato('errore', '⚠ Correzione scritta, ma aggiornamento dati non riuscito',
-        'Le schede potrebbero mostrare ancora i dati vecchi. Controlla la connessione e riprova.',
-        [{ label: '🔄 Riprova aggiornamento', primary: true, onClick: aggiornaPoi }]);
+        'Le schede potrebbero mostrare ancora i dati vecchi. Controlla la connessione e riprova.' + elenco,
+        [{ label: '🔄 Riprova aggiornamento', primary: true, onClick: () => aggiornaPoi(righe) }]);
       return;
     }
+    const prima = conflittiPrimaCorrezione;
     ricalcola();
     const n = conflictsCorrenti.length;
     counter.textContent = n ? `Conflitti rimasti: ${n}` : '';
+    const delta = (typeof prima === 'number') ? (prima - n) : null;
+    const esitoConteggio = (delta === null) ? '' :
+      (delta > 0 ? `\nConflitti: da ${prima} a ${n}.` :
+       delta === 0 ? `\n⚠ Il numero di conflitti non è sceso (${n}): il rapporto potrebbe essere dichiarato altrove o creare un altro ciclo.` :
+       `\nConflitti: da ${prima} a ${n}.`);
+    bClose.disabled = false; bX.disabled = false;
     if (n) {
       boxStato('ok', '✓ Fatto — correzione scritta e dati aggiornati',
-        `Ora puoi aprire le schede: mostrano già i dati nuovi. Conflitti rimasti: ${n}.`,
+        `Le schede mostrano già i dati nuovi. Conflitti rimasti: ${n}.` + esitoConteggio + elenco,
         [{ label: 'Vai al prossimo conflitto ▶', primary: true, onClick: () => { setNav(true); render(); } }]);
-      bClose.disabled = false; bX.disabled = false;
     } else {
-      bClose.disabled = false; bX.disabled = false;
       boxStato('ok', '✅ Fatto — nessun conflitto rimasto',
-        'Correzione scritta e dati aggiornati. Tutti i conflitti sono risolti.',
+        'Correzione scritta e dati aggiornati. Tutti i conflitti sono risolti.' + elenco,
         [{ label: 'Chiudi', primary: true, onClick: () => bClose.onclick() }]);
     }
   }
 
+  let conflittiPrimaCorrezione = null;
+
   async function eseguiCorrezione(fn) {
     setNav(false);
+    conflittiPrimaCorrezione = conflictsCorrenti.length;
     boxStato('lavoro', '⏳ Scrivo la correzione sul foglio…', 'Attendi il messaggio verde prima di fare altro.');
+    let righe = [];
     try {
-      await fn();
+      const r = await fn();
+      if (Array.isArray(r)) righe = r;
     } catch (e) {
       console.error(e);
       setNav(true);
       render();
       const err = document.createElement('div');
       err.style.cssText = 'background:rgba(200,70,60,0.16);border:2px solid #c8463c;border-radius:6px;padding:10px 12px;margin-bottom:12px;font-size:0.8rem;color:var(--ink);line-height:1.5';
-      err.textContent = '⚠ ' + (navigator.onLine === false
+      err.textContent = '⚠ ' + (e && e.userMsg ? e.userMsg : (navigator.onLine === false
         ? 'Sei offline: correzione non scritta. Riprova quando torna la rete.'
-        : 'Scrittura non riuscita. Controlla la connessione e riprova con gli stessi pulsanti.');
+        : 'Scrittura non riuscita. Controlla la connessione e riprova con gli stessi pulsanti (la correzione si può ripetere senza danni).'));
       body.insertBefore(err, body.firstChild);
       return;
     }
-    await aggiornaPoi();
+    await aggiornaPoi(righe);
   }
 
   function rigaAzione(azioni, labelBtn, onClick, cls) {
@@ -9704,8 +9757,8 @@ function apriRisolutoreConflitti() {
     azioni.style.cssText = 'display:flex;flex-direction:column;gap:6px';
 
     if (c.type === 'contradiction') {
-      if (c.fixA) rigaAzione(azioni, c.fixA.label, () => sostituisciRapportoSuFoglio(c.fixA.onScheda, c.fixA.oldRap, c.fixA.newRap), 'btn btn-primary');
-      if (c.fixB) rigaAzione(azioni, c.fixB.label, () => sostituisciRapportoSuFoglio(c.fixB.onScheda, c.fixB.oldRap, c.fixB.newRap), 'btn btn-primary');
+      if (c.fixA) rigaAzione(azioni, c.fixA.label, () => correggiUnLato(c.fixA.onScheda, c.fixA.oldRap, c.fixA.newRap), 'btn btn-primary');
+      if (c.fixB) rigaAzione(azioni, c.fixB.label, () => correggiUnLato(c.fixB.onScheda, c.fixB.oldRap, c.fixB.newRap), 'btn btn-primary');
     } else if (c.type === 'cycle') {
       (c.hops || []).forEach(h => {
         if (!h.literal) return;
@@ -9713,16 +9766,22 @@ function apriRisolutoreConflitti() {
         riga.style.cssText = 'border-top:1px solid var(--border);padding:9px 0 2px';
         const titoloH = document.createElement('div');
         titoloH.style.cssText = 'font-size:0.76rem;color:var(--muted);margin-bottom:6px';
-        titoloH.textContent = `US ${h.from} —${h.tipo}→ US ${h.to}`;
+        {
+          const inv = RAPPORTI_INVERSI[h.tipo];
+          const sF = schede.find(x => sameNum(x.numero, h.from)), sT = schede.find(x => sameNum(x.numero, h.to));
+          const ha = (sc, tp, us) => !!sc && (Array.isArray(sc.rapporti) ? sc.rapporti : []).some(r => r.tipo === tp && sameNum(r.us, us));
+          const suF = ha(sF, h.tipo, h.to), suT = ha(sT, inv, h.from);
+          const dove = (suF && suT) ? 'scritto su entrambe le schede' : suF ? `scritto solo su US ${h.from}` : suT ? `scritto solo su US ${h.to}` : '';
+          titoloH.textContent = `US ${h.from} —${h.tipo}→ US ${h.to}` + (dove ? `  (${dove})` : '');
+        }
         riga.appendChild(titoloH);
         const inner = document.createElement('div');
         inner.style.cssText = 'display:flex;gap:8px;flex-wrap:wrap';
-        rigaAzione(inner, '− Rimuovi questo rapporto',
-          () => modificaRapportoSuFoglio(h.literal.onScheda, { tipo: h.literal.tipo, us: h.literal.us }, 'remove'));
-        const inverso = RAPPORTI_INVERSI[h.literal.tipo];
-        if (inverso) {
-          rigaAzione(inner, '⇄ Inverti verso',
-            () => sostituisciRapportoSuFoglio(h.literal.onScheda, { tipo: h.literal.tipo, us: h.literal.us }, { tipo: inverso, us: h.literal.us }));
+        rigaAzione(inner, '− Rimuovi (da entrambe le schede)',
+          () => rimuoviRapportoDaEntrambe(h.from, h.to, h.tipo));
+        if (RAPPORTI_INVERSI[h.tipo]) {
+          rigaAzione(inner, '⇄ Inverti verso (su entrambe le schede)',
+            () => invertiRapportoSuEntrambe(h.from, h.to, h.tipo));
         }
         riga.appendChild(inner);
         azioni.appendChild(riga);
@@ -9842,9 +9901,9 @@ function showToast(msg) {
   <script>
     if ('serviceWorker' in navigator && !location.hostname.includes('claudeusercontent.com')) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./service-worker.js?v=110')
+        navigator.serviceWorker.register('./service-worker.js?v=111')
           .then(reg => {
-            console.log('SW registrato v110:', reg.scope);
+            console.log('SW registrato v111:', reg.scope);
             // Forza aggiornamento immediato se c'è una nuova versione
             reg.update();
           })

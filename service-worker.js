@@ -1,11 +1,13 @@
 // ─────────────────────────────────────────────────────────────────
 // SMP Scavo — Service Worker
-// v110 — Matrix: rilevamento dei cicli riscritto in modo esaustivo (gruppi
-// di US mutuamente raggiungibili, algoritmo di Tarjan): nessun ciclo vero
-// resta nascosto e nessun ciclo falso viene segnalato (niente più "—?→").
-// Include il risolutore conflitti v108 e la correzione dei falsi cicli v109.
+// v111 — Risolutore conflitti: "Rimuovi" e "Inverti verso" ora agiscono su
+// ENTRAMBE le schede (il rapporto e il suo reciproco), altrimenti il conflitto
+// restava perché il Matrix considera valido il rapporto scritto su una
+// qualsiasi delle due. Dopo ogni correzione il riquadro elenca cosa è stato
+// modificato sul foglio e come è cambiato il numero di conflitti.
+// Include il rilevamento cicli esaustivo (v110) e il pannello flottante (v108).
 // ─────────────────────────────────────────────────────────────────
-const CACHE_NAME = 'smp-scavo-v110';
+const CACHE_NAME = 'smp-scavo-v111';
 
 // Shell dell'app da rendere disponibile offline.
 const APP_SHELL = [
