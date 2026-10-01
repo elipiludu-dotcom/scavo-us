@@ -1,13 +1,11 @@
 // ─────────────────────────────────────────────────────────────────
 // SMP Scavo — Service Worker
-// v111 — Risolutore conflitti: "Rimuovi" e "Inverti verso" ora agiscono su
-// ENTRAMBE le schede (il rapporto e il suo reciproco), altrimenti il conflitto
-// restava perché il Matrix considera valido il rapporto scritto su una
-// qualsiasi delle due. Dopo ogni correzione il riquadro elenca cosa è stato
-// modificato sul foglio e come è cambiato il numero di conflitti.
-// Include il rilevamento cicli esaustivo (v110) e il pannello flottante (v108).
+// v112 — Scheda US: nuovo pulsante "⬇ Testo" (esporta tutti i dati in .txt) e
+// PDF senza più testi tagliati o sbordanti: le caselle restano ferme, il testo
+// si riduce fino a 6 pt e, se non basta, il resto va nel foglio di
+// continuazione (pagina 3). Include le correzioni dei conflitti Matrix v108-v111.
 // ─────────────────────────────────────────────────────────────────
-const CACHE_NAME = 'smp-scavo-v111';
+const CACHE_NAME = 'smp-scavo-v112';
 
 // Shell dell'app da rendere disponibile offline.
 const APP_SHELL = [

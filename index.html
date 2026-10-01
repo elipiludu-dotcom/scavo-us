@@ -5,7 +5,7 @@
   <!-- PWA -->
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#C9963A">
-  <meta name="app-version" content="111">
+  <meta name="app-version" content="112">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="SMP Scavo">
@@ -1223,6 +1223,7 @@
           <button class="btn btn-secondary" id="btnMappaUS" style="display:none;white-space:nowrap" onclick="apriMappaPerUS()">🗺 Vedi su mappa</button>
           <button class="btn btn-secondary" onclick="showView(window._editOrigin?.replace('view-','') || 'schede')" style="white-space:nowrap">← Indietro</button>
           <button class="btn btn-secondary" id="btnExportUSPDF" style="display:none;white-space:nowrap" onclick="exportPDFUS(editingId)">⬇ PDF</button>
+          <button class="btn btn-secondary" id="btnExportUSTxt" style="display:none;white-space:nowrap" onclick="exportTestoUS(editingId)" title="Scarica tutti i dati salvati della scheda in un file di testo, senza caselle né tagli">⬇ Testo</button>
           <button class="btn btn-danger" id="btnDelete" style="display:none;white-space:nowrap" onclick="deleteScheda()">🗑 Elimina</button>
           <button class="btn btn-success" onclick="saveScheda()">Salva</button>
         </div>
@@ -3026,6 +3027,7 @@ function resetForm() {
   document.getElementById('formTitle').textContent = 'Nuova Scheda US';
   document.getElementById('btnDelete').style.display = 'none';
   const _bpdf2 = document.getElementById('btnExportUSPDF'); if(_bpdf2) _bpdf2.style.display = 'none';
+  const _btxt2 = document.getElementById('btnExportUSTxt'); if(_btxt2) _btxt2.style.display = 'none';
   const _bmu2 = document.getElementById('btnMappaUS'); if(_bmu2) _bmu2.style.display = 'none';
   const _bdu2 = document.getElementById('btnDuplica'); if(_bdu2) _bdu2.style.display = 'none';
   const _nav2 = document.getElementById('usNavBar'); if (_nav2) _nav2.style.display = 'none';
@@ -3103,6 +3105,7 @@ function openEdit(id) {
   document.getElementById('formTitle').textContent = (s._src === 'rielab' ? '🛠 ' : '') + 'Scheda US ' + s.numero;
   document.getElementById('btnDelete').style.display = 'block';
   const _bpdf = document.getElementById('btnExportUSPDF'); if (_bpdf) _bpdf.style.display = 'inline-block';
+  const _btxt = document.getElementById('btnExportUSTxt'); if (_btxt) _btxt.style.display = 'inline-block';
   const _bmu = document.getElementById('btnMappaUS');
   if (_bmu) _bmu.style.display = 'inline-block';
   const _bdu = document.getElementById('btnDuplica');
@@ -5777,7 +5780,7 @@ function eseguiStampaSingola() {
   document.getElementById('pdf-select-overlay').style.display = 'none';
   if (_pdfSelectTipo === 'us') {
     const s = schede.find(x => x.id === id);
-    if (s) loadJsPDF().then(() => { const doc = buildICCDpdf([s]); doc.save(`US_${s.numero}.pdf`); });
+    if (s) loadJsPDF().then(() => { const doc = buildICCDpdf([s]); doc.save(`US_${s.numero}.pdf`); avvisaContinuazione(doc._continuazioni); });
   } else if (_pdfSelectTipo === 'tomba') {
     exportTombaPDF(id);
   } else if (_pdfSelectTipo === 'diario') {
@@ -5911,6 +5914,126 @@ function populatePDFSelect() {
 }
 
 
+// ─── v112: ESPORTA SCHEDA US IN TESTO PURO (.txt) ─────────────────
+// Per il controllo rapido: tutti i dati salvati della scheda, senza caselle
+// né tagli. I numeri delle US sono in ordine crescente. Non va a capo da
+// solo, così si legge per intero in qualsiasi editor.
+function _numeriOrdinati(valori) {
+  // Ordine crescente (negativi compresi). I doppioni NON vengono tolti:
+  // se una US compare due volte, nel testo si vede.
+  return valori.map(v => String(v == null ? '' : v).trim()).filter(Boolean).sort(compareNum);
+}
+
+function costruisciTestoUS(s) {
+  const L = [];
+  const riga = (et, v) => {
+    const t = (v === undefined || v === null || v === '') ? '—' : String(v);
+    L.push(et + ': ' + t);
+  };
+  const blocco = (et, v) => {                 // testo lungo, anche su più righe
+    L.push(et + ':');
+    L.push((v === undefined || v === null || String(v).trim() === '') ? '—' : String(v));
+  };
+  const sez = t => { L.push(''); L.push('=== ' + t + ' ==='); };
+  const sino = v => (v === true || v === 'true' || v === '1' || v === 1) ? 'sì' : 'no';
+
+  L.push('SCHEDA US ' + (s.numero || '') + (s.anno ? ' — Anno ' + s.anno : '') + (s.saggio ? ' — Saggio ' + s.saggio : ''));
+  L.push('Esportata il ' + new Date().toLocaleString('it-IT') + ' (dati salvati; i numeri sono in ordine crescente)');
+
+  sez('IDENTIFICAZIONE');
+  riga('Numero US', s.numero); riga('Anno', s.anno); riga('Area/Edificio/Struttura', s.area);
+  riga('Saggio / Settore', s.saggio); riga('Tipo', s.tipo); riga('Positiva/Negativa', s.pos_neg);
+  riga('Data rilevamento', s.data);
+  riga('Quota max (cm)', s.quota_max); riga('Quota min (cm)', s.quota_min); riga('Spessore (cm)', s.spessore);
+  blocco('Definizione', s.definizione);
+  blocco('Criteri di distinzione', s.criteri);
+  riga('Formazione', s.formazione); riga('Modo di formazione', s.modo_formazione);
+
+  // Rapporti
+  const rapporti = Array.isArray(s.rapporti) ? s.rapporti : [];
+  sez('SEQUENZA FISICA');
+  [['Uguale a','uguale_a'],['Si lega a','si_lega_a'],['Gli si appoggia','gli_si_appoggia'],['Si appoggia a','si_appoggia_a'],
+   ['Coperto da','coperto_da'],['Copre','copre'],['Tagliato da','tagliato_da'],['Taglia','taglia'],
+   ['Riempito da','riempito_da'],['Riempie','riempie']].forEach(([et, tp]) => {
+    const nums = _numeriOrdinati(rapporti.filter(r => r.tipo === tp).map(r => r.us));
+    L.push(et.toUpperCase() + ' (' + nums.length + '): ' + (nums.length ? nums.join(', ') : '—'));
+  });
+
+  const tipiPost = ['gli_si_appoggia','coperto_da','tagliato_da','riempito_da'];
+  const tipiAnt  = ['si_appoggia_a','copre','taglia','riempie'];
+  sez('SEQUENZA STRATIGRAFICA');
+  [['POSTERIORE', tipiPost, s.post_riepilogo], ['ANTERIORE', tipiAnt, s.ant_riepilogo]].forEach(([et, tipi, salvato]) => {
+    const calc = _numeriOrdinati(rapporti.filter(r => tipi.includes(r.tipo)).map(r => r.us));
+    L.push(et + ' — dai rapporti (' + calc.length + '): ' + (calc.length ? calc.join(', ') : '—'));
+    const salv = _numeriOrdinati(String(salvato || '').split(/[\s,;]+/));
+    if (salv.length) {
+      L.push(et + ' — campo riepilogo salvato (' + salv.length + '): ' + salv.join(', '));
+      const a = new Set(calc.map(x => x.toLowerCase())), b = new Set(salv.map(x => x.toLowerCase()));
+      const soloRapp = calc.filter(x => !b.has(x.toLowerCase())), soloRiep = salv.filter(x => !a.has(x.toLowerCase()));
+      if (!soloRapp.length && !soloRiep.length) L.push('   ✓ il riepilogo coincide con i rapporti');
+      else {
+        L.push('   ⚠ il riepilogo NON coincide con i rapporti');
+        if (soloRapp.length) L.push('   nei rapporti ma non nel riepilogo: ' + soloRapp.join(', '));
+        if (soloRiep.length) L.push('   nel riepilogo ma non nei rapporti: ' + soloRiep.join(', '));
+      }
+      L.push('   (nel PDF viene stampato il campo riepilogo salvato)');
+    } else {
+      L.push(et + ' — campo riepilogo salvato: non compilato (nel PDF si usa quello calcolato dai rapporti)');
+    }
+  });
+
+  sez('COMPONENTI E CARATTERI');
+  blocco('Inorganici — geologici', s.inclusi_geo);
+  blocco('Inorganici — artificiali', s.inclusi_art);
+  blocco('Organici', s.inclusi_org);
+  riga('Consistenza', s.consistenza); riga('Colore', s.colore);
+  riga('Composizione', s.composizione); riga('Umidità', s.umidita);
+  riga('Stato di conservazione', s.stato_conservazione);
+  if (s.stato_conservazione_note) blocco('Note stato di conservazione', s.stato_conservazione_note);
+
+  sez('DESCRIZIONE');
+  L.push((s.descrizione && String(s.descrizione).trim()) ? String(s.descrizione) : '—');
+  sez('OSSERVAZIONI');
+  L.push((s.osservazioni && String(s.osservazioni).trim()) ? String(s.osservazioni) : '—');
+  sez('INTERPRETAZIONE');
+  L.push((s.interpretazione && String(s.interpretazione).trim()) ? String(s.interpretazione) : '—');
+  if (s.note_interp) { L.push(''); blocco('Note interpretazione', s.note_interp); }
+
+  sez('CRONOLOGIA');
+  riga('Datazione', s.datazione); riga('Fase', s.fase); riga('Affidabilità stratigrafica', s.affidabilita);
+
+  const reperti = Array.isArray(s.reperti) ? s.reperti : [];
+  sez('REPERTI (' + reperti.length + ')');
+  if (!reperti.length) L.push('—');
+  reperti.forEach((r, i) => L.push((i + 1) + '. ' + (r.categoria || '') + ' — inv. ' + (r.inv || '–') + ' — qtà ' + (r.qty || '–') + (r.desc ? ' — ' + r.desc : '')));
+
+  sez('DOCUMENTAZIONE');
+  riga('Foto digitali', sino(s.foto_digitali)); riga('Foto 3D/Laser scanner', sino(s.foto_3d)); riga('Foto drone/asta', sino(s.foto_drone));
+  riga('Piante/disegni', s.disegni); blocco('Note documentazione', s.note_doc);
+
+  sez('RESPONSABILI E DATE');
+  riga('Responsabile compilazione sul campo', s.responsabile);
+  riga('Responsabile scientifico', s.responsabile_scientifico);
+  riga('Responsabile rielaborazione', s.responsabile_rielaborazione);
+  riga('Data rielaborazione', s.data_rielaborazione);
+  riga('Ultima modifica', s._last_modified); riga('Modificata da', s._modified_by);
+  return L.join('\r\n') + '\r\n';
+}
+
+function exportTestoUS(id) {
+  const s = schede.find(x => x.id === id);
+  if (!s) { showToast('⚠ Scheda non trovata'); return; }
+  const testo = '﻿' + costruisciTestoUS(s);   // BOM: accenti corretti anche nel Blocco note
+  const blob = new Blob([testo], { type: 'text/plain;charset=utf-8' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'SchedaUS_' + s.numero + '_' + new Date().toISOString().split('T')[0] + '.txt';
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+  showToast('✓ Testo esportato (dati salvati della scheda)');
+}
+
+
 async function exportPDFSingola() {
   const id = document.getElementById('pdfSelectUS').value;
   if (!id) { showToast('⚠ Seleziona una scheda US'); return; }
@@ -5939,6 +6062,7 @@ async function exportPDFUS(id) {
   const doc = buildICCDpdf([s], fotoMap);
   doc.save('SchedaUS_' + s.numero + '_' + new Date().toISOString().split('T')[0] + '.pdf');
   showToast('✓ PDF generato');
+  avvisaContinuazione(doc._continuazioni);
 }
 
 async function exportPDFTutte() {
@@ -5955,15 +6079,18 @@ async function exportPDFTutte() {
   const suffix = anno === 'tutti' ? 'complete' : anno;
   doc.save('SchedeUS_' + suffix + '_' + new Date().toISOString().split('T')[0] + '.pdf');
   showToast('✓ PDF generato (' + filtered.length + ' schede)');
+  avvisaContinuazione(doc._continuazioni);
 }
 
 function buildICCDpdf(schedeList, fotoMap = {}) {
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+  doc._continuazioni = []; // v112: schede che hanno richiesto il foglio di continuazione
 
   schedeList.forEach((s, idx) => {
     if (idx > 0) doc.addPage(); // pagina 1 della nuova scheda
-    drawICCDpage(doc, s);       // disegna pag.1 + aggiunge pag.2 internamente
+    const campiLunghi = drawICCDpage(doc, s); // disegna pag.1 + pag.2 (+ continuazione se serve)
+    if (campiLunghi && campiLunghi.length) doc._continuazioni.push({ numero: s.numero, campi: campiLunghi });
     // Tavola fotografica (se foto disponibili per questa scheda)
     const fotos = (fotoMap[s.id] || []).filter(Boolean);
     if (fotos.length) {
@@ -6033,10 +6160,40 @@ function drawICCDpage(doc, s) {
     doc.text(lines, x, yr);
     return lines.length;
   };
+  // v112 — Testo che deve stare in una casella di dimensione FISSA (le caselle
+  // non cambiano mai). Prima prova a ridurre il corpo (da maxPt fino a 6 pt);
+  // se nemmeno a 6 pt entra, scrive quel che ci sta, chiude con l'indicazione
+  // "segue nel foglio di continuazione" e mette il testo COMPLETO in `cont`,
+  // da stampare nel foglio di continuazione (pagina 3).
+  const cont = [];
+  const MIN_PT = 6, LHF = 1.15; // 1.15 = interlinea predefinita di jsPDF (come prima)
+  const fitText = (text, x, yBase, w, yBottom, maxPt, label) => {
+    const t = String(text == null ? '' : text);
+    if (!t.trim()) return true;
+    const capAt = sz => Math.max(1, Math.floor((yBottom - 1.5 - yBase) / (sz * 0.3528 * LHF)) + 1);
+    doc.setFont('helvetica', 'normal'); doc.setTextColor(0, 0, 0);
+    let size = maxPt, lines;
+    for (;;) {
+      doc.setFontSize(size);
+      lines = doc.splitTextToSize(t, w);
+      if (lines.length <= capAt(size) || size <= MIN_PT) break;
+      size = Math.max(MIN_PT, Math.round((size - 0.5) * 10) / 10);
+    }
+    const capN = capAt(size);
+    if (lines.length <= capN) { doc.text(lines, x, yBase); return true; }
+    const lh = size * 0.3528 * LHF;
+    const keep = Math.max(0, capN - 1);
+    if (keep > 0) doc.text(lines.slice(0, keep), x, yBase);
+    doc.setFont('helvetica', 'italic'); doc.setFontSize(MIN_PT);
+    doc.text('… segue nel foglio di continuazione', x, yBase + keep * lh);
+    doc.setFont('helvetica', 'normal');
+    cont.push({ label: label, text: t });
+    return false;
+  };
   const cell  = (lblTxt, valTxt, x, yr, w, h=8) => {
     rect(x, yr, w, h);
     lbl(lblTxt, x+1.5, yr+3.5);
-    val(valTxt, x+1.5, yr+7, w-3);
+    fitText(valTxt, x+1.5, yr+7, w-3, yr+h, 7.5, lblTxt);
   };
   const drawCB = (checked, x, yc) => {
     const sz = 3.2;
@@ -6110,7 +6267,7 @@ function drawICCDpage(doc, s) {
   // — AREA / SAGGIO —
   rect(ML, y, IW*0.65, 9, 0.2);
   lbl('AREA/EDIFICIO/STRUTTURA', ML+1.5, y+3.5);
-  val(s.area||'', ML+1.5, y+7.5, IW*0.65-3);
+  fitText(s.area||'', ML+1.5, y+7.5, IW*0.65-3, y+9, 7.5, 'AREA/EDIFICIO/STRUTTURA');
   rect(ML+IW*0.65, y, IW*0.35, 9, 0.2);
   lbl('SAGGIO', ML+IW*0.65+1.5, y+3.5);
   y += 9;
@@ -6133,7 +6290,7 @@ function drawICCDpage(doc, s) {
   rect(ML, y, amb, rowH, 0.2);            lbl('AMBIENTE/UNITA\' FUNZIONALE', ML+1.5, y+3.5);
   rect(ML+amb, y, pos, rowH, 0.2);        lbl('POSIZIONE', ML+amb+1.5, y+3.5);
   rect(ML+amb+pos, y, sett, rowH, 0.2);   lbl('SETTORE/I', ML+amb+pos+1.5, y+3.5);
-  val(s.saggio||'', ML+amb+pos+1.5, y+9, sett-3);
+  fitText(s.saggio||'', ML+amb+pos+1.5, y+9, sett-3, y+rowH, 7.5, 'SETTORE/I');
   rect(ML+amb+pos+sett, y, quad, rowH, 0.2); lbl('QUADRATO/I', ML+amb+pos+sett+1.5, y+3.5);
   // QUOTE: etichetta verticale a sinistra + due celle uguali (max/min) a destra
   const qx = ML+amb+pos+sett+quad;
@@ -6176,7 +6333,7 @@ function drawICCDpage(doc, s) {
   // — PIANTE | PROSPETTI | SEZIONI | FOTOGRAFIE | RIF.TABELLE —
   const docRowH = 22;
   const pW=IW*0.12, prW=IW*0.12, seW=IW*0.12, foW=IW*0.28, rtW=IW*0.36;
-  rect(ML, y, pW, docRowH, 0.2);     lbl('PIANTE', ML+1.5, y+3.5);     val(s.disegni||'', ML+1.5, y+8, pW-3);
+  rect(ML, y, pW, docRowH, 0.2);     lbl('PIANTE', ML+1.5, y+3.5);     fitText(s.disegni||'', ML+1.5, y+8, pW-3, y+docRowH, 7.5, 'PIANTE');
   rect(ML+pW, y, prW, docRowH, 0.2); lbl('PROSPETTI', ML+pW+1.5, y+3.5);
   rect(ML+pW+prW, y, seW, docRowH, 0.2); lbl('SEZIONI', ML+pW+prW+1.5, y+3.5);
   // Fotografie con checkbox
@@ -6219,13 +6376,13 @@ function drawICCDpage(doc, s) {
   const geoW = inorgW / 2;
   rect(ML+compLabelW, y+compHdrH, geoW, compSubH, 0.2);
   txt('Geologici', ML+compLabelW+1.5, y+compHdrH+4, 6.5);
-  val(s.inclusi_geo||'', ML+compLabelW+1.5, y+compHdrH+9, geoW-3);
+  fitText(s.inclusi_geo||'', ML+compLabelW+1.5, y+compHdrH+9, geoW-3, y+compH, 7.5, 'COMPONENTI INORGANICI — Geologici');
   rect(ML+compLabelW+geoW, y+compHdrH, geoW, compSubH, 0.2);
   txt('Artificiali', ML+compLabelW+geoW+1.5, y+compHdrH+4, 6.5);
-  val(s.inclusi_art||'', ML+compLabelW+geoW+1.5, y+compHdrH+9, geoW-3);
+  fitText(s.inclusi_art||'', ML+compLabelW+geoW+1.5, y+compHdrH+9, geoW-3, y+compH, 7.5, 'COMPONENTI INORGANICI — Artificiali');
   // Organici — senza etichetta ripetuta, testo parte dalla stessa altezza
   rect(ML+compLabelW+inorgW, y+compHdrH, orgW, compSubH, 0.2);
-  val(s.inclusi_org||'', ML+compLabelW+inorgW+1.5, y+compHdrH+9, orgW-3);
+  fitText(s.inclusi_org||'', ML+compLabelW+inorgW+1.5, y+compHdrH+9, orgW-3, y+compH, 7.5, 'COMPONENTI ORGANICI');
   y += compH;
 
   // — CONSISTENZA | COLORE | MISURE —
@@ -6281,10 +6438,10 @@ function drawICCDpage(doc, s) {
     const [lbl2,tipo2] = rapDefs[i*2+1];
     rect(ML+seqLabelW, ry, seqW, rapRowH, 0.2);
     lbl(lbl1, ML+seqLabelW+1.5, ry+3.5);
-    val(rapporti.filter(r=>r.tipo===tipo1).map(r=>r.us).join(', '), ML+seqLabelW+1.5, ry+7, seqW-3);
+    fitText(rapporti.filter(r=>r.tipo===tipo1).map(r=>r.us).join(', '), ML+seqLabelW+1.5, ry+7, seqW-3, ry+rapRowH, 7.5, lbl1);
     rect(ML+seqLabelW+seqW, ry, seqW, rapRowH, 0.2);
     lbl(lbl2, ML+seqLabelW+seqW+1.5, ry+3.5);
-    val(rapporti.filter(r=>r.tipo===tipo2).map(r=>r.us).join(', '), ML+seqLabelW+seqW+1.5, ry+7, seqW-3);
+    fitText(rapporti.filter(r=>r.tipo===tipo2).map(r=>r.us).join(', '), ML+seqLabelW+seqW+1.5, ry+7, seqW-3, ry+rapRowH, 7.5, lbl2);
   }
 
   // Label verticale "SEQUENZA STRATIGRAFICA"
@@ -6308,15 +6465,11 @@ function drawICCDpage(doc, s) {
   const ssHalf = rapH / 2;
   rect(ssContentX, y, ssColW, ssHalf, 0.2);
   lbl('POSTERIORE', ssContentX+1.5, y+3.5);
-  doc.setFontSize(8); doc.setFont('helvetica','normal'); doc.setTextColor(0,0,0);
-  const postLines = doc.splitTextToSize(postNums, ssColW-3);
-  doc.text(postLines, ssContentX+1.5, y+8);
+  fitText(postNums, ssContentX+1.5, y+8, ssColW-3, y+ssHalf, 8, 'POSTERIORE (sequenza stratigrafica)');
 
   rect(ssContentX, y+ssHalf, ssColW, ssHalf, 0.2);
   lbl('ANTERIORE', ssContentX+1.5, y+ssHalf+3.5);
-  doc.setFontSize(8); doc.setFont('helvetica','normal'); doc.setTextColor(0,0,0);
-  const antLines = doc.splitTextToSize(antNums, ssColW-3);
-  doc.text(antLines, ssContentX+1.5, y+ssHalf+8);
+  fitText(antNums, ssContentX+1.5, y+ssHalf+8, ssColW-3, y+rapH, 8, 'ANTERIORE (sequenza stratigrafica)');
 
   // — FOOTER pagina 1 —
   txt('MiC – ICCD_licenza CC BY-SA 4.0 – Creative Commons Attribution-ShareAlike 4.0 International',
@@ -6340,32 +6493,20 @@ function drawICCDpage(doc, s) {
   // — DESCRIZIONE —
   rect(ML, y, IW, descH, 0.2);
   lbl('DESCRIZIONE', ML+1.5, y+3.5);
-  doc.setFontSize(7.5); doc.setFont('helvetica','normal'); doc.setTextColor(0,0,0);
-  const descAllLines = doc.splitTextToSize(String(s.descrizione||''), IW-5);
-  const descLineH = 4.2;
-  const descMaxL = Math.floor((descH - 10) / descLineH);
-  doc.text(descAllLines.slice(0, descMaxL), ML+1.5, y+8);
+  fitText(s.descrizione||'', ML+1.5, y+8, IW-5, y+descH, 7.5, 'DESCRIZIONE');
   y += descH;
 
   // — OSSERVAZIONI —
-  const osservLines = doc.splitTextToSize(String(s.osservazioni||''), IW-4);
-  const osservMaxLines = Math.floor((osservH - 10) / descLineH);
-  const osservLinesClipped = osservLines.slice(0, osservMaxLines);
   rect(ML, y, IW, osservH, 0.2);
   lbl('OSSERVAZIONI', ML+1.5, y+3.5);
-  doc.setFontSize(7.5); doc.setFont('helvetica','normal'); doc.setTextColor(0,0,0);
-  doc.text(osservLinesClipped, ML+1.5, y+8);
+  fitText(s.osservazioni||'', ML+1.5, y+8, IW-4, y+osservH, 7.5, 'OSSERVAZIONI');
   y += osservH;
 
   // — INTERPRETAZIONE —
   const interpTxt = String(s.interpretazione||'') + (s.note_interp ? '\n' + s.note_interp : '');
-  const interpLines = doc.splitTextToSize(interpTxt, IW-4);
-  const interpMaxLines = Math.floor((interpH - 10) / descLineH);
-  const interpLinesClipped = interpLines.slice(0, interpMaxLines);
   rect(ML, y, IW, interpH, 0.2);
   lbl('INTERPRETAZIONE', ML+1.5, y+3.5);
-  doc.setFontSize(7.5); doc.setFont('helvetica','normal'); doc.setTextColor(0,0,0);
-  doc.text(interpLinesClipped, ML+1.5, y+8);
+  fitText(interpTxt, ML+1.5, y+8, IW-4, y+interpH, 7.5, 'INTERPRETAZIONE');
   y += interpH;
 
   // — DATAZIONE | PERIODO | FASE | ATTIVITA —
@@ -6397,7 +6538,7 @@ function drawICCDpage(doc, s) {
   // — RESPONSABILE SCIENTIFICO —
   rect(ML, y, IW, 10, 0.2);
   lbl('RESPONSABILE SCIENTIFICO DELLE INDAGINI', ML+1.5, y+3.5);
-  val(s.responsabile_scientifico || s.responsabile || '', ML+1.5, y+8, IW-3);
+  fitText(s.responsabile_scientifico || s.responsabile || '', ML+1.5, y+8, IW-3, y+10, 7.5, 'RESPONSABILE SCIENTIFICO DELLE INDAGINI');
   y += 10;
 
   // — DATA RILEVAMENTO | RESPONSABILE COMPILAZIONE —
@@ -6413,6 +6554,63 @@ function drawICCDpage(doc, s) {
   // — FOOTER pagina 2 —
   txt('MiC – ICCD_licenza CC BY-SA 4.0 – Creative Commons Attribution-ShareAlike 4.0 International',
     ML, H-8, 5, 'normal', [120,120,120]);
+
+  // v112 — Foglio di continuazione (pagina 3), SOLO se almeno un testo non è
+  // entrato nella sua casella nemmeno al corpo minimo.
+  if (cont.length) drawContinuazione(doc, s, cont);
+  return cont.map(c => c.label);
+}
+
+// v112 — Foglio di continuazione: riporta per intero i testi che non entravano
+// nelle caselle della scheda. Se serve più di una pagina, ne aggiunge altre.
+function drawContinuazione(doc, s, items) {
+  const W = 210, H = 297, ML = 8, MR = 8, MT = 8, IW = W - ML - MR;
+  let pag = 0, y = MT;
+  const footer = () => {
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(5); doc.setTextColor(120, 120, 120);
+    doc.text('MiC – ICCD_licenza CC BY-SA 4.0 – Creative Commons Attribution-ShareAlike 4.0 International', ML, H - 8);
+  };
+  const intestazione = () => {
+    doc.addPage(); pag++;
+    doc.setLineWidth(0.4); doc.setDrawColor(0, 0, 0); doc.setFillColor(240, 240, 240);
+    doc.rect(ML, MT, IW, 10, 'FD');
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(9); doc.setTextColor(0, 0, 0);
+    doc.text('FOGLIO DI CONTINUAZIONE — US ' + String(s.numero || '') + (s.anno ? '  ·  Anno ' + s.anno : '') + (pag > 1 ? '  ·  (segue)' : ''), ML + 2, MT + 6.5);
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(6.5); doc.setTextColor(90, 90, 90);
+    doc.text('Testo completo dei campi che non entravano nelle caselle della scheda (pagine 1-2).', ML, MT + 14.5);
+    y = MT + 21;
+  };
+  intestazione();
+  items.forEach(it => {
+    if (y > H - 34) { footer(); intestazione(); }
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(7); doc.setTextColor(60, 60, 60);
+    doc.text(String(it.label).toUpperCase(), ML, y);
+    y += 4.5;
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(8.5); doc.setTextColor(0, 0, 0);
+    const lines = doc.splitTextToSize(String(it.text), IW);
+    lines.forEach(l => {
+      if (y > H - 16) {
+        footer(); intestazione();
+        doc.setFont('helvetica', 'normal'); doc.setFontSize(8.5); doc.setTextColor(0, 0, 0);
+      }
+      doc.text(l, ML, y);
+      y += 4.2;
+    });
+    y += 5;
+  });
+  footer();
+}
+
+// v112 — Dopo l'esportazione, dice quali schede hanno richiesto il foglio di continuazione.
+function avvisaContinuazione(lista) {
+  if (!lista || !lista.length) return;
+  const max = 25;
+  const righe = lista.slice(0, max).map(x => `US ${x.numero}: ${x.campi.join(', ')}`).join('\n')
+    + (lista.length > max ? `\n… e altre ${lista.length - max} schede` : '');
+  showConflictDialog('📄 Foglio di continuazione aggiunto',
+    (lista.length === 1 ? 'Questa scheda ha' : 'Queste ' + lista.length + ' schede hanno') +
+    ' campi troppo lunghi per le caselle. Il testo completo è nel foglio di continuazione (pagina 3), subito dopo la scheda.\n\n' + righe,
+    null);
 }
 
 
@@ -9901,9 +10099,9 @@ function showToast(msg) {
   <script>
     if ('serviceWorker' in navigator && !location.hostname.includes('claudeusercontent.com')) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./service-worker.js?v=111')
+        navigator.serviceWorker.register('./service-worker.js?v=112')
           .then(reg => {
-            console.log('SW registrato v111:', reg.scope);
+            console.log('SW registrato v112:', reg.scope);
             // Forza aggiornamento immediato se c'è una nuova versione
             reg.update();
           })
