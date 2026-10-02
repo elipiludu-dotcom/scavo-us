@@ -5,7 +5,7 @@
   <!-- PWA -->
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#C9963A">
-  <meta name="app-version" content="112">
+  <meta name="app-version" content="113">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="SMP Scavo">
@@ -1091,6 +1091,9 @@
         </div>
         <div class="nav-dropdown-item" onclick="verificaRapporti()">
           <span class="nav-icon">🔁</span> Reciproci rapporti
+        </div>
+        <div class="nav-dropdown-item" onclick="apriControlloUguali()">
+          <span class="nav-icon">🟰</span> Controllo US uguali
         </div>
         <div class="nav-dropdown-item" onclick="apriCreazioneUSRielaborazione()">
           <span class="nav-icon">🏗️</span> Crea US taglio/riempimento (bulk)
@@ -8576,6 +8579,96 @@ function popolaFiltriMatrix() {
 }
 
 // ─── MATRIX: VALIDAZIONE CONFLITTI ───────────────────────────────
+// v113 — Grafo "a classi": le US dichiarate uguali (uguale_a, su una scheda
+// qualsiasi delle due) sono la STESSA unità stratigrafica e diventano un solo
+// nodo. Così il controllo dei cicli vede anche i cicli che passano attraverso
+// un'uguaglianza (A copre C, C copre B, con A = B). Ritorna anche gli archi
+// originali, per poter mostrare i rapporti reali di ogni ciclo.
+function buildClassGraph(sel) {
+  const key = v => String(v == null ? '' : v).trim();
+  const nodes = sel.map(s => key(s.numero));
+  const nodeSet = new Set(nodes);
+  const parent = {}; nodes.forEach(n => { parent[n] = n; });
+  const find = x => { while (parent[x] !== x) { parent[x] = parent[parent[x]]; x = parent[x]; } return x; };
+  const eqAdj = {}; nodes.forEach(n => { eqAdj[n] = new Set(); });
+  const FWD = { copre: 'copre', taglia: 'taglia', riempie: 'riempie', coperto_da: 'copre', tagliato_da: 'taglia', riempito_da: 'riempie' };
+  const DIRETTI = ['copre', 'taglia', 'riempie'];
+  const edges = [], visti = new Set();
+  sel.forEach(s => {
+    const a = key(s.numero);
+    const raps = Array.isArray(s.rapporti) ? s.rapporti : (() => { try { return JSON.parse(s.rapporti || '[]'); } catch { return []; } })();
+    raps.forEach(r => {
+      const b = key(r.us);
+      if (!nodeSet.has(b)) return;
+      if (r.tipo === 'uguale_a') {
+        if (a === b) return;
+        eqAdj[a].add(b); eqAdj[b].add(a);
+        const ra = find(a), rb = find(b); if (ra !== rb) parent[ra] = rb;
+      } else if (FWD[r.tipo]) {
+        const [u, v] = DIRETTI.includes(r.tipo) ? [a, b] : [b, a];
+        const k = u + '\u0001' + v + '\u0001' + FWD[r.tipo];
+        if (visti.has(k)) return;
+        visti.add(k);
+        edges.push({ u, v, tipo: FWD[r.tipo], literal: { onScheda: a, tipo: r.tipo, us: b } });
+      }
+    });
+  });
+  const members = {};
+  nodes.forEach(n => { const c = find(n); (members[c] = members[c] || []).push(n); });
+  const classi = Object.keys(members);
+  const succSet = {}, byPair = {};
+  classi.forEach(c => { succSet[c] = new Set(); });
+  edges.forEach(e => {
+    const cu = find(e.u), cv = find(e.v);
+    succSet[cu].add(cv);
+    const k = cu + '\u0001' + cv;
+    (byPair[k] = byPair[k] || []).push(e);
+  });
+  const succC = {}; classi.forEach(c => { succC[c] = [...succSet[c]]; });
+
+  // Percorso minimo tra due US dello stesso gruppo, lungo le uguaglianze dichiarate.
+  function eqPath(a, b) {
+    if (a === b) return [a];
+    const prev = { [a]: null }, coda = [a];
+    while (coda.length) {
+      const x = coda.shift();
+      for (const y of eqAdj[x]) {
+        if (y in prev) continue;
+        prev[y] = x;
+        if (y === b) { const out = [b]; let z = x; while (z !== null) { out.unshift(z); z = prev[z]; } return out; }
+        coda.push(y);
+      }
+    }
+    return [a, b];
+  }
+
+  // Dal ciclo di classi ai rapporti reali: tratti di sequenza + tratti di uguaglianza.
+  function hopsDelCiclo(ciclo) {
+    const k = ciclo.length, scelte = [];
+    let prevV = null;
+    for (let i = 0; i < k; i++) {
+      const lista = byPair[ciclo[i] + '\u0001' + ciclo[(i + 1) % k]] || [];
+      const e = (prevV && lista.find(x => x.u === prevV)) || lista[0];
+      scelte.push(e); prevV = e.v;
+    }
+    const hops = [];
+    for (let i = 0; i < k; i++) {
+      const e = scelte[i];
+      hops.push({ from: e.u, to: e.v, tipo: e.tipo, literal: e.literal });
+      const nextU = scelte[(i + 1) % k].u;
+      if (e.v !== nextU) {
+        const path = eqPath(e.v, nextU);
+        for (let j = 0; j + 1 < path.length; j++) {
+          hops.push({ from: path[j], to: path[j + 1], tipo: 'uguale a', eq: true,
+            literal: { onScheda: path[j], tipo: 'uguale_a', us: path[j + 1] } });
+        }
+      }
+    }
+    return hops;
+  }
+  return { nodes, find, members, classi, eqAdj, edges, succC, byPair, hopsDelCiclo };
+}
+
 function validateMatrixConflicts(sel) {
   // Coppie inverse attese
   const INVERSE = {
@@ -8666,8 +8759,10 @@ function validateMatrixConflicts(sel) {
   // (solo nel calcolo, mai sul foglio) l'arco di chiusura e si cerca il
   // ciclo successivo, finché il gruppo non è più ciclico: il numero di
   // segnalazioni è così una stima realistica dei rapporti da correggere.
-  const { succ, edgeMeta } = buildSuccGraph(sel, usSet);
-  const nodiTutti = sel.map(s => String(s.numero));
+  // v113: i cicli si cercano sul grafo a classi (US uguali = un solo nodo).
+  const cg = buildClassGraph(sel);
+  const succ = cg.succC;
+  const nodiTutti = cg.classi;
 
   // Tarjan iterativo (evita limiti di ricorsione con molte US)
   function componentiCicliche() {
@@ -8743,18 +8838,15 @@ function validateMatrixConflicts(sel) {
     let guardia = 0;
     let ciclo;
     while ((ciclo = trovaUnCiclo(comp, tolti)) && guardia++ < 200) {
-      ciclo.forEach(n => conflictNodes.add(n));
-      // v106: tipo di rapporto di ogni tratto (compreso quello di chiusura)
-      const hops = ciclo.map((n, i) => {
-        const next = ciclo[(i + 1) % ciclo.length];
-        const meta = (edgeMeta[n] || {})[next] || {};
-        return { from: n, to: next, tipo: meta.tipo || '?', literal: meta.literal || null };
-      });
-      const testoCiclo = hops.map(h => `US ${h.from} —${h.tipo}→`).join(' ') + ` US ${ciclo[0]}`;
+      // v106/v113: tipo di rapporto di ogni tratto (anche i tratti di uguaglianza)
+      const hops = cg.hopsDelCiclo(ciclo);
+      const nodiCiclo = [...new Set(hops.flatMap(h => [h.from, h.to]))];
+      nodiCiclo.forEach(n => conflictNodes.add(n));
+      const testoCiclo = hops.map(h => `US ${h.from} —${h.tipo}→`).join(' ') + ` US ${hops[0].from}`;
       conflicts.push({
         type: 'cycle',
         msg: `Ciclo stratigrafico impossibile: ${testoCiclo}`,
-        nodes: ciclo,
+        nodes: nodiCiclo,
         hops
       });
       const ultimo = ciclo[ciclo.length - 1];
@@ -9655,6 +9747,372 @@ function _matrixSelCorrente() {
   });
 }
 
+// ─── v113: CONTROLLO US UGUALI ───────────────────────────────────
+// Due US dichiarate "uguali" sono la stessa unità stratigrafica: devono avere
+// gli stessi rapporti di sequenza (copre/coperto da, taglia/tagliato da,
+// riempie/riempito da) con tutte le altre US. Lo strumento trova i rapporti
+// che mancano su una delle due e li propone UNO ALLA VOLTA: scrive solo dopo
+// conferma, su entrambe le schede (rapporto e reciproco). Lavora su tutto
+// l'archivio, non solo sul settore o l'anno selezionati nel Matrix.
+function calcolaMancanzeUguali(arch) {
+  const cg = buildClassGraph(arch);
+  const gruppi = Object.values(cg.members).filter(m => m.length > 1)
+    .map(m => [...m].sort(compareNum))
+    .sort((x, y) => compareNum(x[0], y[0]));
+  const esiste = new Set(cg.edges.map(e => e.u + '\u0001' + e.v + '\u0001' + e.tipo));
+
+  // Raggiungibilità sul grafo a classi: se l'arco chiude un ciclo, non si propone.
+  const raggiunge = (da, a) => {
+    const vis = new Set([da]), coda = [da];
+    while (coda.length) {
+      const x = coda.shift();
+      if (x === a) return true;
+      for (const y of (cg.succC[x] || [])) if (!vis.has(y)) { vis.add(y); coda.push(y); }
+    }
+    return false;
+  };
+
+  const triple = {};
+  cg.edges.forEach(e => {
+    const cu = cg.find(e.u), cv = cg.find(e.v);
+    if (cu === cv) return;                       // rapporto interno al gruppo: è una contraddizione, non una mancanza
+    const k = cu + '\u0001' + cv + '\u0001' + e.tipo;
+    if (!triple[k]) triple[k] = { cu, cv, tipo: e.tipo, rif: e };
+  });
+  const righe = [];
+  Object.values(triple).forEach(t => {
+    const inCiclo = raggiunge(t.cv, t.cu);
+    cg.members[t.cu].forEach(f => cg.members[t.cv].forEach(to => {
+      if (esiste.has(f + '\u0001' + to + '\u0001' + t.tipo)) return;
+      righe.push({ tipoRiga: 'seq', key: f + '\u0001' + to + '\u0001' + t.tipo, from: f, to, tipo: t.tipo, rif: t.rif, inCiclo });
+    }));
+  });
+  righe.sort((x, y) => compareNum(x.from, y.from) || compareNum(x.to, y.to));
+
+  // Catene: A = B e B = C ma A = C non scritto.
+  const catene = [];
+  gruppi.forEach(g => {
+    for (let i = 0; i < g.length; i++) for (let j = i + 1; j < g.length; j++) {
+      if (!cg.eqAdj[g[i]].has(g[j])) catene.push({ tipoRiga: 'eq', key: 'eq\u0001' + g[i] + '\u0001' + g[j], a: g[i], b: g[j], gruppo: g });
+    }
+  });
+
+  // Contraddizioni (cicli, reciproci incompatibili) che toccano US uguali.
+  const inGruppo = new Set(gruppi.flat());
+  const contraddizioni = validateMatrixConflicts(arch).conflicts.filter(c => (c.nodes || []).some(n => inGruppo.has(String(n))));
+  return { gruppi, righe, catene, contraddizioni, cg };
+}
+
+// Pannello flottante (PC) / a tutto schermo (schermi stretti), come il risolutore.
+function _creaPannelloFlottante(idOverlay, titoloTxt) {
+  const flottante = window.innerWidth > 768;
+  const overlay = document.createElement('div');
+  overlay.id = idOverlay;
+  const box = document.createElement('div');
+  if (flottante) {
+    overlay.style.cssText = 'position:fixed;inset:0;z-index:9999;pointer-events:none';
+    box.style.cssText = 'position:absolute;pointer-events:auto;width:min(560px,calc(100vw - 32px));background:var(--parchment);border:1px solid var(--border);border-radius:6px;max-height:88vh;display:flex;flex-direction:column;box-shadow:0 8px 32px rgba(0,0,0,0.35)';
+    box.style.top = '72px'; box.style.left = Math.max(16, window.innerWidth - 592) + 'px';
+  } else {
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px';
+    box.style.cssText = 'background:var(--parchment);border:1px solid var(--border);border-radius:6px;max-width:600px;width:100%;max-height:88vh;display:flex;flex-direction:column;box-shadow:0 8px 32px rgba(0,0,0,0.3)';
+  }
+  const head = document.createElement('div');
+  head.style.cssText = 'padding:14px 14px 4px 20px;font-family:"Space Mono",monospace;font-size:0.85rem;color:var(--earth);font-weight:700;display:flex;justify-content:space-between;align-items:center;gap:10px;touch-action:none' + (flottante ? ';cursor:move;user-select:none' : '');
+  const appVer = (document.querySelector('meta[name="app-version"]') || {}).content || '?';
+  const tit = document.createElement('span'); tit.textContent = titoloTxt;
+  const dx = document.createElement('span'); dx.style.cssText = 'display:flex;align-items:center;gap:8px';
+  const ver = document.createElement('span'); ver.style.cssText = 'font-size:0.65rem;color:var(--muted);font-weight:400'; ver.textContent = 'v' + appVer;
+  dx.appendChild(ver);
+  const bMin = document.createElement('button'); bMin.className = 'btn btn-secondary'; bMin.textContent = '▁'; bMin.title = 'Riduci a barra';
+  bMin.style.cssText = 'font-size:0.75rem;padding:2px 8px;cursor:pointer';
+  if (flottante) dx.appendChild(bMin);
+  const bX = document.createElement('button'); bX.className = 'btn btn-secondary'; bX.textContent = '✕'; bX.title = 'Chiudi';
+  bX.style.cssText = 'font-size:0.75rem;padding:2px 8px;cursor:pointer';
+  dx.appendChild(bX);
+  head.appendChild(tit); head.appendChild(dx);
+  const counter = document.createElement('div');
+  counter.style.cssText = 'padding:2px 20px 10px;font-size:0.72rem;color:var(--muted);font-family:"Space Mono",monospace';
+  const body = document.createElement('div');
+  body.style.cssText = 'padding:4px 20px 14px;overflow-y:auto;flex:1';
+  const foot = document.createElement('div');
+  foot.style.cssText = 'padding:12px 20px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:10px;flex-wrap:wrap';
+  box.appendChild(head); box.appendChild(counter); box.appendChild(body); box.appendChild(foot);
+  overlay.appendChild(box); document.body.appendChild(overlay);
+
+  if (flottante) {
+    let drag = null;
+    head.addEventListener('pointerdown', e => {
+      if (e.target.closest('button')) return;
+      const r = box.getBoundingClientRect();
+      drag = { dx: e.clientX - r.left, dy: e.clientY - r.top };
+      try { head.setPointerCapture(e.pointerId); } catch (_) {}
+      e.preventDefault();
+    });
+    head.addEventListener('pointermove', e => {
+      if (!drag) return;
+      const w = box.offsetWidth;
+      box.style.left = Math.min(Math.max(-w + 80, e.clientX - drag.dx), window.innerWidth - 80) + 'px';
+      box.style.top  = Math.min(Math.max(0, e.clientY - drag.dy), window.innerHeight - 40) + 'px';
+    });
+    const fine = () => { drag = null; };
+    head.addEventListener('pointerup', fine); head.addEventListener('pointercancel', fine);
+    let ridotto = false;
+    bMin.onclick = () => {
+      ridotto = !ridotto;
+      counter.style.display = body.style.display = foot.style.display = ridotto ? 'none' : '';
+      bMin.textContent = ridotto ? '▢' : '▁'; bMin.title = ridotto ? 'Ripristina' : 'Riduci a barra';
+    };
+  }
+
+  function apriScheda(id) {
+    const mo = document.getElementById('us-modal-overlay');
+    const stretto = !flottante;
+    if (stretto) overlay.style.display = 'none';
+    openUSModal(id);
+    if (!mo || mo.style.display === 'none') { if (stretto) overlay.style.display = 'flex'; return; }
+    mo.style.zIndex = '10001';
+    const obs = new MutationObserver(() => {
+      if (mo.style.display === 'none') {
+        obs.disconnect(); mo.style.zIndex = '';
+        if (stretto && document.body.contains(overlay)) overlay.style.display = 'flex';
+      }
+    });
+    obs.observe(mo, { attributes: true, attributeFilter: ['style'] });
+  }
+
+  function boxStato(tipo, titoloS, dettaglio, bottoni) {
+    const col = { lavoro: ['rgba(200,160,60,0.14)', '#c8a03c'], ok: ['rgba(60,150,90,0.18)', '#3c9a5a'], errore: ['rgba(200,70,60,0.16)', '#c8463c'] }[tipo];
+    body.innerHTML = '';
+    const b = document.createElement('div');
+    b.style.cssText = `background:${col[0]};border:2px solid ${col[1]};border-radius:6px;padding:18px 16px;text-align:center`;
+    const t = document.createElement('div');
+    t.style.cssText = 'font-size:0.95rem;font-weight:700;color:var(--ink);margin-bottom:8px;line-height:1.4';
+    t.textContent = titoloS;
+    const d = document.createElement('div');
+    d.style.cssText = 'white-space:pre-line;font-size:0.8rem;color:var(--ink);line-height:1.5;margin-bottom:' + (bottoni && bottoni.length ? '14px' : '0');
+    d.textContent = dettaglio || '';
+    b.appendChild(t); if (dettaglio) b.appendChild(d);
+    (bottoni || []).forEach(x => {
+      const bt = document.createElement('button');
+      bt.className = x.primary ? 'btn btn-primary' : 'btn btn-secondary';
+      bt.style.cssText = 'font-size:0.85rem;padding:9px 16px;margin:0 4px';
+      bt.textContent = x.label; bt.onclick = x.onClick;
+      b.appendChild(bt);
+    });
+    body.appendChild(b); body.scrollTop = 0;
+  }
+  return { overlay, counter, body, foot, bX, flottante, apriScheda, boxStato };
+}
+
+function apriControlloUguali() {
+  if (!schede.length) { showToast('⚠ Nessuna scheda in archivio'); return; }
+  if (isOffline()) { showToast('⚠ Offline — il controllo richiede la rete'); return; }
+  const ex = document.getElementById('controlloUgualiOverlay'); if (ex) ex.remove();
+  const P = _creaPannelloFlottante('controlloUgualiOverlay', '🟰 Controllo US uguali');
+  const { overlay, counter, body, foot, bX, apriScheda, boxStato } = P;
+
+  const bSkip = document.createElement('button');
+  bSkip.className = 'btn btn-secondary'; bSkip.textContent = 'Salta'; bSkip.style.cssText = 'font-size:0.75rem';
+  const bClose = document.createElement('button');
+  bClose.className = 'btn btn-primary'; bClose.textContent = 'Chiudi'; bClose.style.cssText = 'font-size:0.75rem';
+  foot.appendChild(bSkip); foot.appendChild(bClose);
+  const chiudi = () => overlay.remove();
+  bClose.onclick = chiudi; bX.onclick = chiudi;
+  const setNav = ok => { [bSkip, bClose, bX].forEach(b => { b.disabled = !ok; }); };
+
+  const skipped = new Set();
+  let calc = null, righe = [], idx = 0, prima = null;
+  const lblT = t => tipoRapportoLabel(t).toLowerCase();
+  const idDi = n => { const x = schede.find(y => sameNum(y.numero, n)); return x ? x.id : null; };
+  const chipsDi = nums => {
+    const w = document.createElement('div');
+    w.style.cssText = 'margin-top:14px;padding-top:10px;border-top:1px solid var(--border);font-size:0.7rem';
+    let n = 0;
+    [...new Set(nums.map(String))].forEach(num => {
+      const id = idDi(num); if (!id) return;
+      const sp = document.createElement('span');
+      sp.style.cssText = 'cursor:pointer;text-decoration:underline;text-underline-offset:2px;opacity:0.85;margin-right:10px';
+      sp.title = 'Apri scheda US ' + num; sp.textContent = '🔍 US ' + num;
+      sp.onclick = () => apriScheda(id);
+      w.appendChild(sp); n++;
+    });
+    return n ? w : null;
+  };
+
+  function ricalcola() {
+    calc = calcolaMancanzeUguali(schede);
+    righe = [...calc.righe, ...calc.catene].filter(r => !skipped.has(r.key));
+  }
+
+  function riepilogo() {
+    ricalcola();
+    setNav(true); bSkip.disabled = true;
+    counter.textContent = '';
+    body.innerHTML = '';
+    const box = document.createElement('div');
+    box.style.cssText = 'font-size:0.82rem;color:var(--ink);line-height:1.6';
+    const nUS = calc.gruppi.reduce((t, g) => t + g.length, 0);
+    box.innerHTML =
+      `<div style="margin-bottom:10px">Gruppi di US uguali: <b>${calc.gruppi.length}</b> (${nUS} US)</div>` +
+      `<div>Rapporti di sequenza mancanti: <b>${calc.righe.filter(r => !skipped.has(r.key)).length}</b></div>` +
+      `<div>Uguaglianze mancanti nelle catene (A = B, B = C): <b>${calc.catene.filter(r => !skipped.has(r.key)).length}</b></div>` +
+      `<div>Contraddizioni che coinvolgono US uguali: <b>${calc.contraddizioni.length}</b></div>` +
+      (skipped.size ? `<div style="color:var(--muted);font-size:0.74rem;margin-top:6px">Saltate in questa sessione: ${skipped.size}</div>` : '');
+    body.appendChild(box);
+    const nota = document.createElement('div');
+    nota.style.cssText = 'font-size:0.74rem;color:var(--muted);line-height:1.5;margin:12px 0';
+    nota.textContent = 'Non viene scritto nulla finché non confermi una voce. Si trasferiscono solo copre/coperto da, taglia/tagliato da, riempie/riempito da. Lo strumento lavora su tutto l\'archivio.';
+    body.appendChild(nota);
+    if (righe.length) {
+      const bi = document.createElement('button');
+      bi.className = 'btn btn-primary'; bi.style.cssText = 'font-size:0.85rem;padding:9px 16px';
+      bi.textContent = 'Inizia la revisione ▶';
+      bi.onclick = () => { idx = 0; mostraRiga(); };
+      body.appendChild(bi);
+    } else {
+      const ok = document.createElement('div');
+      ok.style.cssText = 'font-weight:700;color:var(--earth);font-size:0.9rem';
+      ok.textContent = skipped.size ? `Nessuna voce rimasta da rivedere (saltate: ${skipped.size}).` : '✓ Tutte le US uguali hanno gli stessi rapporti di sequenza.';
+      body.appendChild(ok);
+    }
+    if (calc.contraddizioni.length) {
+      const h = document.createElement('div');
+      h.style.cssText = 'margin-top:16px;padding-top:10px;border-top:1px solid var(--border);font-size:0.76rem;font-weight:700;color:var(--earth)';
+      h.textContent = 'Contraddizioni da sistemare con "🛠 Risolvi conflitti" nel Matrix:';
+      body.appendChild(h);
+      calc.contraddizioni.slice(0, 30).forEach(c => {
+        const d = document.createElement('div');
+        d.style.cssText = 'font-size:0.74rem;color:var(--ink);line-height:1.45;margin-top:8px';
+        d.textContent = (c.type === 'cycle' ? '🔄 ' : '⚡ ') + c.msg;
+        body.appendChild(d);
+        const ch = chipsDi(c.nodes || []); if (ch) { ch.style.marginTop = '4px'; ch.style.paddingTop = '0'; ch.style.borderTop = 'none'; body.appendChild(ch); }
+      });
+      if (calc.contraddizioni.length > 30) {
+        const d = document.createElement('div');
+        d.style.cssText = 'font-size:0.72rem;color:var(--muted);margin-top:8px';
+        d.textContent = `… e altre ${calc.contraddizioni.length - 30}. Le trovi tutte nel risolutore del Matrix.`;
+        body.appendChild(d);
+      }
+    }
+  }
+
+  function mostraRiga(avviso) {
+    if (!righe.length) { riepilogo(); return; }
+    if (idx >= righe.length) idx = 0;
+    const r = righe[idx];
+    setNav(true); bSkip.disabled = false;
+    counter.textContent = `Voce ${idx + 1} di ${righe.length}`;
+    body.innerHTML = '';
+    if (avviso) body.appendChild(avviso);
+    const msg = document.createElement('div');
+    msg.style.cssText = 'font-size:0.85rem;color:var(--ink);line-height:1.55;margin-bottom:14px';
+    const azioni = document.createElement('div');
+    azioni.style.cssText = 'display:flex;flex-direction:column;gap:6px';
+    let nums = [];
+    if (r.tipoRiga === 'seq') {
+      const rif = r.rif;
+      const perche = [];
+      if (rif.u !== r.from) perche.push(`US ${r.from} è uguale a US ${rif.u}`);
+      if (rif.v !== r.to)   perche.push(`US ${r.to} è uguale a US ${rif.v}`);
+      msg.innerHTML = `<div style="font-weight:700;margin-bottom:6px">➕ US ${r.from} «${lblT(r.tipo)} US ${r.to}»</div>` +
+        `<div style="font-size:0.78rem;color:var(--muted)">Il rapporto «US ${rif.u} ${lblT(rif.tipo)} US ${rif.v}» c'è già` +
+        (perche.length ? `, e ${perche.join('; ')}` : '') + `.<br>Aggiungi scrive «${lblT(r.tipo)} US ${r.to}» su US ${r.from} e «${lblT(RAPPORTI_INVERSI[r.tipo])} US ${r.from}» su US ${r.to} (solo se non già presenti).</div>`;
+      nums = [r.from, r.to, rif.u, rif.v];
+    } else {
+      msg.innerHTML = `<div style="font-weight:700;margin-bottom:6px">➕ US ${r.a} «uguale a US ${r.b}»</div>` +
+        `<div style="font-size:0.78rem;color:var(--muted)">Gruppo di US uguali: ${r.gruppo.map(x => 'US ' + x).join(' = ')}.<br>US ${r.a} e US ${r.b} sono uguali tramite altre US, ma l'uguaglianza diretta non è scritta. Aggiungi la scrive su entrambe le schede.</div>`;
+      nums = r.gruppo;
+    }
+    body.appendChild(msg);
+    if (r.inCiclo) {
+      const av = document.createElement('div');
+      av.style.cssText = 'background:rgba(200,70,60,0.16);border:2px solid #c8463c;border-radius:6px;padding:10px 12px;margin-bottom:12px;font-size:0.78rem;color:var(--ink);line-height:1.5';
+      av.textContent = '⚠ Questo rapporto fa parte di un ciclo stratigrafico: non lo aggiungo. Sistema prima il ciclo con "🛠 Risolvi conflitti" nel Matrix, poi ripeti il controllo.';
+      body.appendChild(av);
+    }
+    const bAdd = document.createElement('button');
+    bAdd.className = 'btn btn-primary'; bAdd.style.cssText = 'font-size:0.8rem;padding:8px 14px';
+    bAdd.textContent = '➕ Aggiungi (su entrambe le schede)';
+    bAdd.disabled = !!r.inCiclo;
+    bAdd.onclick = () => aggiungi(r);
+    azioni.appendChild(bAdd);
+    body.appendChild(azioni);
+    const ch = chipsDi(nums); if (ch) body.appendChild(ch);
+  }
+
+  async function scriviAdd(da, a, tipo) {
+    const inv = RAPPORTI_INVERSI[tipo];
+    const out = [];
+    const r1 = await modificaRapportoSuFoglio(da, { tipo, us: a }, 'add');
+    if (!r1 || r1.ok === false) throw _errRis(`US ${da} non trovata sul foglio.`);
+    out.push(r1.reason === 'add' ? `US ${da}: aggiunto «${lblT(tipo)} US ${a}»` : `US ${da}: «${lblT(tipo)} US ${a}» era già presente`);
+    const r2 = await modificaRapportoSuFoglio(a, { tipo: inv, us: da }, 'add');
+    if (!r2 || r2.ok === false) throw _errRis(`US ${a} non trovata sul foglio.`);
+    out.push(r2.reason === 'add' ? `US ${a}: aggiunto «${lblT(inv)} US ${da}»` : `US ${a}: «${lblT(inv)} US ${da}» era già presente`);
+    return out;
+  }
+
+  async function aggiornaPoi(log) {
+    const elenco = '\n\nModificato sul foglio:\n' + log.join('\n');
+    setNav(false);
+    boxStato('lavoro', '⏳ Aggiorno i dati dal foglio…', 'Attendi: la voce successiva comparirà solo a fine aggiornamento.' + elenco);
+    let ok = false;
+    try { ok = (await loadFromSheets(false, true)) !== false; } catch (e) { console.error(e); }
+    if (!ok) {
+      bClose.disabled = false; bX.disabled = false;
+      boxStato('errore', '⚠ Scritto, ma aggiornamento dati non riuscito',
+        'Le schede potrebbero mostrare ancora i dati vecchi. Controlla la connessione e riprova.' + elenco,
+        [{ label: '🔄 Riprova aggiornamento', primary: true, onClick: () => aggiornaPoi(log) }]);
+      return;
+    }
+    ricalcola();
+    const n = righe.length;
+    counter.textContent = n ? `Voci rimaste: ${n}` : '';
+    bClose.disabled = false; bX.disabled = false;
+    const conteggio = (prima !== null) ? `\nVoci: da ${prima} a ${n}.` : '';
+    if (n) {
+      boxStato('ok', '✓ Fatto — scritto e dati aggiornati',
+        `Le schede mostrano già i dati nuovi. Voci rimaste: ${n}.` + conteggio + elenco,
+        [{ label: 'Vai alla prossima voce ▶', primary: true, onClick: () => { idx = 0; mostraRiga(); } }]);
+    } else {
+      boxStato('ok', '✅ Fatto — nessuna voce rimasta',
+        'Scritto e dati aggiornati. Non ci sono altri rapporti da riportare tra le US uguali.' + elenco,
+        [{ label: 'Chiudi', primary: true, onClick: chiudi }]);
+    }
+  }
+
+  async function aggiungi(r) {
+    setNav(false);
+    prima = righe.length;
+    boxStato('lavoro', '⏳ Scrivo sul foglio…', 'Attendi il messaggio verde prima di fare altro.');
+    let log = [];
+    try {
+      log = (r.tipoRiga === 'seq') ? await scriviAdd(r.from, r.to, r.tipo) : await scriviAdd(r.a, r.b, 'uguale_a');
+    } catch (e) {
+      console.error(e);
+      setNav(true);
+      const err = document.createElement('div');
+      err.style.cssText = 'background:rgba(200,70,60,0.16);border:2px solid #c8463c;border-radius:6px;padding:10px 12px;margin-bottom:12px;font-size:0.8rem;color:var(--ink);line-height:1.5';
+      err.textContent = '⚠ ' + (e && e.userMsg ? e.userMsg : (navigator.onLine === false
+        ? 'Sei offline: nulla scritto. Riprova quando torna la rete.'
+        : 'Scrittura non riuscita. Controlla la connessione e riprova: ripetere l\'operazione è sicuro.'));
+      mostraRiga(err);
+      return;
+    }
+    await aggiornaPoi(log);
+  }
+
+  bSkip.onclick = () => {
+    if (!righe.length) return;
+    skipped.add(righe[idx].key);
+    righe.splice(idx, 1);
+    mostraRiga();
+  };
+
+  riepilogo();
+}
+
 // v111 — Correzioni del risolutore che agiscono su ENTRAMBE le schede.
 // Un rapporto di sequenza (copre/taglia/riempie) è di solito scritto due volte:
 // su una US come «copre 46» e sull'altra come «coperto da 45». Il grafo del
@@ -9960,6 +10418,22 @@ function apriRisolutoreConflitti() {
     } else if (c.type === 'cycle') {
       (c.hops || []).forEach(h => {
         if (!h.literal) return;
+        if (h.eq) {
+          // v113: tratto di uguaglianza (US dichiarate uguali) dentro il ciclo.
+          const rigaEq = document.createElement('div');
+          rigaEq.style.cssText = 'border-top:1px solid var(--border);padding:9px 0 2px';
+          const tEq = document.createElement('div');
+          tEq.style.cssText = 'font-size:0.76rem;color:var(--muted);margin-bottom:6px';
+          tEq.textContent = `US ${h.from} = US ${h.to}  (dichiarate uguali)`;
+          rigaEq.appendChild(tEq);
+          const innerEq = document.createElement('div');
+          innerEq.style.cssText = 'display:flex;gap:8px;flex-wrap:wrap';
+          rigaAzione(innerEq, '− Rimuovi uguaglianza (da entrambe le schede)',
+            () => rimuoviRapportoDaEntrambe(h.from, h.to, 'uguale_a'));
+          rigaEq.appendChild(innerEq);
+          azioni.appendChild(rigaEq);
+          return;
+        }
         const riga = document.createElement('div');
         riga.style.cssText = 'border-top:1px solid var(--border);padding:9px 0 2px';
         const titoloH = document.createElement('div');
@@ -10099,9 +10573,9 @@ function showToast(msg) {
   <script>
     if ('serviceWorker' in navigator && !location.hostname.includes('claudeusercontent.com')) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./service-worker.js?v=112')
+        navigator.serviceWorker.register('./service-worker.js?v=113')
           .then(reg => {
-            console.log('SW registrato v112:', reg.scope);
+            console.log('SW registrato v113:', reg.scope);
             // Forza aggiornamento immediato se c'è una nuova versione
             reg.update();
           })

@@ -1,11 +1,13 @@
 // ─────────────────────────────────────────────────────────────────
 // SMP Scavo — Service Worker
-// v112 — Scheda US: nuovo pulsante "⬇ Testo" (esporta tutti i dati in .txt) e
-// PDF senza più testi tagliati o sbordanti: le caselle restano ferme, il testo
-// si riduce fino a 6 pt e, se non basta, il resto va nel foglio di
-// continuazione (pagina 3). Include le correzioni dei conflitti Matrix v108-v111.
+// v113 — Nuovo strumento "🟰 Controllo US uguali" (menu Strumenti): trova i
+// rapporti di sequenza (copre/taglia/riempie e inversi) presenti su una US ma
+// non sulle US dichiarate uguali, e li propone una alla volta, da confermare,
+// scrivendoli su entrambe le schede. Il controllo dei cicli del Matrix ora
+// tratta le US uguali come un'unica unità (cicli attraverso le uguaglianze).
+// Include PDF con foglio di continuazione (v112) e correzioni conflitti (v108-111).
 // ─────────────────────────────────────────────────────────────────
-const CACHE_NAME = 'smp-scavo-v112';
+const CACHE_NAME = 'smp-scavo-v113';
 
 // Shell dell'app da rendere disponibile offline.
 const APP_SHELL = [
