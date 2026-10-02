@@ -1,13 +1,13 @@
 // ─────────────────────────────────────────────────────────────────
 // SMP Scavo — Service Worker
-// v113 — Nuovo strumento "🟰 Controllo US uguali" (menu Strumenti): trova i
-// rapporti di sequenza (copre/taglia/riempie e inversi) presenti su una US ma
-// non sulle US dichiarate uguali, e li propone una alla volta, da confermare,
-// scrivendoli su entrambe le schede. Il controllo dei cicli del Matrix ora
-// tratta le US uguali come un'unica unità (cicli attraverso le uguaglianze).
-// Include PDF con foglio di continuazione (v112) e correzioni conflitti (v108-111).
+// v114 — "Controllo US uguali": nuovo pulsante "🔎 Uguaglianze sospette".
+// Per ogni «uguale a» coinvolta nei cicli stratigrafici calcola quante US
+// restano in conflitto se la si toglie, e le propone una alla volta (dalla
+// più sospetta) con possibilità di rimuoverla da entrambe le schede.
+// Include controllo US uguali e cicli attraverso le uguaglianze (v113),
+// PDF con foglio di continuazione (v112), correzioni conflitti (v108-111).
 // ─────────────────────────────────────────────────────────────────
-const CACHE_NAME = 'smp-scavo-v113';
+const CACHE_NAME = 'smp-scavo-v114';
 
 // Shell dell'app da rendere disponibile offline.
 const APP_SHELL = [

@@ -5,7 +5,7 @@
   <!-- PWA -->
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#C9963A">
-  <meta name="app-version" content="113">
+  <meta name="app-version" content="114">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="SMP Scavo">
@@ -8584,7 +8584,7 @@ function popolaFiltriMatrix() {
 // nodo. Così il controllo dei cicli vede anche i cicli che passano attraverso
 // un'uguaglianza (A copre C, C copre B, con A = B). Ritorna anche gli archi
 // originali, per poter mostrare i rapporti reali di ogni ciclo.
-function buildClassGraph(sel) {
+function buildClassGraph(sel, escludiEq) {   // escludiEq: Set di coppie 'a\u0001b' (ordinate) da ignorare come uguaglianza
   const key = v => String(v == null ? '' : v).trim();
   const nodes = sel.map(s => key(s.numero));
   const nodeSet = new Set(nodes);
@@ -8602,6 +8602,7 @@ function buildClassGraph(sel) {
       if (!nodeSet.has(b)) return;
       if (r.tipo === 'uguale_a') {
         if (a === b) return;
+        if (escludiEq && escludiEq.has([a, b].sort().join('\u0001'))) return;
         eqAdj[a].add(b); eqAdj[b].add(a);
         const ra = find(a), rb = find(b); if (ra !== rb) parent[ra] = rb;
       } else if (FWD[r.tipo]) {
@@ -9803,6 +9804,78 @@ function calcolaMancanzeUguali(arch) {
   return { gruppi, righe, catene, contraddizioni, cg };
 }
 
+// v114 — Classifica delle "uguaglianze sospette": per ogni «uguale a» che sta
+// in un groviglio di cicli, quante US restano coinvolte in cicli se la si toglie.
+function _compCicliche(succ, nodi) {
+  let counter = 0;
+  const index = {}, low = {}, onSt = {}, st = [], comps = [];
+  for (const root of nodi) {
+    if (index[root] !== undefined) continue;
+    const work = [[root, 0]];
+    index[root] = low[root] = counter++; st.push(root); onSt[root] = true;
+    while (work.length) {
+      const top = work[work.length - 1], v = top[0], nbs = succ[v] || [];
+      if (top[1] < nbs.length) {
+        const w = nbs[top[1]++];
+        if (index[w] === undefined) { index[w] = low[w] = counter++; st.push(w); onSt[w] = true; work.push([w, 0]); }
+        else if (onSt[w]) low[v] = Math.min(low[v], index[w]);
+      } else {
+        if (low[v] === index[v]) {
+          const comp = []; let w;
+          do { w = st.pop(); onSt[w] = false; comp.push(w); } while (w !== v);
+          if (comp.length > 1 || (succ[v] || []).includes(v)) comps.push(comp);
+        }
+        work.pop();
+        if (work.length) { const pp = work[work.length - 1][0]; low[pp] = Math.min(low[pp], low[v]); }
+      }
+    }
+  }
+  return comps;
+}
+
+function usInCicli(cg) {
+  let n = 0;
+  _compCicliche(cg.succC, cg.classi).forEach(c => c.forEach(cl => { n += cg.members[cl].length; }));
+  return n;
+}
+
+function classificaUguaglianzeSospette(arch) {
+  const cg0 = buildClassGraph(arch);
+  const base = usInCicli(cg0);
+  const conflitti = validateMatrixConflicts(arch).conflicts;
+  const chiave = (x, y) => [x, y].sort().join('\u0001');
+  // in quanti dei cicli segnalati compare ciascuna uguaglianza
+  const K = {};
+  conflitti.forEach(c => {
+    if (c.type !== 'cycle') return;
+    const viste = new Set();
+    (c.hops || []).forEach(h => { if (h.eq) viste.add(chiave(h.from, h.to)); });
+    viste.forEach(k => { K[k] = (K[k] || 0) + 1; });
+  });
+  // classi che stanno in un groviglio
+  const cicliche = new Set();
+  _compCicliche(cg0.succC, cg0.classi).forEach(c => c.forEach(cl => cicliche.add(cl)));
+  // candidati: tutte le uguaglianze dichiarate dentro classi cicliche
+  const cand = new Map();
+  cg0.nodes.forEach(a => cg0.eqAdj[a].forEach(b => {
+    const k = chiave(a, b);
+    if (!cand.has(k) && cicliche.has(cg0.find(a))) cand.set(k, [a, b].sort());
+  }));
+  let lista = [...cand.entries()];
+  const MAX = 600;                       // limite di sicurezza sul tempo di calcolo
+  if (lista.length > MAX) lista = lista.sort((x, y) => (K[y[0]] || 0) - (K[x[0]] || 0)).slice(0, MAX);
+  const items = [];
+  lista.forEach(([k, [a, b]]) => {
+    const cgX = buildClassGraph(arch, new Set([k]));
+    const dopo = usInCicli(cgX);
+    const score = base - dopo;
+    const nK = K[k] || 0;
+    if (score > 0 || nK > 0) items.push({ key: k, a, b, score, K: nK, dopo });
+  });
+  items.sort((x, y) => (y.score - x.score) || (y.K - x.K) || compareNum(x.a, y.a) || compareNum(x.b, y.b));
+  return { items, base, nConflitti: conflitti.length, troncata: cand.size > MAX };
+}
+
 // Pannello flottante (PC) / a tutto schermo (schermi stretti), come il risolutore.
 function _creaPannelloFlottante(idOverlay, titoloTxt) {
   const flottante = window.innerWidth > 768;
@@ -9964,12 +10037,20 @@ function apriControlloUguali() {
     nota.style.cssText = 'font-size:0.74rem;color:var(--muted);line-height:1.5;margin:12px 0';
     nota.textContent = 'Non viene scritto nulla finché non confermi una voce. Si trasferiscono solo copre/coperto da, taglia/tagliato da, riempie/riempito da. Lo strumento lavora su tutto l\'archivio.';
     body.appendChild(nota);
+    if (calc.gruppi.length) {
+      const bs = document.createElement('button');
+      bs.className = 'btn btn-secondary'; bs.style.cssText = 'font-size:0.85rem;padding:9px 16px;margin-left:8px';
+      bs.textContent = '🔎 Uguaglianze sospette';
+      bs.title = 'Le uguaglianze che, se tolte, ridurrebbero di più i cicli impossibili';
+      bs.onclick = () => sospette(true);
+      body.appendChild(bs);
+    }
     if (righe.length) {
       const bi = document.createElement('button');
       bi.className = 'btn btn-primary'; bi.style.cssText = 'font-size:0.85rem;padding:9px 16px';
       bi.textContent = 'Inizia la revisione ▶';
       bi.onclick = () => { idx = 0; mostraRiga(); };
-      body.appendChild(bi);
+      body.insertBefore(bi, body.lastChild);
     } else {
       const ok = document.createElement('div');
       ok.style.cssText = 'font-weight:700;color:var(--earth);font-size:0.9rem';
@@ -10101,6 +10182,112 @@ function apriControlloUguali() {
       return;
     }
     await aggiornaPoi(log);
+  }
+
+
+  // ── Uguaglianze sospette (v114) ──
+  let sosp = null, sIdx = 0, sPrima = null;
+  function sospette(ricalcolaOra) {
+    setNav(false); bClose.disabled = false; bX.disabled = false; bSkip.disabled = true;
+    counter.textContent = '';
+    if (ricalcolaOra || !sosp) {
+      boxStato('lavoro', '⏳ Calcolo le uguaglianze sospette…', 'Provo a togliere una per una le uguaglianze coinvolte nei cicli e misuro quanto si riduce il groviglio. Può richiedere qualche secondo.');
+      setTimeout(() => {
+        try { sosp = classificaUguaglianzeSospette(schede); }
+        catch (e) { console.error(e); boxStato('errore', '⚠ Calcolo non riuscito', String(e && e.message || e), [{ label: '← Torna al riepilogo', onClick: riepilogo }]); return; }
+        sIdx = 0; mostraSospetta();
+      }, 40);
+    } else mostraSospetta();
+  }
+
+  function mostraSospetta(avviso) {
+    setNav(true); bSkip.disabled = true;
+    body.innerHTML = '';
+    if (!sosp.items.length) {
+      boxStato('ok', '✓ Nessuna uguaglianza sospetta', sosp.base ? 'Nessuna uguaglianza, da sola, tiene in piedi i cicli: possono dipendere da rapporti di sequenza sbagliati. Usa "🛠 Risolvi conflitti" nel Matrix.' : 'Non ci sono US coinvolte in cicli.', [{ label: '← Torna al riepilogo', onClick: riepilogo }]);
+      return;
+    }
+    if (sIdx >= sosp.items.length) sIdx = 0;
+    if (sIdx < 0) sIdx = sosp.items.length - 1;
+    const it = sosp.items[sIdx];
+    counter.textContent = `Sospetta ${sIdx + 1} di ${sosp.items.length}`;
+    if (avviso) body.appendChild(avviso);
+    const msg = document.createElement('div');
+    msg.style.cssText = 'font-size:0.85rem;color:var(--ink);line-height:1.55;margin-bottom:14px';
+    const gruppo = (calc && calc.gruppi.find(g => g.includes(it.a))) || [it.a, it.b];
+    msg.innerHTML =
+      `<div style="font-weight:700;margin-bottom:6px">🔎 US ${it.a} = US ${it.b}</div>` +
+      `<div style="font-size:0.78rem;color:var(--ink);line-height:1.6">` +
+      (it.score > 0
+        ? `Togliendo questa uguaglianza, le US coinvolte in cicli passano da <b>${sosp.base}</b> a <b>${it.dopo}</b> (−${it.score}).`
+        : `Da sola non scioglie i cicli, ma compare in <b>${it.K}</b> cicli segnalati.`) +
+      (it.score > 0 ? `<br>Compare in <b>${it.K}</b> cicli segnalati.` : '') +
+      `<br>Gruppo di US uguali: ${gruppo.map(x => 'US ' + x).join(' = ')}.` +
+      `</div>` +
+      `<div style="font-size:0.74rem;color:var(--muted);line-height:1.5;margin-top:8px">È un indizio, non una sentenza: apri le due schede con le lenti e valuta se è l'uguaglianza a essere sbagliata o un rapporto di sequenza. «Rimuovi» toglie «uguale a US ${it.b}» da US ${it.a} e «uguale a US ${it.a}» da US ${it.b} (solo dove presenti).</div>`;
+    body.appendChild(msg);
+    const azioni = document.createElement('div');
+    azioni.style.cssText = 'display:flex;flex-direction:column;gap:6px';
+    const bRim = document.createElement('button');
+    bRim.className = 'btn btn-primary'; bRim.style.cssText = 'font-size:0.8rem;padding:8px 14px';
+    bRim.textContent = '− Rimuovi uguaglianza (da entrambe le schede)';
+    bRim.onclick = () => rimuoviSospetta(it);
+    azioni.appendChild(bRim);
+    body.appendChild(azioni);
+    const nav = document.createElement('div');
+    nav.style.cssText = 'display:flex;gap:8px;flex-wrap:wrap;margin-top:14px';
+    [['◀ Precedente', () => { sIdx--; mostraSospetta(); }], ['Successiva ▶', () => { sIdx++; mostraSospetta(); }], ['← Riepilogo', riepilogo]].forEach(([t, f]) => {
+      const b = document.createElement('button');
+      b.className = 'btn btn-secondary'; b.style.cssText = 'font-size:0.75rem'; b.textContent = t; b.onclick = f;
+      nav.appendChild(b);
+    });
+    body.appendChild(nav);
+    const ch = chipsDi([it.a, it.b]); if (ch) body.appendChild(ch);
+  }
+
+  async function rimuoviSospetta(it) {
+    setNav(false);
+    sPrima = { base: sosp.base, conflitti: sosp.nConflitti };
+    boxStato('lavoro', '⏳ Scrivo sul foglio…', 'Attendi il messaggio verde prima di fare altro.');
+    let log = [];
+    try { log = await rimuoviRapportoDaEntrambe(it.a, it.b, 'uguale_a'); }
+    catch (e) {
+      console.error(e);
+      setNav(true);
+      const err = document.createElement('div');
+      err.style.cssText = 'background:rgba(200,70,60,0.16);border:2px solid #c8463c;border-radius:6px;padding:10px 12px;margin-bottom:12px;font-size:0.8rem;color:var(--ink);line-height:1.5';
+      err.textContent = '⚠ ' + (e && e.userMsg ? e.userMsg : (navigator.onLine === false ? 'Sei offline: nulla scritto.' : 'Scrittura non riuscita. Controlla la connessione e riprova: ripetere l\'operazione è sicuro.'));
+      mostraSospetta(err);
+      return;
+    }
+    await aggiornaSospette(log);
+  }
+
+  async function aggiornaSospette(log) {
+    const elenco = '\n\nModificato sul foglio:\n' + log.join('\n');
+    setNav(false);
+    boxStato('lavoro', '⏳ Aggiorno i dati dal foglio…', 'Attendi: la voce successiva comparirà solo a fine aggiornamento.' + elenco);
+    let ok = false;
+    try { ok = (await loadFromSheets(false, true)) !== false; } catch (e) { console.error(e); }
+    if (!ok) {
+      bClose.disabled = false; bX.disabled = false;
+      boxStato('errore', '⚠ Scritto, ma aggiornamento dati non riuscito',
+        'Le schede potrebbero mostrare ancora i dati vecchi. Controlla la connessione e riprova.' + elenco,
+        [{ label: '🔄 Riprova aggiornamento', primary: true, onClick: () => aggiornaSospette(log) }]);
+      return;
+    }
+    boxStato('lavoro', '⏳ Ricalcolo la classifica…', 'Ancora qualche secondo.' + elenco);
+    setTimeout(() => {
+      try { calc = calcolaMancanzeUguali(schede); sosp = classificaUguaglianzeSospette(schede); }
+      catch (e) { console.error(e); }
+      bClose.disabled = false; bX.disabled = false; sIdx = 0; counter.textContent = '';
+      const dettaglio = sosp
+        ? `US coinvolte in cicli: da ${sPrima.base} a ${sosp.base}.\nContraddizioni e cicli: da ${sPrima.conflitti} a ${sosp.nConflitti}.\nUguaglianze sospette rimaste: ${sosp.items.length}.` + elenco
+        : elenco;
+      boxStato('ok', '✓ Fatto — uguaglianza rimossa e dati aggiornati', dettaglio,
+        [{ label: sosp && sosp.items.length ? 'Vai alla prossima sospetta ▶' : '← Torna al riepilogo', primary: true,
+           onClick: () => (sosp && sosp.items.length) ? mostraSospetta() : riepilogo() }]);
+    }, 40);
   }
 
   bSkip.onclick = () => {
@@ -10573,9 +10760,9 @@ function showToast(msg) {
   <script>
     if ('serviceWorker' in navigator && !location.hostname.includes('claudeusercontent.com')) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./service-worker.js?v=113')
+        navigator.serviceWorker.register('./service-worker.js?v=114')
           .then(reg => {
-            console.log('SW registrato v113:', reg.scope);
+            console.log('SW registrato v114:', reg.scope);
             // Forza aggiornamento immediato se c'è una nuova versione
             reg.update();
           })
