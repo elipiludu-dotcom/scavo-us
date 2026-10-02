@@ -1,13 +1,16 @@
 // ─────────────────────────────────────────────────────────────────
 // SMP Scavo — Service Worker
-// v114 — "Controllo US uguali": nuovo pulsante "🔎 Uguaglianze sospette".
-// Per ogni «uguale a» coinvolta nei cicli stratigrafici calcola quante US
-// restano in conflitto se la si toglie, e le propone una alla volta (dalla
-// più sospetta) con possibilità di rimuoverla da entrambe le schede.
-// Include controllo US uguali e cicli attraverso le uguaglianze (v113),
-// PDF con foglio di continuazione (v112), correzioni conflitti (v108-111).
+// v116 — Matrix: un grafo per area (Area 1 = US a 3 cifre, Area 2000 = 4 cifre);
+// righe fisse per i riferimenti cronologici (2000, 2041, 2145, 2185, 2445);
+// cicli non più scaricati sul fondo; fascia a parte per le US senza rapporti di
+// sequenza; clic su una US = evidenzia l'intera catena sopra e sotto.
+// v115 — Nuovo strumento "🧩 US senza rapporti" (menu Strumenti, sola lettura):
+// elenca le US senza alcun rapporto, con soli rapporti non di sequenza, con
+// rapporti verso US inesistenti, e le US senza nulla sopra / senza nulla sotto.
+// Include uguaglianze sospette (v114), controllo US uguali (v113), PDF con
+// foglio di continuazione (v112), correzioni conflitti (v108-111).
 // ─────────────────────────────────────────────────────────────────
-const CACHE_NAME = 'smp-scavo-v114';
+const CACHE_NAME = 'smp-scavo-v116';
 
 // Shell dell'app da rendere disponibile offline.
 const APP_SHELL = [

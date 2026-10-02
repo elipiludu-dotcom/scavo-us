@@ -5,7 +5,7 @@
   <!-- PWA -->
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#C9963A">
-  <meta name="app-version" content="114">
+  <meta name="app-version" content="116">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="SMP Scavo">
@@ -1095,6 +1095,9 @@
         <div class="nav-dropdown-item" onclick="apriControlloUguali()">
           <span class="nav-icon">🟰</span> Controllo US uguali
         </div>
+        <div class="nav-dropdown-item" onclick="apriUSIsolate()">
+          <span class="nav-icon">🧩</span> US senza rapporti
+        </div>
         <div class="nav-dropdown-item" onclick="apriCreazioneUSRielaborazione()">
           <span class="nav-icon">🏗️</span> Crea US taglio/riempimento (bulk)
         </div>
@@ -1729,6 +1732,11 @@
       <!-- Toolbar -->
       <div style="display:flex;align-items:center;gap:10px;padding:10px 16px;border-bottom:1px solid var(--border);flex-wrap:wrap">
         <h2 style="margin:0;font-family:'Patrick Hand',cursive;color:var(--earth);font-size:1.2rem;white-space:nowrap">📊 Matrix</h2>
+        <select id="matrix-area" onchange="renderMatrix()" title="Le US a 3 cifre sono dell'Area 1, quelle a 4 cifre dell'Area 2000"
+          style="padding:6px 10px;background:var(--parchment-light);border:1px solid var(--border);border-radius:3px;color:var(--ink);font-size:0.8rem;font-family:'Space Mono',monospace">
+          <option value="2000" selected>Area 2000 (US a 4 cifre)</option>
+          <option value="1">Area 1 (US a 3 cifre)</option>
+        </select>
         <select id="matrix-settore" onchange="renderMatrix()"
           style="padding:6px 10px;background:var(--parchment-light);border:1px solid var(--border);border-radius:3px;color:var(--ink);font-size:0.8rem;font-family:'Space Mono',monospace">
           <option value="">— tutti i settori —</option>
@@ -1739,6 +1747,9 @@
         </select>
         <div style="display:flex;gap:6px;margin-left:auto;align-items:center;flex-wrap:wrap">
           <span id="matrix-info" style="font-size:0.72rem;color:var(--muted);font-family:'Space Mono',monospace;white-space:nowrap"></span>
+          <button class="btn btn-secondary" id="matrix-note-btn" onclick="apriNoteMatrix()" style="font-size:0.72rem;padding:5px 10px;white-space:nowrap;display:none"></button>
+          <button class="btn btn-primary" id="matrix-chain-open" onclick="matrixChainOpen()" style="font-size:0.72rem;padding:5px 10px;white-space:nowrap;display:none"></button>
+          <button class="btn btn-secondary" id="matrix-chain-clear" onclick="matrixChainClear()" style="font-size:0.72rem;padding:5px 10px;white-space:nowrap;display:none">✕ Togli evidenziazione</button>
           <button class="btn btn-secondary" onclick="exportMatrixSVG()" style="font-size:0.72rem;padding:5px 10px;white-space:nowrap">⬇ SVG</button>
           <button class="btn btn-secondary" onclick="exportMatrixPDF()" style="font-size:0.72rem;padding:5px 10px;white-space:nowrap">⬇ PDF</button>
           <button class="btn btn-primary" onclick="apriRisolutoreConflitti()" id="btn-risolvi-conflitti" style="font-size:0.72rem;padding:5px 10px;white-space:nowrap;display:none">🛠 Risolvi conflitti</button>
@@ -9018,6 +9029,12 @@ function _mxInitEvents() {
     }
   }, { passive: false });
   container.addEventListener('touchend', () => { _mx.dragging = false; _mx.pinchDist = null; });
+  // v116: clic sullo sfondo (senza trascinare) = togli l'evidenziazione della catena
+  container.addEventListener('click', e => {
+    if (e.target.closest && e.target.closest('g[data-us]')) return;
+    if (Math.abs(_mx.tx - _mx.lastTx) > 3 || Math.abs(_mx.ty - _mx.lastTy) > 3) return;
+    matrixChainClear();
+  });
 }
 
 
@@ -9046,17 +9063,268 @@ async function aggiornaMatrix() {
   }
 }
 
+// ─── v116: MATRIX PER AREA, RIFERIMENTI CRONOLOGICI, FASCIA ISOLATE, CATENA ──
+// Area 1 = US a 3 cifre, Area 2000 = US a 4 cifre (si guarda il primo gruppo di
+// cifre del numero, senza segno e senza lettere: -2002 e 2002bis sono Area 2000).
+// Qualsiasi altro numero (1-2 cifre, 5 o più) va in Area 1 e viene segnalato.
+// I RIFERIMENTI sono US-spartiacque interpretative, dalla più recente alla più
+// antica. Non sono contenitori: servono a dare righe fisse al grafico.
+const MATRIX_ANCORE = { '2000': ['2000', '2041', '2145', '2185', '2445'], '1': [] };
+
+function _cifreNum(numero) {
+  const m = String(numero == null ? '' : numero).match(/\d+/);
+  return m ? m[0].replace(/^0+/, '') : '';
+}
+function matrixAreaDi(numero) { return _cifreNum(numero).length === 4 ? '2000' : '1'; }
+function _matrixAreaCorrente() { return document.getElementById('matrix-area')?.value || '2000'; }
+
+// Rapporti scritti tra US di aree diverse (per te non dovrebbero esistere).
+function calcolaRelazioniTraAree(arch) {
+  const esiste = new Set(arch.map(s => String(s.numero).trim()));
+  const viste = new Map();
+  arch.forEach(s => {
+    const a = String(s.numero).trim();
+    const raps = Array.isArray(s.rapporti) ? s.rapporti : (() => { try { return JSON.parse(s.rapporti || '[]'); } catch { return []; } })();
+    raps.forEach(r => {
+      const b = String(r.us == null ? '' : r.us).trim();
+      if (!b || !esiste.has(b) || a === b) return;
+      if (matrixAreaDi(a) === matrixAreaDi(b)) return;
+      const k = [a, b].sort().join('\u0001');
+      if (!viste.has(k)) viste.set(k, { a, b, tipi: [] });
+      viste.get(k).tipi.push(`${a}: ${tipoRapportoLabel(r.tipo).toLowerCase()} ${b}`);
+    });
+  });
+  return [...viste.values()].sort((x, y) => compareNum(x.a, y.a));
+}
+
+// Calcolo dei livelli del Matrix (v116).
+//  - le US uguali sono un solo nodo (classe);
+//  - i cicli NON vengono più scaricati sull'ultima riga: si ignorano solo gli archi
+//    "di ritorno" (quelli che chiudono il ciclo, trovati con una visita dall'alto)
+//    e si dispongono per livelli le US del ciclo e quelle sotto di esse;
+//  - i riferimenti cronologici sono righe fisse in ordine (archi virtuali tra l'uno
+//    e il successivo, solo per il calcolo: non vengono disegnati);
+//  - le US senza alcun rapporto di sequenza vanno nella fascia a parte (strip).
+function _layoutMatrixV116(sel, succ, nodeGroup, ancoreNum) {
+  const avvisi = [];
+  const classi = [...new Set(sel.map(s => nodeGroup[String(s.numero)]))];
+  const cSucc = {}; classi.forEach(c => { cSucc[c] = new Set(); });
+  sel.forEach(s => {
+    const u = String(s.numero);
+    (succ[u] || []).forEach(v => {
+      const cu = nodeGroup[u], cv = nodeGroup[v];
+      if (cu !== undefined && cv !== undefined && cu !== cv) cSucc[cu].add(cv);
+    });
+  });
+  const hasIn = {}; classi.forEach(c => { hasIn[c] = false; });
+  classi.forEach(c => cSucc[c].forEach(d => { hasIn[d] = true; }));
+  const seq = new Set(classi.filter(c => cSucc[c].size > 0 || hasIn[c]));
+
+  // Riferimenti presenti e utilizzabili
+  const ancoreCl = [];
+  (ancoreNum || []).forEach(n => {
+    const c = nodeGroup[String(n)];
+    if (c === undefined) { avvisi.push({ tipo: 'ancora', msg: `Il riferimento US ${n} non è tra le US mostrate.` }); return; }
+    if (!seq.has(c)) { avvisi.push({ tipo: 'ancora', msg: `Il riferimento US ${n} non ha rapporti di sequenza: non può fare da riga fissa.` }); return; }
+    if (ancoreCl.length && ancoreCl[ancoreCl.length - 1].c === c) { avvisi.push({ tipo: 'ancora', msg: `I riferimenti US ${ancoreCl[ancoreCl.length - 1].num} e US ${n} sono dichiarati uguali.` }); return; }
+    ancoreCl.push({ num: String(n), c });
+  });
+
+  // Visita dall'alto per trovare gli archi di ritorno (chiudono i cicli)
+  const ord = [...seq].sort(compareNum);
+  const roots = ancoreCl.map(a => a.c).concat(ord.filter(c => !hasIn[c]), ord);
+  const color = {}, back = new Set();
+  const vicini = c => [...cSucc[c]].sort(compareNum);
+  roots.forEach(r0 => {
+    if (color[r0]) return;
+    color[r0] = 1;
+    const stack = [[r0, vicini(r0), 0]];
+    while (stack.length) {
+      const top = stack[stack.length - 1];
+      if (top[2] < top[1].length) {
+        const v = top[1][top[2]++];
+        if (!color[v]) { color[v] = 1; stack.push([v, vicini(v), 0]); }
+        else if (color[v] === 1) back.add(top[0] + '\u0001' + v);
+      } else { color[top[0]] = 2; stack.pop(); }
+    }
+  });
+  const dag = {};
+  seq.forEach(c => { dag[c] = new Set([...cSucc[c]].filter(d => !back.has(c + '\u0001' + d))); });
+  const raggiunge = (da, a) => {
+    if (da === a) return true;
+    const vis = new Set([da]), coda = [da];
+    while (coda.length) {
+      const x = coda.pop();
+      for (const y of dag[x]) { if (y === a) return true; if (!vis.has(y)) { vis.add(y); coda.push(y); } }
+    }
+    return false;
+  };
+
+  // Righe fisse: ogni riferimento deve stare sotto il precedente
+  for (let k = 0; k < ancoreCl.length - 1; k++) {
+    const a = ancoreCl[k], b = ancoreCl[k + 1];
+    if (raggiunge(b.c, a.c)) {
+      avvisi.push({ tipo: 'ordine', msg: `Ordine incoerente: i rapporti portano US ${b.num} SOPRA US ${a.num}, mentre dovrebbe stare sotto.` });
+      continue;
+    }
+    if (!raggiunge(a.c, b.c)) {
+      avvisi.push({ tipo: 'percorso', msg: `Nessuna catena di rapporti dimostra che US ${a.num} sta sopra US ${b.num}.` });
+      dag[a.c].add(b.c);     // arco virtuale, solo per il calcolo dei livelli
+    }
+  }
+
+  // Livelli: percorso più lungo dall'alto (Kahn)
+  const indeg = {}; seq.forEach(c => { indeg[c] = 0; });
+  seq.forEach(c => dag[c].forEach(d => { indeg[d]++; }));
+  const lvl = {};
+  let q = [...seq].filter(c => indeg[c] === 0);
+  q.forEach(c => { lvl[c] = 0; });
+  let fatti = 0;
+  while (q.length) {
+    const nx = [];
+    q.forEach(c => {
+      fatti++;
+      dag[c].forEach(d => {
+        lvl[d] = Math.max(lvl[d] || 0, lvl[c] + 1);
+        if (--indeg[d] === 0) nx.push(d);
+      });
+    });
+    q = nx;
+  }
+  if (fatti !== seq.size) throw new Error('layout v116: ciclo residuo');
+
+  const levels = {}, strip = [];
+  sel.forEach(s => {
+    const u = String(s.numero), c = nodeGroup[u];
+    if (seq.has(c)) levels[u] = lvl[c]; else strip.push(u);
+  });
+
+  // US non collegate a nessun riferimento (né sopra né sotto)
+  let nonAncorate = [];
+  if (ancoreCl.length) {
+    const giu = new Set(), su = new Set();
+    const rev = {}; seq.forEach(c => { rev[c] = []; });
+    seq.forEach(c => dag[c].forEach(d => rev[d].push(c)));
+    const visita = (adj, set) => {
+      const coda = ancoreCl.map(a => a.c);
+      coda.forEach(c => set.add(c));
+      while (coda.length) { const x = coda.pop(); for (const y of adj[x]) if (!set.has(y)) { set.add(y); coda.push(y); } }
+    };
+    visita(dag, giu); visita(rev, su);
+    nonAncorate = sel.map(s => String(s.numero)).filter(u => seq.has(nodeGroup[u]) && !giu.has(nodeGroup[u]) && !su.has(nodeGroup[u]));
+    nonAncorate.sort(compareNum);
+  }
+  return { levels, strip, ancore: ancoreCl.map(a => ({ num: a.num, lvl: lvl[a.c] })), avvisi, nonAncorate, ritorni: back.size };
+}
+
+// ── Catena evidenziata (clic su una US del Matrix) ─────────────────
+let _mxDom = null, _mxCat = null, _mxNote = null;
+
+function _matrixCatena(us) {
+  const { succ, pred, ugualGroups, nodeGroup } = _mxCat;
+  const tutti = new Set([us]);
+  const percorri = (adj) => {
+    const vis = new Set([us]), coda = [us];
+    while (coda.length) {
+      const x = coda.pop();
+      const prossimi = (adj[x] || []).concat((ugualGroups[nodeGroup[x]] || []).filter(m => m !== x));
+      prossimi.forEach(y => { y = String(y); if (!vis.has(y)) { vis.add(y); coda.push(y); } });
+    }
+    vis.forEach(v => tutti.add(v));
+  };
+  percorri(succ); percorri(pred);
+  return tutti;
+}
+function matrixChainClear() {
+  if (_mxDom) {
+    Object.values(_mxDom.nodi).forEach(g => {
+      g.style.opacity = '';
+      const r = g.querySelector('rect');
+      if (r) { r.setAttribute('stroke', r.dataset.s0); r.setAttribute('stroke-width', r.dataset.w0); }
+    });
+    _mxDom.edges.forEach(e => { e.el.style.opacity = ''; e.el.setAttribute('stroke-width', e.w0); });
+    _mxDom.extra.forEach(el => { el.style.opacity = ''; });
+    _mxDom.sel = null;
+  }
+  ['matrix-chain-open', 'matrix-chain-clear'].forEach(id => { const b = document.getElementById(id); if (b) b.style.display = 'none'; });
+}
+function matrixChainSet(us, id) {
+  if (!_mxDom || !_mxCat) return;
+  if (_mxDom.sel && _mxDom.sel.us === us) { openUSModal(id); return; }   // secondo clic = apri scheda
+  matrixChainClear();
+  const set = _matrixCatena(us);
+  Object.entries(_mxDom.nodi).forEach(([n, g]) => {
+    const on = set.has(n);
+    g.style.opacity = on ? '1' : '0.15';
+    if (n === us) { const r = g.querySelector('rect'); r.setAttribute('stroke', '#ffffff'); r.setAttribute('stroke-width', '3'); }
+  });
+  _mxDom.edges.forEach(e => {
+    const on = set.has(e.from) && set.has(e.to);
+    e.el.style.opacity = on ? '1' : '0.05';
+    e.el.setAttribute('stroke-width', on ? '2.4' : e.w0);
+  });
+  _mxDom.extra.forEach(el => { el.style.opacity = '0.12'; });
+  _mxDom.sel = { us, id };
+  const bo = document.getElementById('matrix-chain-open'), bc = document.getElementById('matrix-chain-clear');
+  if (bo) { bo.textContent = `📄 Apri scheda US ${us} (${set.size - 1} nella catena)`; bo.style.display = 'inline-block'; }
+  if (bc) bc.style.display = 'inline-block';
+}
+function matrixChainOpen() { if (_mxDom && _mxDom.sel) openUSModal(_mxDom.sel.id); }
+
+// Note sul Matrix: anomalie e informazioni sul disegno mostrato
+function apriNoteMatrix() {
+  if (!_mxNote) return;
+  const ex = document.getElementById('matrixNoteOverlay'); if (ex) ex.remove();
+  const P = _creaPannelloFlottante('matrixNoteOverlay', 'ℹ Note sul Matrix');
+  const { overlay, counter, body, foot, bX, apriScheda } = P;
+  counter.textContent = _mxNote.titolo;
+  const bClose = document.createElement('button');
+  bClose.className = 'btn btn-primary'; bClose.style.cssText = 'font-size:0.75rem'; bClose.textContent = 'Chiudi';
+  foot.appendChild(bClose);
+  bClose.onclick = () => overlay.remove(); bX.onclick = () => overlay.remove();
+  const idDi = n => { const x = schede.find(y => sameNum(y.numero, n)); return x ? x.id : null; };
+  const chip = n => {
+    const id = idDi(n), sp = document.createElement('span');
+    sp.style.cssText = 'display:inline-block;margin:0 10px 4px 0;font-size:0.72rem;' + (id ? 'cursor:pointer;text-decoration:underline;text-underline-offset:2px' : 'opacity:0.6');
+    sp.textContent = 'US ' + n; if (id) sp.onclick = () => apriScheda(id);
+    return sp;
+  };
+  _mxNote.sezioni.forEach(sz => {
+    const box = document.createElement('div');
+    box.style.cssText = 'border-top:1px solid var(--border);padding:10px 0';
+    const h = document.createElement('div');
+    h.style.cssText = 'font-size:0.82rem;font-weight:700;color:var(--earth)';
+    h.textContent = sz.titolo; box.appendChild(h);
+    const n = document.createElement('div');
+    n.style.cssText = 'font-size:0.72rem;color:var(--muted);line-height:1.45;margin:4px 0 6px';
+    n.textContent = sz.nota; box.appendChild(n);
+    const l = document.createElement('div'); l.style.cssText = 'max-height:240px;overflow-y:auto';
+    (sz.us || []).forEach(u => l.appendChild(chip(u)));
+    (sz.righe || []).forEach(r => {
+      const d = document.createElement('div');
+      d.style.cssText = 'font-size:0.72rem;line-height:1.5;margin-bottom:3px';
+      d.textContent = r; l.appendChild(d);
+    });
+    box.appendChild(l); body.appendChild(box);
+  });
+}
+
 function renderMatrix() {
   const settore = document.getElementById('matrix-settore')?.value || '';
   const anno    = document.getElementById('matrix-anno')?.value || '';
+  const areaSel = _matrixAreaCorrente();
 
   let sel = schede.filter(s => {
     if (settore && s.saggio !== settore) return false;
     if (anno    && s.anno   !== anno)    return false;
+    if (matrixAreaDi(s.numero) !== areaSel) return false;
     return true;
   });
 
-  document.getElementById('matrix-info').textContent = `${sel.length} US`;
+  document.getElementById('matrix-info').textContent = `${sel.length} US · Area ${areaSel}`;
+  // v116: azzera lo stato della catena evidenziata e delle note
+  _mxDom = null; _mxCat = null; _mxNote = null;
+  ['matrix-chain-open', 'matrix-chain-clear', 'matrix-note-btn'].forEach(id => { const b = document.getElementById(id); if (b) b.style.display = 'none'; });
 
   // Rilevamento mobile (mantenuto per altri usi)
   const isMobile = window.innerWidth <= 768 || /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
@@ -9068,7 +9336,11 @@ function renderMatrix() {
   if (mobileBtn)   mobileBtn.style.display = 'none';
   const svg = document.getElementById('matrix-svg');
   svg.innerHTML = '';
-  if (!sel.length) return;
+  if (!sel.length) {
+    const wp = document.getElementById('matrix-warnings'); if (wp) wp.style.display = 'none';
+    ['btn-print-conflicts', 'btn-risolvi-conflitti'].forEach(id => { const b = document.getElementById(id); if (b) b.style.display = 'none'; });
+    return;
+  }
 
   const usSet = new Set(sel.map(s => String(s.numero)));
   const ns = 'http://www.w3.org/2000/svg';
@@ -9173,7 +9445,17 @@ function renderMatrix() {
   // ── 4. TOPOLOGICAL SORT → LIVELLI ───────────────────────────────
   // Le US uguale_a devono stare allo stesso livello: propaghiamo il livello
   // massimo a tutti i membri del gruppo dopo il sort.
+  // v116: nuovo calcolo (cicli non scaricati sul fondo, riferimenti come righe
+  // fisse, US senza sequenza in una fascia a parte). Se per qualunque motivo dà
+  // errore si torna al calcolo precedente, così il Matrix non resta mai vuoto.
+  let layout = null;
+  try { layout = _layoutMatrixV116(sel, succ, nodeGroup, MATRIX_ANCORE[areaSel] || []); }
+  catch (e) { console.error('Matrix v116: calcolo non riuscito, uso il precedente', e); layout = null; }
+  const stripSet = new Set(layout ? layout.strip : []);
+
   const levels = {};
+  if (layout) Object.assign(levels, layout.levels);
+  if (!layout) {
   const inDeg = {};
   sel.forEach(s => { inDeg[s.numero] = pred[s.numero].length; });
 
@@ -9202,10 +9484,12 @@ function renderMatrix() {
     const maxGroupLvl = Math.max(...members.map(m => levels[m] ?? 0));
     members.forEach(m => { levels[m] = maxGroupLvl; });
   });
+  }   // fine calcolo precedente (fallback)
 
   // ── 5. RAGGRUPPA PER LIVELLO ────────────────────────────────────
   const byLevel = {};
   sel.forEach(s => {
+    if (stripSet.has(String(s.numero))) return;
     const lv = levels[s.numero] ?? 0;
     if (!byLevel[lv]) byLevel[lv] = [];
     byLevel[lv].push(String(s.numero));
@@ -9263,8 +9547,9 @@ function renderMatrix() {
   }
 
   // ── 7. CALCOLO POSIZIONI (centering per livello) ─────────────────
-  const maxNodesInLevel = Math.max(...sortedLevels.map(lv => byLevel[lv].length));
-  const totalW = maxNodesInLevel * (NW + HGAP) - HGAP;
+  const maxNodesInLevel = sortedLevels.length ? Math.max(...sortedLevels.map(lv => byLevel[lv].length)) : 0;
+  const stripCols = Math.min(20, Math.max(8, maxNodesInLevel));
+  const totalW = Math.max(maxNodesInLevel, stripSet.size ? stripCols : 0) * (NW + HGAP) - HGAP;
 
   const positions = {};
   sortedLevels.forEach(lv => {
@@ -9279,14 +9564,36 @@ function renderMatrix() {
     });
   });
 
+  // v116: fascia a parte per le US senza rapporti di sequenza (uguali vicine)
+  const lastLvl = sortedLevels.length ? sortedLevels[sortedLevels.length - 1] : -1;
+  const stripY0 = (lastLvl + 1) * (NH + VGAP) + 40;
+  if (stripSet.size) {
+    const unita = {};
+    [...stripSet].forEach(u => { const g = nodeGroup[u]; (unita[g] = unita[g] || []).push(u); });
+    const lista = Object.values(unita).map(m => m.sort(compareNum)).sort((a, b) => compareNum(a[0], b[0]));
+    let riga = 0, col = 0;
+    lista.forEach(m => {
+      if (col > 0 && col + m.length > stripCols) { riga++; col = 0; }
+      m.forEach(u => {
+        positions[u] = { x: col * (NW + HGAP) + NW / 2, y: stripY0 + riga * (NH + 24) + NH / 2 };
+        col++;
+      });
+    });
+  }
+  // Rete di sicurezza: nessuna US deve restare senza posizione
+  const senzaPos = sel.map(s => String(s.numero)).filter(u => !positions[u]);
+  if (senzaPos.length) console.warn('Matrix: US senza posizione', senzaPos);
+
   // ── 7. DIMENSIONI SVG ────────────────────────────────────────────
   const allX = Object.values(positions).map(p => p.x);
   const allY = Object.values(positions).map(p => p.y);
   const svgW = Math.max(...allX) + NW / 2 + PAD;
   const LEG_BOTTOM_H = 28; // spazio extra in fondo per la legenda orizzontale
   const svgH = Math.max(...allY) + NH / 2 + PAD + LEG_BOTTOM_H;
+  const GUT = (layout && layout.ancore.length) ? 64 : 0;   // margine sinistro per le etichette dei riferimenti
+  const W_TOT = svgW + GUT;
 
-  svg.setAttribute('width',  svgW + PAD);
+  svg.setAttribute('width',  W_TOT + PAD);
   svg.setAttribute('height', svgH + PAD);
   svg.removeAttribute('viewBox');
   // Reset trasformazione e auto-fit nel viewport
@@ -9297,11 +9604,47 @@ function renderMatrix() {
 
   // Sfondo
   const bg = svg.appendChild(document.createElementNS(ns, 'rect'));
-  bg.setAttribute('width', svgW + PAD); bg.setAttribute('height', svgH + PAD);
+  bg.setAttribute('width', W_TOT + PAD); bg.setAttribute('height', svgH + PAD);
   bg.setAttribute('fill', '#2e2b26');
 
   const gRoot = svg.appendChild(document.createElementNS(ns, 'g'));
-  gRoot.setAttribute('transform', `translate(${PAD},${PAD})`);
+  gRoot.setAttribute('transform', `translate(${PAD + GUT},${PAD})`);
+
+  // v116: righe fisse dei riferimenti cronologici (sfondo a fasce + linea + etichetta)
+  if (layout && layout.ancore.length) {
+    const righeA = layout.ancore.filter(a => positions[a.num]).map(a => ({ num: a.num, y: positions[a.num].y })).sort((a, b) => a.y - b.y);
+    righeA.forEach((a, i) => {
+      if (i < righeA.length - 1 && i % 2 === 0) {
+        const fascia = gRoot.appendChild(document.createElementNS(ns, 'rect'));
+        fascia.setAttribute('x', -GUT); fascia.setAttribute('y', a.y);
+        fascia.setAttribute('width', svgW + GUT); fascia.setAttribute('height', righeA[i + 1].y - a.y);
+        fascia.setAttribute('fill', '#ffffff'); fascia.setAttribute('opacity', '0.035');
+      }
+      const ln = gRoot.appendChild(document.createElementNS(ns, 'line'));
+      ln.setAttribute('x1', -GUT + 4); ln.setAttribute('x2', svgW);
+      ln.setAttribute('y1', a.y); ln.setAttribute('y2', a.y);
+      ln.setAttribute('stroke', '#C9963A'); ln.setAttribute('stroke-width', '1');
+      ln.setAttribute('stroke-dasharray', '2 5'); ln.setAttribute('opacity', '0.45');
+      const lb = gRoot.appendChild(document.createElementNS(ns, 'text'));
+      lb.setAttribute('x', -GUT + 6); lb.setAttribute('y', a.y - 4);
+      lb.setAttribute('fill', '#C9963A'); lb.setAttribute('font-family', 'Space Mono, monospace');
+      lb.setAttribute('font-size', '9'); lb.setAttribute('font-weight', 'bold');
+      lb.textContent = 'US ' + a.num;
+    });
+  }
+  // v116: titolo della fascia delle US senza rapporti di sequenza
+  if (stripSet.size) {
+    const sep = gRoot.appendChild(document.createElementNS(ns, 'line'));
+    sep.setAttribute('x1', -GUT + 4); sep.setAttribute('x2', svgW);
+    sep.setAttribute('y1', stripY0 - 22); sep.setAttribute('y2', stripY0 - 22);
+    sep.setAttribute('stroke', '#8a7f70'); sep.setAttribute('stroke-width', '1'); sep.setAttribute('opacity', '0.6');
+    const tt = gRoot.appendChild(document.createElementNS(ns, 'text'));
+    tt.setAttribute('x', 0); tt.setAttribute('y', stripY0 - 8);
+    tt.setAttribute('fill', '#8a7f70'); tt.setAttribute('font-family', 'Space Mono, monospace');
+    tt.setAttribute('font-size', '9'); tt.setAttribute('letter-spacing', '0.06em');
+    tt.textContent = `US SENZA RAPPORTI DI SEQUENZA — ${stripSet.size}`;
+  }
+  const dom = { nodi: {}, edges: [], extra: [], sel: null };
 
   // ── LEGENDA ORIZZONTALE in fondo all'SVG ─────────────────────────
   // Y di partenza: subito sotto l'ultimo nodo
@@ -9426,6 +9769,7 @@ function renderMatrix() {
     path.setAttribute('stroke', isConflict ? '#d94f30' : '#C9963A');
     path.setAttribute('stroke-width', '1.3');
     path.setAttribute('opacity', '0.8');
+    dom.edges.push({ el: path, from: e.from, to: e.to, w0: '1.3' });
   });
 
   // ── 9. GRUPPI UGUALE_A: rettangolo contenitore + linee orizzontali ─
@@ -9451,6 +9795,7 @@ function renderMatrix() {
     rect.setAttribute('stroke-width', '1.2');
     rect.setAttribute('stroke-dasharray', '5 3');
     rect.setAttribute('opacity', '0.6');
+    dom.extra.push(rect);
 
     // Etichetta "=" sopra il gruppo
     const lbl = gRoot.appendChild(document.createElementNS(ns, 'text'));
@@ -9462,6 +9807,7 @@ function renderMatrix() {
     lbl.setAttribute('font-size', '9');
     lbl.setAttribute('opacity', '0.8');
     lbl.textContent = '= uguale_a';
+    dom.extra.push(lbl);
 
     // Linee orizzontali tra i nodi del gruppo (bordo destro → bordo sinistro)
     const sorted = [...members].filter(m => positions[m]).sort((a, b) => positions[a].x - positions[b].x);
@@ -9474,6 +9820,7 @@ function renderMatrix() {
       line.setAttribute('stroke-width', '1.5');
       line.setAttribute('stroke-dasharray', '4 3');
       line.setAttribute('opacity', '0.8');
+      dom.extra.push(line);
     }
   });
 
@@ -9498,6 +9845,7 @@ function renderMatrix() {
       path.setAttribute('stroke-width', '1');
       path.setAttribute('stroke-dasharray', '3 4');
       path.setAttribute('opacity', '0.5');
+      dom.extra.push(path);
     });
   });
 
@@ -9515,7 +9863,9 @@ function renderMatrix() {
     const grp = gRoot.appendChild(document.createElementNS(ns, 'g'));
     grp.setAttribute('transform', `translate(${p.x - NW/2},${p.y - NH/2})`);
     grp.style.cursor = 'pointer';
-    grp.addEventListener('click', () => openUSModal(s.id));
+    grp.dataset.us = String(s.numero);
+    dom.nodi[String(s.numero)] = grp;
+    grp.addEventListener('click', ev => { ev.stopPropagation(); matrixChainSet(String(s.numero), s.id); });
 
     const rect = grp.appendChild(document.createElementNS(ns, 'rect'));
     rect.setAttribute('width', NW); rect.setAttribute('height', NH);
@@ -9524,6 +9874,7 @@ function renderMatrix() {
     rect.setAttribute('stroke', strokeCol);
     rect.setAttribute('stroke-width', isConflict ? '2' : '1.5');
     if (s._src === 'rielab') rect.setAttribute('stroke-dasharray', '3 2'); // v102: US di rielaborazione
+    rect.dataset.s0 = strokeCol; rect.dataset.w0 = isConflict ? '2' : '1.5';
 
     // Numero US
     const tNum = grp.appendChild(document.createElementNS(ns, 'text'));
@@ -9560,12 +9911,51 @@ function renderMatrix() {
       tTipo.textContent = s.tipo.substring(0, 11);
     }
   });
+
+  // v116: stato per la catena evidenziata e note sul disegno
+  _mxDom = dom;
+  _mxCat = { succ, pred, ugualGroups, nodeGroup };
+  try {
+    const sezioni = [];
+    const tra = calcolaRelazioniTraAree(schede);
+    if (tra.length) sezioni.push({
+      titolo: `Rapporti tra Area 1 e Area 2000 — ${tra.length}`,
+      nota: 'Non sono disegnati in nessuno dei due Matrix. Per come è organizzato lo scavo non dovrebbero esistere: probabile numero sbagliato.',
+      us: [], righe: tra.map(x => x.tipi.join('; '))
+    });
+    const strane = sel.map(s => String(s.numero)).filter(u => { const l = _cifreNum(u).length; return l !== 3 && l !== 4; });
+    if (strane.length) sezioni.push({
+      titolo: `US con numero né a 3 né a 4 cifre — ${strane.length}`,
+      nota: 'Sono state messe in Area 1. Controlla che il numero sia corretto.', us: strane.sort(compareNum)
+    });
+    if (layout) {
+      if (layout.avvisi.length) sezioni.push({
+        titolo: `Riferimenti cronologici — ${layout.avvisi.length} avvis${layout.avvisi.length === 1 ? 'o' : 'i'}`,
+        nota: 'Le righe fisse seguono comunque l\'ordine che hai indicato; questi avvisi dicono dove i rapporti scritti nelle schede non lo confermano.',
+        us: [], righe: layout.avvisi.map(a => a.msg)
+      });
+      if (layout.nonAncorate.length) sezioni.push({
+        titolo: `US non collegate a nessun riferimento — ${layout.nonAncorate.length}`,
+        nota: 'Non sono né sopra né sotto nessun riferimento cronologico lungo i rapporti scritti: il Matrix non può dire in che fase stanno, e possono apparire a cavallo delle righe.',
+        us: layout.nonAncorate
+      });
+      if (layout.strip.length) sezioni.push({
+        titolo: `US senza rapporti di sequenza (fascia in fondo) — ${layout.strip.length}`,
+        nota: 'Non hanno copre/coperto da, taglia/tagliato da, riempie/riempito da: stanno nella fascia a parte in fondo al Matrix.',
+        us: [...layout.strip].sort(compareNum)
+      });
+    }
+    _mxNote = { titolo: `Area ${areaSel} · ${sel.length} US`, sezioni };
+    const nb = document.getElementById('matrix-note-btn');
+    if (nb && sezioni.length) { nb.textContent = `ℹ Note (${sezioni.length})`; nb.style.display = 'inline-block'; }
+  } catch (e) { console.error('Matrix note', e); }
 }
 
 // ─── MATRIX EXPORT ───────────────────────────────────────────────
 function exportMatrixSVG() {
   const svg = document.getElementById('matrix-svg');
   if (!svg || !svg.innerHTML.trim()) { showToast('⚠ Genera prima il matrix'); return; }
+  matrixChainClear();
   const settore = document.getElementById('matrix-settore')?.value || 'tutti';
   const anno    = document.getElementById('matrix-anno')?.value    || 'tutti';
   const serializer = new XMLSerializer();
@@ -9574,7 +9964,7 @@ function exportMatrixSVG() {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = `matrix_harris_${settore}_${anno}.svg`;
+  a.download = `matrix_harris_area${_matrixAreaCorrente()}_${settore}_${anno}.svg`;
   a.click();
   URL.revokeObjectURL(url);
   showToast('✓ SVG esportato');
@@ -9583,6 +9973,7 @@ function exportMatrixSVG() {
 function exportMatrixPDF() {
   const svg = document.getElementById('matrix-svg');
   if (!svg || !svg.innerHTML.trim()) { showToast('⚠ Genera prima il matrix'); return; }
+  matrixChainClear();
   const settore = document.getElementById('matrix-settore')?.value || 'tutti';
   const anno    = document.getElementById('matrix-anno')?.value    || 'tutti';
 
@@ -9741,9 +10132,11 @@ function printMatrixConflicts() {
 function _matrixSelCorrente() {
   const settore = document.getElementById('matrix-settore')?.value || '';
   const anno    = document.getElementById('matrix-anno')?.value || '';
+  const area    = _matrixAreaCorrente();
   return schede.filter(s => {
     if (settore && s.saggio !== settore) return false;
     if (anno    && s.anno   !== anno)    return false;
+    if (matrixAreaDi(s.numero) !== area) return false;
     return true;
   });
 }
@@ -10300,6 +10693,153 @@ function apriControlloUguali() {
   riepilogo();
 }
 
+// ─── v115: US SENZA RAPPORTI ──────────────────────────────────────
+// Controllo in sola lettura, su tutto l'archivio: trova le US che nel Matrix
+// "galleggiano" o stanno ai margini, e dove i rapporti sono incompleti.
+function calcolaUSIsolate(arch) {
+  const key = v => String(v == null ? '' : v).trim();
+  const SEQ = ['copre', 'coperto_da', 'taglia', 'tagliato_da', 'riempie', 'riempito_da'];
+  const nodi = arch.map(s => key(s.numero));
+  const esiste = new Set(nodi);
+  const rel = {}, seqAny = {}, tipiDi = {}, inesist = {};
+  nodi.forEach(n => { rel[n] = new Set(); seqAny[n] = false; tipiDi[n] = new Set(); });
+  arch.forEach(s => {
+    const a = key(s.numero);
+    const raps = Array.isArray(s.rapporti) ? s.rapporti : (() => { try { return JSON.parse(s.rapporti || '[]'); } catch { return []; } })();
+    raps.forEach(r => {
+      const b = key(r.us);
+      if (!b) return;
+      if (!esiste.has(b)) { (inesist[a] = inesist[a] || []).push({ tipo: r.tipo, us: b }); return; }
+      if (a === b) return;
+      rel[a].add(b); rel[b].add(a);
+      tipiDi[a].add(r.tipo);
+      if (SEQ.includes(r.tipo)) { seqAny[a] = true; seqAny[b] = true; }
+    });
+  });
+  const ordina = arr => arr.sort(compareNum);
+  const nessuno = ordina(nodi.filter(n => rel[n].size === 0 && !(inesist[n] && inesist[n].length)));
+  const soloNonSeq = ordina(nodi.filter(n => rel[n].size > 0 && !seqAny[n]));
+  const inesistenti = ordina(Object.keys(inesist).filter(n => inesist[n].length)).map(n => ({ num: n, rel: inesist[n] }));
+  // Estremi della sequenza (US uguali = un solo nodo)
+  const cg = buildClassGraph(arch);
+  const inDeg = {}, outDeg = {};
+  cg.classi.forEach(c => { inDeg[c] = 0; outDeg[c] = 0; });
+  cg.classi.forEach(c => cg.succC[c].forEach(d => { outDeg[c]++; inDeg[d]++; }));
+  const senzaSopra = [], senzaSotto = [];
+  cg.classi.forEach(c => {
+    if (inDeg[c] === 0 && outDeg[c] > 0) senzaSopra.push(...cg.members[c]);
+    if (outDeg[c] === 0 && inDeg[c] > 0) senzaSotto.push(...cg.members[c]);
+  });
+  return { totale: nodi.length, nessuno, soloNonSeq, tipiDi, inesistenti, senzaSopra: ordina(senzaSopra), senzaSotto: ordina(senzaSotto) };
+}
+
+function apriUSIsolate() {
+  if (!schede.length) { showToast('⚠ Nessuna scheda in archivio'); return; }
+  const ex = document.getElementById('usIsolateOverlay'); if (ex) ex.remove();
+  const P = _creaPannelloFlottante('usIsolateOverlay', '🧩 US senza rapporti');
+  const { overlay, counter, body, foot, bX, apriScheda, boxStato } = P;
+  const bRic = document.createElement('button');
+  bRic.className = 'btn btn-secondary'; bRic.style.cssText = 'font-size:0.75rem';
+  bRic.textContent = '🔄 Ricalcola (rilegge dal foglio)';
+  const bClose = document.createElement('button');
+  bClose.className = 'btn btn-primary'; bClose.style.cssText = 'font-size:0.75rem'; bClose.textContent = 'Chiudi';
+  foot.appendChild(bRic); foot.appendChild(bClose);
+  const chiudi = () => overlay.remove();
+  bClose.onclick = chiudi; bX.onclick = chiudi;
+
+  const idDi = n => { const x = schede.find(y => sameNum(y.numero, n)); return x ? x.id : null; };
+  const lblT = t => tipoRapportoLabel(t).toLowerCase();
+  const aperte = new Set();
+
+  function chip(num, titolo) {
+    const id = idDi(num);
+    const sp = document.createElement('span');
+    sp.style.cssText = 'display:inline-block;margin:0 10px 4px 0;font-size:0.72rem;' + (id ? 'cursor:pointer;text-decoration:underline;text-underline-offset:2px;opacity:0.9' : 'opacity:0.6');
+    sp.textContent = 'US ' + num;
+    if (titolo) sp.title = titolo;
+    if (id) sp.onclick = () => apriScheda(id);
+    return sp;
+  }
+
+  function sezione(chiaveSez, titolo, nota, elementi, disegna) {
+    const box = document.createElement('div');
+    box.style.cssText = 'border-top:1px solid var(--border);padding:10px 0';
+    const h = document.createElement('div');
+    h.style.cssText = 'display:flex;justify-content:space-between;align-items:center;gap:8px;cursor:pointer;font-size:0.82rem;font-weight:700;color:var(--earth)';
+    const aperta = aperte.has(chiaveSez);
+    const t = document.createElement('span');
+    t.textContent = (elementi.length ? (aperta ? '▼ ' : '▶ ') : '✓ ') + titolo + ' — ' + elementi.length;
+    h.appendChild(t);
+    box.appendChild(h);
+    const n = document.createElement('div');
+    n.style.cssText = 'font-size:0.72rem;color:var(--muted);line-height:1.45;margin-top:4px';
+    n.textContent = nota;
+    box.appendChild(n);
+    if (elementi.length && aperta) {
+      const lista = document.createElement('div');
+      lista.style.cssText = 'margin-top:8px;max-height:260px;overflow-y:auto';
+      disegna(lista);
+      box.appendChild(lista);
+      const bc = document.createElement('button');
+      bc.className = 'btn btn-secondary'; bc.style.cssText = 'font-size:0.7rem;padding:3px 8px;margin-top:6px';
+      bc.textContent = '📋 Copia elenco';
+      bc.onclick = async () => {
+        const testo = elementi.map(e => (typeof e === 'string' ? e : e.num)).join(', ');
+        try { await navigator.clipboard.writeText(testo); showToast('✓ Elenco copiato'); }
+        catch (_) { showToast('⚠ Copia non riuscita: seleziona e copia a mano'); }
+      };
+      box.appendChild(bc);
+    }
+    if (elementi.length) h.onclick = () => { if (aperte.has(chiaveSez)) aperte.delete(chiaveSez); else aperte.add(chiaveSez); disegnaTutto(); };
+    return box;
+  }
+
+  let r = null;
+  function disegnaTutto() {
+    const scroll = body.scrollTop;
+    body.innerHTML = '';
+    counter.textContent = `${r.totale} US in archivio`;
+    const nota = document.createElement('div');
+    nota.style.cssText = 'font-size:0.74rem;color:var(--muted);line-height:1.5;margin-bottom:8px';
+    nota.textContent = 'Controllo in sola lettura su tutto l\'archivio. Clicca una categoria per vedere l\'elenco; clicca una US per aprirne la scheda.';
+    body.appendChild(nota);
+    body.appendChild(sezione('nessuno', 'US senza alcun rapporto',
+      'Non hanno rapporti propri e nessun\'altra US punta a loro. Nel Matrix galleggiano da sole.',
+      r.nessuno, l => r.nessuno.forEach(n => l.appendChild(chip(n)))));
+    body.appendChild(sezione('solonon', 'US con soli rapporti non di sequenza',
+      'Hanno rapporti (uguale a, si lega a, si appoggia…) ma nessuno di copre/coperto da, taglia/tagliato da, riempie/riempito da: nel Matrix non hanno un sopra né un sotto.',
+      r.soloNonSeq, l => r.soloNonSeq.forEach(n => l.appendChild(chip(n, [...r.tipiDi[n]].map(lblT).join(', '))))));
+    body.appendChild(sezione('inesist', 'US con rapporti verso US che non esistono in archivio',
+      'Il rapporto è scritto ma l\'altra US non ha scheda (numero sbagliato, scheda mancante o ancora da creare).',
+      r.inesistenti, l => r.inesistenti.forEach(x => {
+        const riga = document.createElement('div');
+        riga.style.cssText = 'font-size:0.72rem;line-height:1.5;margin-bottom:4px';
+        riga.appendChild(chip(x.num));
+        riga.appendChild(document.createTextNode('→ ' + x.rel.map(y => `${lblT(y.tipo)} US ${y.us}`).join('; ')));
+        l.appendChild(riga);
+      })));
+    body.appendChild(sezione('sopra', 'US senza nulla sopra',
+      'Hanno altre US sotto di sé ma nessuna sopra. Le US uguali contano come una sola. Dovrebbero essere poche: i veri punti più recenti (piano di calpestio, humus…).',
+      r.senzaSopra, l => r.senzaSopra.forEach(n => l.appendChild(chip(n)))));
+    body.appendChild(sezione('sotto', 'US senza nulla sotto',
+      'Hanno altre US sopra ma nessuna sotto. Dovrebbero essere poche: i veri punti più antichi (sterile, roccia). Se sono tante, probabilmente mancano dei rapporti.',
+      r.senzaSotto, l => r.senzaSotto.forEach(n => l.appendChild(chip(n)))));
+    body.scrollTop = scroll;
+  }
+  function calcola() { r = calcolaUSIsolate(schede); disegnaTutto(); }
+
+  bRic.onclick = async () => {
+    if (isOffline()) { showToast('⚠ Offline — impossibile rileggere dal foglio'); return; }
+    bRic.disabled = true; bRic.textContent = '⏳ Rilettura…';
+    let ok = false;
+    try { ok = (await loadFromSheets(false, true)) !== false; } catch (e) { console.error(e); }
+    bRic.disabled = false; bRic.textContent = '🔄 Ricalcola (rilegge dal foglio)';
+    if (!ok) { showToast('⚠ Rilettura non riuscita'); return; }
+    calcola(); showToast('✓ Ricalcolato su dati aggiornati');
+  };
+  calcola();
+}
+
 // v111 — Correzioni del risolutore che agiscono su ENTRAMBE le schede.
 // Un rapporto di sequenza (copre/taglia/riempie) è di solito scritto due volte:
 // su una US come «copre 46» e sull'altra come «coperto da 45». Il grafo del
@@ -10760,9 +11300,9 @@ function showToast(msg) {
   <script>
     if ('serviceWorker' in navigator && !location.hostname.includes('claudeusercontent.com')) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./service-worker.js?v=114')
+        navigator.serviceWorker.register('./service-worker.js?v=116')
           .then(reg => {
-            console.log('SW registrato v114:', reg.scope);
+            console.log('SW registrato v116:', reg.scope);
             // Forza aggiornamento immediato se c'è una nuova versione
             reg.update();
           })
