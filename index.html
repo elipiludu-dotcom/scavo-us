@@ -5,7 +5,7 @@
   <!-- PWA -->
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#C9963A">
-  <meta name="app-version" content="116">
+  <meta name="app-version" content="117">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="SMP Scavo">
@@ -1745,6 +1745,13 @@
           style="padding:6px 10px;background:var(--parchment-light);border:1px solid var(--border);border-radius:3px;color:var(--ink);font-size:0.8rem;font-family:'Space Mono',monospace">
           <option value="">— tutti gli anni —</option>
         </select>
+        <!-- v117: cerca una US e ne evidenzia la catena -->
+        <div style="position:relative">
+          <input id="matrix-cerca" type="search" inputmode="search" autocomplete="off" placeholder="🔎 Cerca US…"
+            oninput="matrixCercaInput()" onkeydown="matrixCercaTasto(event)" onfocus="matrixCercaInput()"
+            style="width:130px;padding:6px 10px;background:var(--parchment-light);border:1px solid var(--border);border-radius:3px;color:var(--ink);font-size:0.8rem;font-family:'Space Mono',monospace">
+          <div id="matrix-cerca-lista" style="display:none;position:absolute;top:100%;left:0;z-index:60;min-width:230px;max-height:260px;overflow-y:auto;background:var(--parchment-light);border:1px solid var(--border);border-radius:3px;box-shadow:0 4px 14px rgba(0,0,0,0.35);margin-top:2px"></div>
+        </div>
         <div style="display:flex;gap:6px;margin-left:auto;align-items:center;flex-wrap:wrap">
           <span id="matrix-info" style="font-size:0.72rem;color:var(--muted);font-family:'Space Mono',monospace;white-space:nowrap"></span>
           <button class="btn btn-secondary" id="matrix-note-btn" onclick="apriNoteMatrix()" style="font-size:0.72rem;padding:5px 10px;white-space:nowrap;display:none"></button>
@@ -9271,6 +9278,113 @@ function matrixChainSet(us, id) {
 }
 function matrixChainOpen() { if (_mxDom && _mxDom.sel) openUSModal(_mxDom.sel.id); }
 
+// ─── v117: RICERCA US NEL MATRIX ─────────────────────────────────
+let _mxCercaRis = [];
+function matrixCercaChiudi() {
+  const l = document.getElementById('matrix-cerca-lista');
+  if (l) l.style.display = 'none';
+}
+function matrixCerca(q) {
+  q = normNum(q);
+  if (!q) return [];
+  const settore = document.getElementById('matrix-settore')?.value || '';
+  const anno    = document.getElementById('matrix-anno')?.value || '';
+  const areaCur = _matrixAreaCorrente();
+  const visti = new Set(), out = [];
+  (schede || []).forEach(s => {
+    const n = normNum(s.numero);
+    if (!n || visti.has(n) || n.indexOf(q) === -1) return;
+    visti.add(n);
+    const area = matrixAreaDi(s.numero);
+    out.push({
+      us: String(s.numero), id: s.id, area,
+      altraArea: area !== areaCur,
+      filtroSettore: !!(settore && s.saggio !== settore),
+      filtroAnno: !!(anno && s.anno !== anno),
+      rank: n === q ? 0 : (n.replace(/^-/, '').startsWith(q.replace(/^-/, '')) ? 1 : 2)
+    });
+  });
+  out.sort((a, b) => a.rank - b.rank || compareNum(a.us, b.us));
+  return out.slice(0, 15);
+}
+function matrixCercaInput() {
+  const inp = document.getElementById('matrix-cerca'), lista = document.getElementById('matrix-cerca-lista');
+  if (!inp || !lista) return;
+  const q = inp.value.trim();
+  if (!q) { lista.style.display = 'none'; if (_mxDom && _mxDom.sel) matrixChainClear(); return; }
+  _mxCercaRis = matrixCerca(q);
+  lista.innerHTML = '';
+  if (!_mxCercaRis.length) {
+    const d = document.createElement('div');
+    d.style.cssText = 'padding:8px 12px;font-size:0.75rem;color:var(--muted);font-family:\'Space Mono\',monospace';
+    d.textContent = 'Nessuna US trovata';
+    lista.appendChild(d);
+  }
+  _mxCercaRis.forEach(r => {
+    const d = document.createElement('div');
+    d.style.cssText = 'padding:9px 12px;cursor:pointer;font-size:0.8rem;font-family:\'Space Mono\',monospace;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;gap:12px;color:var(--ink)';
+    const a = document.createElement('span'); a.textContent = 'US ' + r.us;
+    const b = document.createElement('span');
+    b.style.cssText = 'font-size:0.62rem;color:var(--muted);white-space:nowrap';
+    b.textContent = 'Area ' + r.area + (r.altraArea ? ' ↪' : '') + ((r.filtroSettore || r.filtroAnno) ? ' · filtrata' : '');
+    d.appendChild(a); d.appendChild(b);
+    d.addEventListener('mousedown', ev => ev.preventDefault());
+    d.addEventListener('click', () => matrixCercaVai(r));
+    lista.appendChild(d);
+  });
+  lista.style.display = 'block';
+}
+function matrixCercaTasto(ev) {
+  if (ev.key === 'Enter') { ev.preventDefault(); if (_mxCercaRis.length) matrixCercaVai(_mxCercaRis[0]); }
+  else if (ev.key === 'Escape') matrixCercaChiudi();
+}
+document.addEventListener('click', ev => {
+  if (!ev.target.closest || !ev.target.closest('#matrix-cerca') && !ev.target.closest('#matrix-cerca-lista')) matrixCercaChiudi();
+});
+async function matrixCercaVai(r) {
+  matrixCercaChiudi();
+  const inp = document.getElementById('matrix-cerca');
+  if (inp) { inp.value = r.us; inp.blur(); }
+  // Ricalcola lo stato attuale (i filtri possono essere cambiati)
+  const s = (schede || []).find(x => sameNum(x.numero, r.us));
+  if (!s) { showToast('⚠ US non trovata'); return; }
+  const settore = document.getElementById('matrix-settore')?.value || '';
+  const anno    = document.getElementById('matrix-anno')?.value || '';
+  const altraArea = matrixAreaDi(s.numero) !== _matrixAreaCorrente();
+  const fSet = !!(settore && s.saggio !== settore), fAnno = !!(anno && s.anno !== anno);
+  if (altraArea || fSet || fAnno) {
+    const righe = [];
+    if (altraArea) righe.push(`La US ${r.us} è nell'Area ${matrixAreaDi(s.numero)}: passo a quel Matrix.`);
+    if (fSet)  righe.push(`Il filtro settore (${settore}) la nasconde: lo tolgo.`);
+    if (fAnno) righe.push(`Il filtro anno (${anno}) la nasconde: lo tolgo.`);
+    const ok = await showConfirm({
+      icon: '🔎', title: `Vai alla US ${r.us}?`, message: righe.join(' '),
+      okLabel: 'Sì, vai', okClass: 'btn-primary'
+    });
+    if (!ok) return;
+    if (altraArea) document.getElementById('matrix-area').value = matrixAreaDi(s.numero);
+    if (fSet)  document.getElementById('matrix-settore').value = '';
+    if (fAnno) document.getElementById('matrix-anno').value = '';
+    renderMatrix();
+    // attende il riadattamento automatico dello zoom fatto da renderMatrix
+    await new Promise(res => requestAnimationFrame(() => requestAnimationFrame(res)));
+    if (inp) inp.value = r.us;
+  }
+  if (!_mxDom || !_mxDom.pos || !_mxDom.pos[String(s.numero)]) { showToast('⚠ US non presente nel Matrix'); return; }
+  const key = String(s.numero);
+  const p = _mxDom.pos[key];
+  const cont = document.getElementById('matrix-container');
+  if (cont) {
+    _mx.scale = 1;
+    _mx.tx = cont.clientWidth  / 2 - (p.x + _mxDom.off.x) * _mx.scale;
+    _mx.ty = cont.clientHeight / 2 - (p.y + _mxDom.off.y) * _mx.scale;
+    _mxApply();
+  }
+  matrixChainClear();
+  matrixChainSet(key, s.id);
+  if (_mxDom.strip && _mxDom.strip.has(key)) showToast(`US ${key}: nessun rapporto di sequenza (fascia in fondo)`);
+}
+
 // Note sul Matrix: anomalie e informazioni sul disegno mostrato
 function apriNoteMatrix() {
   if (!_mxNote) return;
@@ -9324,6 +9438,7 @@ function renderMatrix() {
   document.getElementById('matrix-info').textContent = `${sel.length} US · Area ${areaSel}`;
   // v116: azzera lo stato della catena evidenziata e delle note
   _mxDom = null; _mxCat = null; _mxNote = null;
+  matrixCercaChiudi();
   ['matrix-chain-open', 'matrix-chain-clear', 'matrix-note-btn'].forEach(id => { const b = document.getElementById(id); if (b) b.style.display = 'none'; });
 
   // Rilevamento mobile (mantenuto per altri usi)
@@ -9914,6 +10029,7 @@ function renderMatrix() {
 
   // v116: stato per la catena evidenziata e note sul disegno
   _mxDom = dom;
+  dom.pos = positions; dom.off = { x: PAD + GUT, y: PAD }; dom.strip = stripSet;   // v117: per centrare la ricerca
   _mxCat = { succ, pred, ugualGroups, nodeGroup };
   try {
     const sezioni = [];
@@ -11300,9 +11416,9 @@ function showToast(msg) {
   <script>
     if ('serviceWorker' in navigator && !location.hostname.includes('claudeusercontent.com')) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./service-worker.js?v=116')
+        navigator.serviceWorker.register('./service-worker.js?v=117')
           .then(reg => {
-            console.log('SW registrato v116:', reg.scope);
+            console.log('SW registrato v117:', reg.scope);
             // Forza aggiornamento immediato se c'è una nuova versione
             reg.update();
           })

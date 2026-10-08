@@ -1,5 +1,7 @@
 // ─────────────────────────────────────────────────────────────────
 // SMP Scavo — Service Worker
+// v117 — Matrix: casella "Cerca US" (trova una US in qualunque area, conferma il cambio
+// area, zoom comodo e catena dei rapporti evidenziata).
 // v116 — Matrix: un grafo per area (Area 1 = US a 3 cifre, Area 2000 = 4 cifre);
 // righe fisse per i riferimenti cronologici (2000, 2041, 2145, 2185, 2445);
 // cicli non più scaricati sul fondo; fascia a parte per le US senza rapporti di
@@ -10,7 +12,7 @@
 // Include uguaglianze sospette (v114), controllo US uguali (v113), PDF con
 // foglio di continuazione (v112), correzioni conflitti (v108-111).
 // ─────────────────────────────────────────────────────────────────
-const CACHE_NAME = 'smp-scavo-v116';
+const CACHE_NAME = 'smp-scavo-v117';
 
 // Shell dell'app da rendere disponibile offline.
 const APP_SHELL = [
