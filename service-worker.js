@@ -1,5 +1,8 @@
 // ─────────────────────────────────────────────────────────────────
 // SMP Scavo — Service Worker
+// v119 — Matrix: "1sterile" da solo sull'ultima riga dell'Area 1; riferimento 2043 coevo
+// della 2041 (stessa riga, stesso blocco di fase); tutte le incongruenze dei riferimenti
+// sono segnalate in rosso nelle Note.
 // v118 — Matrix: l'Area si legge dal campo Area della scheda (solo "1" o "2000"); US con
 // Area non valida segnalate in rosso nelle Note. Strati "1humus" e "Humus" (+ US 2000)
 // sulla prima riga, US 2445 sull'ultima (Area 2000); "Trincea di alleggerimento cisterna"
@@ -16,7 +19,7 @@
 // Include uguaglianze sospette (v114), controllo US uguali (v113), PDF con
 // foglio di continuazione (v112), correzioni conflitti (v108-111).
 // ─────────────────────────────────────────────────────────────────
-const CACHE_NAME = 'smp-scavo-v118';
+const CACHE_NAME = 'smp-scavo-v119';
 
 // Shell dell'app da rendere disponibile offline.
 const APP_SHELL = [

@@ -5,7 +5,7 @@
   <!-- PWA -->
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#C9963A">
-  <meta name="app-version" content="118">
+  <meta name="app-version" content="119">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="SMP Scavo">
@@ -9078,13 +9078,14 @@ async function aggiornaMatrix() {
 // entrambi i Matrix, con i soli rapporti verso le US dell'area mostrata.
 // Gli strati di humus non hanno numero: "1humus" (Area 1) e "Humus" (Area 2000),
 // riconosciuti dal testo del N° US. In Area 2000 sulla riga più alta stanno
-// insieme Humus e US 2000 (uguali), in Area 1 solo "1humus"; la US 2445 (sterile)
-// sta da sola sull'ultima riga dell'Area 2000.
+// insieme Humus e US 2000 (uguali), in Area 1 solo "1humus"; lo sterile (US 2445 in
+// Area 2000, "1sterile" in Area 1) sta da solo sull'ultima riga.
 // I RIFERIMENTI intermedi sono US-spartiacque interpretative, dalla più recente
 // alla più antica. Non sono contenitori: servono a dare righe fisse al grafico.
-const MATRIX_ANCORE = { '2000': ['2041', '2145', '2185'], '1': [] };
+// v119: una voce può essere un gruppo di riferimenti coevi (stessa riga, non uguali): ['2041','2043'].
+const MATRIX_ANCORE = { '2000': [['2041', '2043'], '2145', '2185'], '1': [] };
 const MATRIX_TOP    = { '2000': ['Humus', '2000'], '1': ['1humus'] };
-const MATRIX_FONDO  = { '2000': '2445', '1': null };
+const MATRIX_FONDO  = { '2000': '2445', '1': '1sterile' };
 const MATRIX_TRINCEA = 'Trincea di alleggerimento cisterna';
 
 function _areaNorm(v) { const a = String(v == null ? '' : v).trim().toLowerCase(); return (a === '1' || a === '2000') ? a : ''; }
@@ -9158,21 +9159,26 @@ function _layoutMatrixV116(sel, succ, nodeGroup, ancoreNum, opts) {
     else { bottom = r.c; bottomNum = r.num; seq.add(bottom); }
   }
   const violSu = new Set(), violGiu = new Set(), violOrdine = new Set();
+  const eqGroups = [];   // gruppi di classi che devono stare sulla stessa riga
 
-  // Riferimenti presenti e utilizzabili
+  // Riferimenti presenti e utilizzabili (ogni voce è una US o un gruppo di US coeve)
   const ancoreCl = [];
-  (ancoreNum || []).forEach(n => {
-    const c = nodeGroup[String(n)];
-    if (c === undefined) { avvisi.push({ tipo: 'ancora', msg: `Il riferimento US ${n} non è tra le US mostrate.` }); return; }
-    if (!seq.has(c)) { avvisi.push({ tipo: 'ancora', msg: `Il riferimento US ${n} non ha rapporti di sequenza: non può fare da riga fissa.` }); return; }
-    if (c === bottom || tops.includes(c)) return;
-    if (ancoreCl.length && ancoreCl[ancoreCl.length - 1].c === c) { avvisi.push({ tipo: 'ancora', msg: `I riferimenti US ${ancoreCl[ancoreCl.length - 1].num} e US ${n} sono dichiarati uguali.` }); return; }
-    ancoreCl.push({ num: String(n), c });
+  (ancoreNum || []).forEach(voce => {
+    const cs = [], presenti = [];
+    [].concat(voce).map(String).forEach(n => {
+      const c = nodeGroup[n];
+      if (c === undefined) { avvisi.push({ tipo: 'ancora', msg: `Il riferimento US ${n} non è tra le US mostrate.` }); return; }
+      if (!seq.has(c)) { avvisi.push({ tipo: 'ancora', msg: `Il riferimento US ${n} non ha rapporti di sequenza: non può fare da riga fissa.` }); return; }
+      if (c === bottom || tops.includes(c) || cs.includes(c)) return;
+      if (ancoreCl.some(g => g.cs.includes(c))) { avvisi.push({ tipo: 'ancora', msg: `Il riferimento US ${n} coincide con un altro riferimento (dichiarate uguali).` }); return; }
+      cs.push(c); presenti.push(n);
+    });
+    if (cs.length) ancoreCl.push({ num: presenti[0], nums: presenti, cs });
   });
 
   // Visita dall'alto per trovare gli archi di ritorno (chiudono i cicli)
   const ord = [...seq].sort(compareNum);
-  const roots = tops.concat(ancoreCl.map(a => a.c), ord.filter(c => !hasIn[c]), ord);
+  const roots = tops.concat(ancoreCl.flatMap(a => a.cs), ord.filter(c => !hasIn[c]), ord);
   const color = {}, back = new Set();
   const vicini = c => [...cSucc[c]].sort(compareNum);
   roots.forEach(r0 => {
@@ -9200,24 +9206,39 @@ function _layoutMatrixV116(sel, succ, nodeGroup, ancoreNum, opts) {
     return false;
   };
 
+  // Riferimenti coevi (stessa riga): non devono avere rapporti di sequenza tra loro
+  const lab = g => g.nums.map(n => 'US ' + n).join('+');
+  ancoreCl.forEach(g => {
+    if (g.cs.length < 2) return;
+    let ok = true;
+    for (const x of g.cs) for (const y of g.cs) if (x !== y && raggiunge(x, y)) ok = false;
+    if (ok) eqGroups.push(g.cs);
+    else {
+      avvisi.push({ tipo: 'ordine', msg: `I riferimenti ${lab(g)} dovrebbero essere coevi (stessa riga), ma i rapporti scritti ne mettono uno SOPRA l'altro: li ho lasciati dove i rapporti li portano.` });
+      g.cs.forEach(c => violOrdine.add(c));
+    }
+  });
+
   // Righe fisse: ogni riferimento deve stare sotto il precedente
   for (let k = 0; k < ancoreCl.length - 1; k++) {
     const a = ancoreCl[k], b = ancoreCl[k + 1];
-    if (raggiunge(b.c, a.c)) {
-      avvisi.push({ tipo: 'ordine', msg: `Ordine incoerente: i rapporti portano US ${b.num} SOPRA US ${a.num}, mentre dovrebbe stare sotto.` });
-      violOrdine.add(b.c);
+    if (b.cs.some(cb => a.cs.some(ca => raggiunge(cb, ca)))) {
+      avvisi.push({ tipo: 'ordine', msg: `Ordine incoerente: i rapporti portano ${lab(b)} SOPRA ${lab(a)}, mentre dovrebbe stare sotto.` });
+      b.cs.forEach(c => violOrdine.add(c));
       continue;
     }
-    if (!raggiunge(a.c, b.c)) {
-      avvisi.push({ tipo: 'percorso', msg: `Nessuna catena di rapporti dimostra che US ${a.num} sta sopra US ${b.num}.` });
-      dag[a.c].add(b.c);     // arco virtuale, solo per il calcolo dei livelli
-    }
+    a.cs.forEach(ca => b.cs.forEach(cb => {
+      if (!raggiunge(ca, cb)) {
+        avvisi.push({ tipo: 'percorso', msg: `Nessuna catena di rapporti dimostra che ${lab(a)} sta sopra ${lab(b)}.` });
+        dag[ca].add(cb);     // arco virtuale, solo per il calcolo dei livelli
+      }
+    }));
   }
 
   // US non collegate a nessun riferimento (né sopra né sotto): calcolate PRIMA di
   // aggiungere i vincoli di riga alta/bassa, che collegherebbero tutto a tutto.
   let nonAncorate = [];
-  const radici = ancoreCl.map(a => a.c).concat(tops, bottom !== undefined ? [bottom] : []);
+  const radici = ancoreCl.flatMap(a => a.cs).concat(tops, bottom !== undefined ? [bottom] : []);
   if (ancoreCl.length || bottom !== undefined) {
     const giu = new Set(), su = new Set();
     const rev = {}; seq.forEach(c => { rev[c] = []; });
@@ -9263,6 +9284,7 @@ function _layoutMatrixV116(sel, succ, nodeGroup, ancoreNum, opts) {
     }
   }
 
+  if (equalizza) eqGroups.push(tops);
   // Livelli: percorso più lungo dall'alto (rilassamento, con righe alte uguali)
   const lvl = {}; seq.forEach(c => { lvl[c] = 0; });
   let mod = true, giri = 0;
@@ -9270,10 +9292,10 @@ function _layoutMatrixV116(sel, succ, nodeGroup, ancoreNum, opts) {
     mod = false;
     if (++giri > seq.size + 10) throw new Error('layout v118: ciclo residuo');
     seq.forEach(c => dag[c].forEach(d => { if (lvl[d] < lvl[c] + 1) { lvl[d] = lvl[c] + 1; mod = true; } }));
-    if (equalizza) {
-      const m = Math.max(...tops.map(c => lvl[c]));
-      tops.forEach(c => { if (lvl[c] < m) { lvl[c] = m; mod = true; } });
-    }
+    eqGroups.forEach(gr => {
+      const m = Math.max(...gr.map(c => lvl[c]));
+      gr.forEach(c => { if (lvl[c] < m) { lvl[c] = m; mod = true; } });
+    });
   }
 
   const levels = {}, strip = [];
@@ -9283,7 +9305,7 @@ function _layoutMatrixV116(sel, succ, nodeGroup, ancoreNum, opts) {
   });
 
   const usDiClassi = set => sel.map(s => String(s.numero)).filter(u => set.has(nodeGroup[u])).sort(compareNum);
-  const ancoreOut = ancoreCl.map(a => ({ num: a.num, lvl: lvl[a.c], label: 'US ' + a.num }));
+  const ancoreOut = ancoreCl.map(a => ({ num: a.num, lvl: lvl[a.cs[0]], label: 'US ' + a.nums.join('+') }));
   if (tops.length) ancoreOut.push({ num: topNomi[0], lvl: lvl[tops[0]], label: topNomi.map(n => /^\d/.test(n) ? 'US ' + n : n).join('+') });
   if (bottom !== undefined) ancoreOut.push({ num: bottomNum, lvl: lvl[bottom], label: 'US ' + bottomNum });
   return {
@@ -9779,7 +9801,7 @@ function renderMatrix() {
   const svgW = Math.max(...allX) + NW / 2 + PAD;
   const LEG_BOTTOM_H = 28; // spazio extra in fondo per la legenda orizzontale
   const svgH = Math.max(...allY) + NH / 2 + PAD + LEG_BOTTOM_H;
-  const GUT = (layout && layout.ancore.length) ? 64 : 0;   // margine sinistro per le etichette dei riferimenti
+  const GUT = (layout && layout.ancore.length) ? Math.max(64, 6 * Math.max(...layout.ancore.map(a => (a.label || '').length)) + 10) : 0;   // margine sinistro per le etichette dei riferimenti
   const W_TOT = svgW + GUT;
 
   svg.setAttribute('width',  W_TOT + PAD);
@@ -10147,9 +10169,9 @@ function renderMatrix() {
         us: layout.sotto
       });
       if (layout.avvisi.length) sezioni.push({
-        rosso: layout.avvisi.some(a => a.tipo === 'ordine') || layout.ordine.length > 0,
+        rosso: layout.avvisi.some(a => a.tipo !== 'info') || layout.ordine.length > 0,
         titolo: `Riferimenti cronologici — ${layout.avvisi.length} avvis${layout.avvisi.length === 1 ? 'o' : 'i'}`,
-        nota: 'Le righe fisse seguono comunque l\'ordine che hai indicato; questi avvisi dicono dove i rapporti scritti nelle schede non lo confermano.',
+        nota: 'Le righe fisse seguono comunque l\'ordine che hai indicato; queste incongruenze dicono dove i rapporti scritti nelle schede (o la loro assenza) non lo confermano.',
         us: [], righe: layout.avvisi.map(a => a.msg)
       });
       if (layout.nonAncorate.length) sezioni.push({
@@ -11522,9 +11544,9 @@ function showToast(msg) {
   <script>
     if ('serviceWorker' in navigator && !location.hostname.includes('claudeusercontent.com')) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./service-worker.js?v=118')
+        navigator.serviceWorker.register('./service-worker.js?v=119')
           .then(reg => {
-            console.log('SW registrato v118:', reg.scope);
+            console.log('SW registrato v119:', reg.scope);
             // Forza aggiornamento immediato se c'è una nuova versione
             reg.update();
           })
