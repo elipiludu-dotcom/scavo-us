@@ -5,7 +5,7 @@
   <!-- PWA -->
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#C9963A">
-  <meta name="app-version" content="117">
+  <meta name="app-version" content="118">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="SMP Scavo">
@@ -1732,10 +1732,10 @@
       <!-- Toolbar -->
       <div style="display:flex;align-items:center;gap:10px;padding:10px 16px;border-bottom:1px solid var(--border);flex-wrap:wrap">
         <h2 style="margin:0;font-family:'Patrick Hand',cursive;color:var(--earth);font-size:1.2rem;white-space:nowrap">📊 Matrix</h2>
-        <select id="matrix-area" onchange="renderMatrix()" title="Le US a 3 cifre sono dell'Area 1, quelle a 4 cifre dell'Area 2000"
+        <select id="matrix-area" onchange="renderMatrix()" title="L'area si legge dal campo Area della scheda (solo 1 oppure 2000)"
           style="padding:6px 10px;background:var(--parchment-light);border:1px solid var(--border);border-radius:3px;color:var(--ink);font-size:0.8rem;font-family:'Space Mono',monospace">
-          <option value="2000" selected>Area 2000 (US a 4 cifre)</option>
-          <option value="1">Area 1 (US a 3 cifre)</option>
+          <option value="2000" selected>Area 2000</option>
+          <option value="1">Area 1</option>
         </select>
         <select id="matrix-settore" onchange="renderMatrix()"
           style="padding:6px 10px;background:var(--parchment-light);border:1px solid var(--border);border-radius:3px;color:var(--ink);font-size:0.8rem;font-family:'Space Mono',monospace">
@@ -9070,24 +9070,36 @@ async function aggiornaMatrix() {
   }
 }
 
-// ─── v116: MATRIX PER AREA, RIFERIMENTI CRONOLOGICI, FASCIA ISOLATE, CATENA ──
-// Area 1 = US a 3 cifre, Area 2000 = US a 4 cifre (si guarda il primo gruppo di
-// cifre del numero, senza segno e senza lettere: -2002 e 2002bis sono Area 2000).
-// Qualsiasi altro numero (1-2 cifre, 5 o più) va in Area 1 e viene segnalato.
-// I RIFERIMENTI sono US-spartiacque interpretative, dalla più recente alla più
-// antica. Non sono contenitori: servono a dare righe fisse al grafico.
-const MATRIX_ANCORE = { '2000': ['2000', '2041', '2145', '2185', '2445'], '1': [] };
+// ─── v116/v118: MATRIX PER AREA, RIFERIMENTI CRONOLOGICI, FASCIA ISOLATE, CATENA ──
+// v118: l'Area di una US si legge dal CAMPO AREA della scheda. Sono accettati solo
+// "1" e "2000" (spazi e maiuscole ignorati). Una US con Area vuota o diversa non
+// compare in nessun Matrix ed è segnalata (in rosso) nelle Note.
+// Eccezione: la "Trincea di alleggerimento cisterna" (US solo a parole) compare in
+// entrambi i Matrix, con i soli rapporti verso le US dell'area mostrata.
+// Gli strati di humus non hanno numero: "1humus" (Area 1) e "Humus" (Area 2000),
+// riconosciuti dal testo del N° US. In Area 2000 sulla riga più alta stanno
+// insieme Humus e US 2000 (uguali), in Area 1 solo "1humus"; la US 2445 (sterile)
+// sta da sola sull'ultima riga dell'Area 2000.
+// I RIFERIMENTI intermedi sono US-spartiacque interpretative, dalla più recente
+// alla più antica. Non sono contenitori: servono a dare righe fisse al grafico.
+const MATRIX_ANCORE = { '2000': ['2041', '2145', '2185'], '1': [] };
+const MATRIX_TOP    = { '2000': ['Humus', '2000'], '1': ['1humus'] };
+const MATRIX_FONDO  = { '2000': '2445', '1': null };
+const MATRIX_TRINCEA = 'Trincea di alleggerimento cisterna';
 
-function _cifreNum(numero) {
-  const m = String(numero == null ? '' : numero).match(/\d+/);
-  return m ? m[0].replace(/^0+/, '') : '';
-}
-function matrixAreaDi(numero) { return _cifreNum(numero).length === 4 ? '2000' : '1'; }
+function _areaNorm(v) { const a = String(v == null ? '' : v).trim().toLowerCase(); return (a === '1' || a === '2000') ? a : ''; }
+function _isTrincea(s) { return normNum(s && s.numero) === normNum(MATRIX_TRINCEA); }
+// '1' | '2000' | 'entrambe' (Trincea) | '' (Area mancante o non valida)
+function matrixAreaDi(s) { return _isTrincea(s) ? 'entrambe' : _areaNorm(s && s.area); }
+function matrixInArea(s, area) { const a = matrixAreaDi(s); return a === 'entrambe' || a === area; }
 function _matrixAreaCorrente() { return document.getElementById('matrix-area')?.value || '2000'; }
+function _mxNumF(n) { const f = parseFloat(n); return isFinite(f) ? f : 1e9; }
 
 // Rapporti scritti tra US di aree diverse (per te non dovrebbero esistere).
 function calcolaRelazioniTraAree(arch) {
   const esiste = new Set(arch.map(s => String(s.numero).trim()));
+  const areaDiNum = {};
+  arch.forEach(s => { areaDiNum[String(s.numero).trim()] = matrixAreaDi(s); });
   const viste = new Map();
   arch.forEach(s => {
     const a = String(s.numero).trim();
@@ -9095,7 +9107,8 @@ function calcolaRelazioniTraAree(arch) {
     raps.forEach(r => {
       const b = String(r.us == null ? '' : r.us).trim();
       if (!b || !esiste.has(b) || a === b) return;
-      if (matrixAreaDi(a) === matrixAreaDi(b)) return;
+      const aa = areaDiNum[a], ab = areaDiNum[b];
+      if (!aa || !ab || aa === 'entrambe' || ab === 'entrambe' || aa === ab) return;
       const k = [a, b].sort().join('\u0001');
       if (!viste.has(k)) viste.set(k, { a, b, tipi: [] });
       viste.get(k).tipi.push(`${a}: ${tipoRapportoLabel(r.tipo).toLowerCase()} ${b}`);
@@ -9112,7 +9125,8 @@ function calcolaRelazioniTraAree(arch) {
 //  - i riferimenti cronologici sono righe fisse in ordine (archi virtuali tra l'uno
 //    e il successivo, solo per il calcolo: non vengono disegnati);
 //  - le US senza alcun rapporto di sequenza vanno nella fascia a parte (strip).
-function _layoutMatrixV116(sel, succ, nodeGroup, ancoreNum) {
+function _layoutMatrixV116(sel, succ, nodeGroup, ancoreNum, opts) {
+  opts = opts || {};
   const avvisi = [];
   const classi = [...new Set(sel.map(s => nodeGroup[String(s.numero)]))];
   const cSucc = {}; classi.forEach(c => { cSucc[c] = new Set(); });
@@ -9127,19 +9141,38 @@ function _layoutMatrixV116(sel, succ, nodeGroup, ancoreNum) {
   classi.forEach(c => cSucc[c].forEach(d => { hasIn[d] = true; }));
   const seq = new Set(classi.filter(c => cSucc[c].size > 0 || hasIn[c]));
 
+  // v118: riga più alta (Humus / US 2000 / 1humus) e riga più bassa (US 2445)
+  const clDi = n => { const x = sel.find(s => normNum(s.numero) === normNum(n)); return x ? { c: nodeGroup[String(x.numero)], num: String(x.numero) } : null; };
+  const tops = [], topNomi = [];
+  (opts.topNums || []).forEach(n => {
+    const r = clDi(n);
+    if (!r) { avvisi.push({ tipo: 'riferimento', msg: `${/^\d/.test(n) ? 'La US ' : 'Lo strato '}${n} non è tra le US mostrate.` }); return; }
+    topNomi.push(r.num);
+    if (!tops.includes(r.c)) tops.push(r.c);
+  });
+  tops.forEach(c => seq.add(c));
+  let bottom, bottomNum = null;
+  if (opts.bottomNum) {
+    const r = clDi(opts.bottomNum);
+    if (!r) avvisi.push({ tipo: 'riferimento', msg: `La US ${opts.bottomNum} non è tra le US mostrate.` });
+    else { bottom = r.c; bottomNum = r.num; seq.add(bottom); }
+  }
+  const violSu = new Set(), violGiu = new Set(), violOrdine = new Set();
+
   // Riferimenti presenti e utilizzabili
   const ancoreCl = [];
   (ancoreNum || []).forEach(n => {
     const c = nodeGroup[String(n)];
     if (c === undefined) { avvisi.push({ tipo: 'ancora', msg: `Il riferimento US ${n} non è tra le US mostrate.` }); return; }
     if (!seq.has(c)) { avvisi.push({ tipo: 'ancora', msg: `Il riferimento US ${n} non ha rapporti di sequenza: non può fare da riga fissa.` }); return; }
+    if (c === bottom || tops.includes(c)) return;
     if (ancoreCl.length && ancoreCl[ancoreCl.length - 1].c === c) { avvisi.push({ tipo: 'ancora', msg: `I riferimenti US ${ancoreCl[ancoreCl.length - 1].num} e US ${n} sono dichiarati uguali.` }); return; }
     ancoreCl.push({ num: String(n), c });
   });
 
   // Visita dall'alto per trovare gli archi di ritorno (chiudono i cicli)
   const ord = [...seq].sort(compareNum);
-  const roots = ancoreCl.map(a => a.c).concat(ord.filter(c => !hasIn[c]), ord);
+  const roots = tops.concat(ancoreCl.map(a => a.c), ord.filter(c => !hasIn[c]), ord);
   const color = {}, back = new Set();
   const vicini = c => [...cSucc[c]].sort(compareNum);
   roots.forEach(r0 => {
@@ -9172,6 +9205,7 @@ function _layoutMatrixV116(sel, succ, nodeGroup, ancoreNum) {
     const a = ancoreCl[k], b = ancoreCl[k + 1];
     if (raggiunge(b.c, a.c)) {
       avvisi.push({ tipo: 'ordine', msg: `Ordine incoerente: i rapporti portano US ${b.num} SOPRA US ${a.num}, mentre dovrebbe stare sotto.` });
+      violOrdine.add(b.c);
       continue;
     }
     if (!raggiunge(a.c, b.c)) {
@@ -9180,40 +9214,16 @@ function _layoutMatrixV116(sel, succ, nodeGroup, ancoreNum) {
     }
   }
 
-  // Livelli: percorso più lungo dall'alto (Kahn)
-  const indeg = {}; seq.forEach(c => { indeg[c] = 0; });
-  seq.forEach(c => dag[c].forEach(d => { indeg[d]++; }));
-  const lvl = {};
-  let q = [...seq].filter(c => indeg[c] === 0);
-  q.forEach(c => { lvl[c] = 0; });
-  let fatti = 0;
-  while (q.length) {
-    const nx = [];
-    q.forEach(c => {
-      fatti++;
-      dag[c].forEach(d => {
-        lvl[d] = Math.max(lvl[d] || 0, lvl[c] + 1);
-        if (--indeg[d] === 0) nx.push(d);
-      });
-    });
-    q = nx;
-  }
-  if (fatti !== seq.size) throw new Error('layout v116: ciclo residuo');
-
-  const levels = {}, strip = [];
-  sel.forEach(s => {
-    const u = String(s.numero), c = nodeGroup[u];
-    if (seq.has(c)) levels[u] = lvl[c]; else strip.push(u);
-  });
-
-  // US non collegate a nessun riferimento (né sopra né sotto)
+  // US non collegate a nessun riferimento (né sopra né sotto): calcolate PRIMA di
+  // aggiungere i vincoli di riga alta/bassa, che collegherebbero tutto a tutto.
   let nonAncorate = [];
-  if (ancoreCl.length) {
+  const radici = ancoreCl.map(a => a.c).concat(tops, bottom !== undefined ? [bottom] : []);
+  if (ancoreCl.length || bottom !== undefined) {
     const giu = new Set(), su = new Set();
     const rev = {}; seq.forEach(c => { rev[c] = []; });
     seq.forEach(c => dag[c].forEach(d => rev[d].push(c)));
     const visita = (adj, set) => {
-      const coda = ancoreCl.map(a => a.c);
+      const coda = radici.slice();
       coda.forEach(c => set.add(c));
       while (coda.length) { const x = coda.pop(); for (const y of adj[x]) if (!set.has(y)) { set.add(y); coda.push(y); } }
     };
@@ -9221,7 +9231,66 @@ function _layoutMatrixV116(sel, succ, nodeGroup, ancoreNum) {
     nonAncorate = sel.map(s => String(s.numero)).filter(u => seq.has(nodeGroup[u]) && !giu.has(nodeGroup[u]) && !su.has(nodeGroup[u]));
     nonAncorate.sort(compareNum);
   }
-  return { levels, strip, ancore: ancoreCl.map(a => ({ num: a.num, lvl: lvl[a.c] })), avvisi, nonAncorate, ritorni: back.size };
+
+  // Riga più alta: tutte le altre US stanno sotto. Chi per i rapporti scritti sta
+  // SOPRA lo humus resta dov'è (posizione reale) e viene segnalato.
+  let equalizza = tops.length > 1;
+  const nomeTop = topNomi.join(' e ');
+  if (tops.length > 1) {
+    for (const a of tops) for (const b of tops) if (a !== b && raggiunge(a, b)) {
+      avvisi.push({ tipo: 'ordine', msg: `${nomeTop} dovrebbero stare sulla stessa riga, ma i rapporti scritti ne mettono una SOPRA l'altra: le ho lasciate dove i rapporti le portano.` });
+      equalizza = false;
+    }
+    if (equalizza && !tops.every(c => c === tops[0])) {
+      avvisi.push({ tipo: 'info', msg: `${nomeTop} non risultano dichiarate uguali (uguale_a) nelle schede: le ho messe comunque sulla stessa riga.` });
+    }
+  }
+  const rev1 = () => { const r = {}; seq.forEach(c => { r[c] = []; }); seq.forEach(c => dag[c].forEach(d => r[d].push(c))); return r; };
+  if (tops.length) {
+    const r = rev1(), vis = new Set(tops), coda = tops.slice();
+    while (coda.length) { const x = coda.pop(); r[x].forEach(y => { if (!vis.has(y)) { vis.add(y); violSu.add(y); coda.push(y); } }); }
+    tops.forEach(tp => seq.forEach(c => { if (!tops.includes(c) && !violSu.has(c)) dag[tp].add(c); }));
+  }
+  // Riga più bassa: tutte le altre US stanno sopra; chi sta SOTTO resta e viene segnalato.
+  if (bottom !== undefined) {
+    if (tops.some(tp => raggiunge(bottom, tp))) {
+      avvisi.push({ tipo: 'ordine', msg: `Per i rapporti scritti la US ${bottomNum} sta SOPRA lo strato di humus: non la metto sull'ultima riga.` });
+      bottom = undefined;
+    } else {
+      const vis = new Set([bottom]), coda = [bottom];
+      while (coda.length) { const x = coda.pop(); for (const y of dag[x]) if (!vis.has(y)) { vis.add(y); violGiu.add(y); coda.push(y); } }
+      seq.forEach(c => { if (c !== bottom && !violGiu.has(c)) dag[c].add(bottom); });
+    }
+  }
+
+  // Livelli: percorso più lungo dall'alto (rilassamento, con righe alte uguali)
+  const lvl = {}; seq.forEach(c => { lvl[c] = 0; });
+  let mod = true, giri = 0;
+  while (mod) {
+    mod = false;
+    if (++giri > seq.size + 10) throw new Error('layout v118: ciclo residuo');
+    seq.forEach(c => dag[c].forEach(d => { if (lvl[d] < lvl[c] + 1) { lvl[d] = lvl[c] + 1; mod = true; } }));
+    if (equalizza) {
+      const m = Math.max(...tops.map(c => lvl[c]));
+      tops.forEach(c => { if (lvl[c] < m) { lvl[c] = m; mod = true; } });
+    }
+  }
+
+  const levels = {}, strip = [];
+  sel.forEach(s => {
+    const u = String(s.numero), c = nodeGroup[u];
+    if (seq.has(c)) levels[u] = lvl[c]; else strip.push(u);
+  });
+
+  const usDiClassi = set => sel.map(s => String(s.numero)).filter(u => set.has(nodeGroup[u])).sort(compareNum);
+  const ancoreOut = ancoreCl.map(a => ({ num: a.num, lvl: lvl[a.c], label: 'US ' + a.num }));
+  if (tops.length) ancoreOut.push({ num: topNomi[0], lvl: lvl[tops[0]], label: topNomi.map(n => /^\d/.test(n) ? 'US ' + n : n).join('+') });
+  if (bottom !== undefined) ancoreOut.push({ num: bottomNum, lvl: lvl[bottom], label: 'US ' + bottomNum });
+  return {
+    levels, strip, ancore: ancoreOut, avvisi, nonAncorate, ritorni: back.size,
+    sopra: usDiClassi(violSu), sotto: usDiClassi(violGiu), ordine: usDiClassi(violOrdine),
+    topNomi, bottomNum: bottom !== undefined ? bottomNum : null
+  };
 }
 
 // ── Catena evidenziata (clic su una US del Matrix) ─────────────────
@@ -9295,10 +9364,10 @@ function matrixCerca(q) {
     const n = normNum(s.numero);
     if (!n || visti.has(n) || n.indexOf(q) === -1) return;
     visti.add(n);
-    const area = matrixAreaDi(s.numero);
+    const area = matrixAreaDi(s);
     out.push({
       us: String(s.numero), id: s.id, area,
-      altraArea: area !== areaCur,
+      altraArea: !matrixInArea(s, areaCur),
       filtroSettore: !!(settore && s.saggio !== settore),
       filtroAnno: !!(anno && s.anno !== anno),
       rank: n === q ? 0 : (n.replace(/^-/, '').startsWith(q.replace(/^-/, '')) ? 1 : 2)
@@ -9326,7 +9395,7 @@ function matrixCercaInput() {
     const a = document.createElement('span'); a.textContent = 'US ' + r.us;
     const b = document.createElement('span');
     b.style.cssText = 'font-size:0.62rem;color:var(--muted);white-space:nowrap';
-    b.textContent = 'Area ' + r.area + (r.altraArea ? ' ↪' : '') + ((r.filtroSettore || r.filtroAnno) ? ' · filtrata' : '');
+    b.textContent = (r.area === '' ? 'Area non valida' : r.area === 'entrambe' ? 'Area 1 e 2000' : 'Area ' + r.area) + (r.altraArea ? ' ↪' : '') + ((r.filtroSettore || r.filtroAnno) ? ' · filtrata' : '');
     d.appendChild(a); d.appendChild(b);
     d.addEventListener('mousedown', ev => ev.preventDefault());
     d.addEventListener('click', () => matrixCercaVai(r));
@@ -9350,11 +9419,16 @@ async function matrixCercaVai(r) {
   if (!s) { showToast('⚠ US non trovata'); return; }
   const settore = document.getElementById('matrix-settore')?.value || '';
   const anno    = document.getElementById('matrix-anno')?.value || '';
-  const altraArea = matrixAreaDi(s.numero) !== _matrixAreaCorrente();
+  const areaS = matrixAreaDi(s);
+  if (areaS === '') {
+    showToast(`⚠ US ${r.us}: il campo Area non è 1 né 2000, non compare in nessun Matrix (vedi Note)`);
+    return;
+  }
+  const altraArea = !matrixInArea(s, _matrixAreaCorrente());
   const fSet = !!(settore && s.saggio !== settore), fAnno = !!(anno && s.anno !== anno);
   if (altraArea || fSet || fAnno) {
     const righe = [];
-    if (altraArea) righe.push(`La US ${r.us} è nell'Area ${matrixAreaDi(s.numero)}: passo a quel Matrix.`);
+    if (altraArea) righe.push(`La US ${r.us} è nell'Area ${areaS}: passo a quel Matrix.`);
     if (fSet)  righe.push(`Il filtro settore (${settore}) la nasconde: lo tolgo.`);
     if (fAnno) righe.push(`Il filtro anno (${anno}) la nasconde: lo tolgo.`);
     const ok = await showConfirm({
@@ -9362,7 +9436,7 @@ async function matrixCercaVai(r) {
       okLabel: 'Sì, vai', okClass: 'btn-primary'
     });
     if (!ok) return;
-    if (altraArea) document.getElementById('matrix-area').value = matrixAreaDi(s.numero);
+    if (altraArea) document.getElementById('matrix-area').value = areaS;
     if (fSet)  document.getElementById('matrix-settore').value = '';
     if (fAnno) document.getElementById('matrix-anno').value = '';
     renderMatrix();
@@ -9397,23 +9471,23 @@ function apriNoteMatrix() {
   foot.appendChild(bClose);
   bClose.onclick = () => overlay.remove(); bX.onclick = () => overlay.remove();
   const idDi = n => { const x = schede.find(y => sameNum(y.numero, n)); return x ? x.id : null; };
-  const chip = n => {
+  const chip = (n, extra) => {
     const id = idDi(n), sp = document.createElement('span');
     sp.style.cssText = 'display:inline-block;margin:0 10px 4px 0;font-size:0.72rem;' + (id ? 'cursor:pointer;text-decoration:underline;text-underline-offset:2px' : 'opacity:0.6');
-    sp.textContent = 'US ' + n; if (id) sp.onclick = () => apriScheda(id);
+    sp.textContent = (/^\d/.test(String(n)) && !/[a-z]{3,}/i.test(String(n)) ? 'US ' : '') + n + (extra ? ' ' + extra : ''); if (id) sp.onclick = () => apriScheda(id);
     return sp;
   };
   _mxNote.sezioni.forEach(sz => {
     const box = document.createElement('div');
-    box.style.cssText = 'border-top:1px solid var(--border);padding:10px 0';
+    box.style.cssText = 'border-top:1px solid var(--border);padding:10px 0' + (sz.rosso ? ';border-left:3px solid #d94f30;padding-left:8px' : '');
     const h = document.createElement('div');
-    h.style.cssText = 'font-size:0.82rem;font-weight:700;color:var(--earth)';
+    h.style.cssText = 'font-size:0.82rem;font-weight:700;color:' + (sz.rosso ? '#d94f30' : 'var(--earth)');
     h.textContent = sz.titolo; box.appendChild(h);
     const n = document.createElement('div');
     n.style.cssText = 'font-size:0.72rem;color:var(--muted);line-height:1.45;margin:4px 0 6px';
     n.textContent = sz.nota; box.appendChild(n);
     const l = document.createElement('div'); l.style.cssText = 'max-height:240px;overflow-y:auto';
-    (sz.us || []).forEach(u => l.appendChild(chip(u)));
+    (sz.us || []).forEach(u => l.appendChild(chip(u, sz.extra && sz.extra[u])));
     (sz.righe || []).forEach(r => {
       const d = document.createElement('div');
       d.style.cssText = 'font-size:0.72rem;line-height:1.5;margin-bottom:3px';
@@ -9431,7 +9505,7 @@ function renderMatrix() {
   let sel = schede.filter(s => {
     if (settore && s.saggio !== settore) return false;
     if (anno    && s.anno   !== anno)    return false;
-    if (matrixAreaDi(s.numero) !== areaSel) return false;
+    if (!matrixInArea(s, areaSel)) return false;
     return true;
   });
 
@@ -9564,7 +9638,7 @@ function renderMatrix() {
   // fisse, US senza sequenza in una fascia a parte). Se per qualunque motivo dà
   // errore si torna al calcolo precedente, così il Matrix non resta mai vuoto.
   let layout = null;
-  try { layout = _layoutMatrixV116(sel, succ, nodeGroup, MATRIX_ANCORE[areaSel] || []); }
+  try { layout = _layoutMatrixV116(sel, succ, nodeGroup, MATRIX_ANCORE[areaSel] || [], { topNums: MATRIX_TOP[areaSel] || [], bottomNum: MATRIX_FONDO[areaSel] || null }); }
   catch (e) { console.error('Matrix v116: calcolo non riuscito, uso il precedente', e); layout = null; }
   const stripSet = new Set(layout ? layout.strip : []);
 
@@ -9617,7 +9691,7 @@ function renderMatrix() {
   // tenuti contigui: prima si ordina per baricentro del gruppo, poi
   // i membri si affiancano nell'ordine naturale.
   sortedLevels.forEach(lv => {
-    byLevel[lv].sort((a, b) => parseFloat(a) - parseFloat(b));
+    byLevel[lv].sort(compareNum);
   });
 
   for (let iter = 0; iter < 3; iter++) {
@@ -9633,12 +9707,12 @@ function renderMatrix() {
           const members = ugualGroups[g] || [g];
           const allPreds = members.flatMap(m => pred[m] || []).filter(p => posAbove[p] !== undefined);
           if (allPreds.length) return allPreds.reduce((s, p) => s + posAbove[p], 0) / allPreds.length;
-          return parseFloat(members[0]);
+          return _mxNumF(members[0]);
         };
         const cmp = grpAvg(ga) - grpAvg(gb);
         if (Math.abs(cmp) > 0.001) return cmp;
         // Stesso gruppo: ordina per numero
-        return parseFloat(a) - parseFloat(b);
+        return compareNum(a, b);
       });
     }
     for (let i = sortedLevels.length - 2; i >= 0; i--) {
@@ -9652,11 +9726,11 @@ function renderMatrix() {
           const members = ugualGroups[g] || [g];
           const allSucc = members.flatMap(m => succ[m] || []).filter(s => posBelow[s] !== undefined);
           if (allSucc.length) return allSucc.reduce((s2, s3) => s2 + posBelow[s3], 0) / allSucc.length;
-          return parseFloat(members[0]);
+          return _mxNumF(members[0]);
         };
         const cmp = grpAvg(ga) - grpAvg(gb);
         if (Math.abs(cmp) > 0.001) return cmp;
-        return parseFloat(a) - parseFloat(b);
+        return compareNum(a, b);
       });
     }
   }
@@ -9727,7 +9801,7 @@ function renderMatrix() {
 
   // v116: righe fisse dei riferimenti cronologici (sfondo a fasce + linea + etichetta)
   if (layout && layout.ancore.length) {
-    const righeA = layout.ancore.filter(a => positions[a.num]).map(a => ({ num: a.num, y: positions[a.num].y })).sort((a, b) => a.y - b.y);
+    const righeA = layout.ancore.filter(a => positions[a.num]).map(a => ({ num: a.num, label: a.label, y: positions[a.num].y })).sort((a, b) => a.y - b.y);
     righeA.forEach((a, i) => {
       if (i < righeA.length - 1 && i % 2 === 0) {
         const fascia = gRoot.appendChild(document.createElementNS(ns, 'rect'));
@@ -9744,7 +9818,7 @@ function renderMatrix() {
       lb.setAttribute('x', -GUT + 6); lb.setAttribute('y', a.y - 4);
       lb.setAttribute('fill', '#C9963A'); lb.setAttribute('font-family', 'Space Mono, monospace');
       lb.setAttribute('font-size', '9'); lb.setAttribute('font-weight', 'bold');
-      lb.textContent = 'US ' + a.num;
+      lb.textContent = a.label || ('US ' + a.num);
     });
   }
   // v116: titolo della fascia delle US senza rapporti di sequenza
@@ -9965,14 +10039,17 @@ function renderMatrix() {
   });
 
   // ── 10. NODI ─────────────────────────────────────────────────────
+  const violSet = new Set(layout ? [].concat(layout.sopra, layout.sotto, layout.ordine) : []);
   sel.forEach(s => {
     const p = positions[s.numero];
     if (!p) return;
     const isNeg      = String(s.numero).startsWith('-');
     const isConflict = conflictNodes.has(String(s.numero));
 
+    const isViol    = violSet.has(String(s.numero));
     const fillCol   = isConflict ? '#3a1010' : (isNeg ? '#C9963A' : '#1e1b12');
-    const strokeCol = isConflict ? '#d94f30'  : (isNeg ? '#8B6520' : '#C9963A');
+    const strokeCol = isViol ? '#ff3b30' : (isConflict ? '#d94f30'  : (isNeg ? '#8B6520' : '#C9963A'));
+    const wCol      = (isViol || isConflict) ? '2.5' : '1.5';
     const textCol   = isConflict ? '#d94f30'  : (isNeg ? '#1e1b12' : '#C9963A');
 
     const grp = gRoot.appendChild(document.createElementNS(ns, 'g'));
@@ -9987,9 +10064,9 @@ function renderMatrix() {
     rect.setAttribute('rx', '4');
     rect.setAttribute('fill', fillCol);
     rect.setAttribute('stroke', strokeCol);
-    rect.setAttribute('stroke-width', isConflict ? '2' : '1.5');
+    rect.setAttribute('stroke-width', wCol);
     if (s._src === 'rielab') rect.setAttribute('stroke-dasharray', '3 2'); // v102: US di rielaborazione
-    rect.dataset.s0 = strokeCol; rect.dataset.w0 = isConflict ? '2' : '1.5';
+    rect.dataset.s0 = strokeCol; rect.dataset.w0 = wCol;
 
     // Numero US
     const tNum = grp.appendChild(document.createElementNS(ns, 'text'));
@@ -10001,7 +10078,12 @@ function renderMatrix() {
     tNum.setAttribute('font-family', 'Patrick Hand, cursive');
     tNum.setAttribute('font-size', '13');
     tNum.setAttribute('font-weight', 'bold');
-    tNum.textContent = String(s.numero);
+    const nTxt = String(s.numero);
+    if (nTxt.length > 9) {
+      tNum.textContent = (_isTrincea(s) ? 'Trincea' : nTxt.substring(0, 8) + '…');
+      tNum.setAttribute('font-size', '11');
+      const ti = grp.appendChild(document.createElementNS(ns, 'title')); ti.textContent = nTxt;
+    } else tNum.textContent = nTxt;
 
     // Icona warning per nodi in conflitto
     if (isConflict) {
@@ -10039,13 +10121,33 @@ function renderMatrix() {
       nota: 'Non sono disegnati in nessuno dei due Matrix. Per come è organizzato lo scavo non dovrebbero esistere: probabile numero sbagliato.',
       us: [], righe: tra.map(x => x.tipi.join('; '))
     });
-    const strane = sel.map(s => String(s.numero)).filter(u => { const l = _cifreNum(u).length; return l !== 3 && l !== 4; });
-    if (strane.length) sezioni.push({
-      titolo: `US con numero né a 3 né a 4 cifre — ${strane.length}`,
-      nota: 'Sono state messe in Area 1. Controlla che il numero sia corretto.', us: strane.sort(compareNum)
-    });
+    // Area mancante o diversa da 1 / 2000 (considera i filtri settore e anno)
+    const senzaArea = schede.filter(s => (!settore || s.saggio === settore) && (!anno || s.anno === anno) && matrixAreaDi(s) === '');
+    if (senzaArea.length) {
+      const extra = {};
+      senzaArea.forEach(s => { const v = String(s.area == null ? '' : s.area).trim(); extra[String(s.numero)] = v ? `(Area: «${v}»)` : '(Area vuota)'; });
+      sezioni.unshift({
+        rosso: true,
+        titolo: `US con campo Area non valido — ${senzaArea.length}`,
+        nota: 'Il campo Area deve essere 1 oppure 2000. Queste US NON compaiono in nessun Matrix finché non lo correggi. Clic sul numero per aprire la scheda.',
+        us: senzaArea.map(s => String(s.numero)).sort(compareNum), extra
+      });
+    }
     if (layout) {
+      if (layout.sopra.length) sezioni.push({
+        rosso: true,
+        titolo: `US sopra ${layout.topNomi.join(' / ')} — ${layout.sopra.length}`,
+        nota: 'Per i rapporti scritti nelle schede stanno PRIMA dello strato di humus (es. «Humus coperto da …»). Sono disegnate nella loro posizione reale, con il bordo rosso: controlla i rapporti.',
+        us: layout.sopra
+      });
+      if (layout.sotto.length) sezioni.push({
+        rosso: true,
+        titolo: `US sotto la US ${layout.bottomNum} — ${layout.sotto.length}`,
+        nota: 'Per i rapporti scritti nelle schede stanno DOPO lo sterile (es. «2445 copre …»). Sono disegnate nella loro posizione reale, con il bordo rosso: controlla i rapporti.',
+        us: layout.sotto
+      });
       if (layout.avvisi.length) sezioni.push({
+        rosso: layout.avvisi.some(a => a.tipo === 'ordine') || layout.ordine.length > 0,
         titolo: `Riferimenti cronologici — ${layout.avvisi.length} avvis${layout.avvisi.length === 1 ? 'o' : 'i'}`,
         nota: 'Le righe fisse seguono comunque l\'ordine che hai indicato; questi avvisi dicono dove i rapporti scritti nelle schede non lo confermano.',
         us: [], righe: layout.avvisi.map(a => a.msg)
@@ -10063,7 +10165,11 @@ function renderMatrix() {
     }
     _mxNote = { titolo: `Area ${areaSel} · ${sel.length} US`, sezioni };
     const nb = document.getElementById('matrix-note-btn');
-    if (nb && sezioni.length) { nb.textContent = `ℹ Note (${sezioni.length})`; nb.style.display = 'inline-block'; }
+    if (nb && sezioni.length) {
+      const rossa = sezioni.some(z => z.rosso);
+      nb.textContent = `${rossa ? '⚠' : 'ℹ'} Note (${sezioni.length})`; nb.style.display = 'inline-block';
+      nb.style.color = rossa ? '#d94f30' : ''; nb.style.borderColor = rossa ? '#d94f30' : '';
+    }
   } catch (e) { console.error('Matrix note', e); }
 }
 
@@ -10252,7 +10358,7 @@ function _matrixSelCorrente() {
   return schede.filter(s => {
     if (settore && s.saggio !== settore) return false;
     if (anno    && s.anno   !== anno)    return false;
-    if (matrixAreaDi(s.numero) !== area) return false;
+    if (!matrixInArea(s, area)) return false;
     return true;
   });
 }
@@ -11416,9 +11522,9 @@ function showToast(msg) {
   <script>
     if ('serviceWorker' in navigator && !location.hostname.includes('claudeusercontent.com')) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./service-worker.js?v=117')
+        navigator.serviceWorker.register('./service-worker.js?v=118')
           .then(reg => {
-            console.log('SW registrato v117:', reg.scope);
+            console.log('SW registrato v118:', reg.scope);
             // Forza aggiornamento immediato se c'è una nuova versione
             reg.update();
           })

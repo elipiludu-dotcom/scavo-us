@@ -1,5 +1,9 @@
 // ─────────────────────────────────────────────────────────────────
 // SMP Scavo — Service Worker
+// v118 — Matrix: l'Area si legge dal campo Area della scheda (solo "1" o "2000"); US con
+// Area non valida segnalate in rosso nelle Note. Strati "1humus" e "Humus" (+ US 2000)
+// sulla prima riga, US 2445 sull'ultima (Area 2000); "Trincea di alleggerimento cisterna"
+// in entrambi i Matrix; US che violano l'ordine con bordo rosso e voce nelle Note.
 // v117 — Matrix: casella "Cerca US" (trova una US in qualunque area, conferma il cambio
 // area, zoom comodo e catena dei rapporti evidenziata).
 // v116 — Matrix: un grafo per area (Area 1 = US a 3 cifre, Area 2000 = 4 cifre);
@@ -12,7 +16,7 @@
 // Include uguaglianze sospette (v114), controllo US uguali (v113), PDF con
 // foglio di continuazione (v112), correzioni conflitti (v108-111).
 // ─────────────────────────────────────────────────────────────────
-const CACHE_NAME = 'smp-scavo-v117';
+const CACHE_NAME = 'smp-scavo-v118';
 
 // Shell dell'app da rendere disponibile offline.
 const APP_SHELL = [
