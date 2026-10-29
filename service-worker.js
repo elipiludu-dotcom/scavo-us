@@ -1,5 +1,8 @@
 // ─────────────────────────────────────────────────────────────────
 // SMP Scavo — Service Worker
+// v120 — Matrix: pulsante "🔍 Dove intervenire" nelle Note. Per ogni incongruenza di ordine
+// (US sopra l'humus, sotto lo sterile, riferimenti coevi o in ordine sbagliato) mostra la
+// catena di rapporti che la produce, con le schede da aprire e i passi decisivi. Sola lettura.
 // v119 — Matrix: "1sterile" da solo sull'ultima riga dell'Area 1; riferimento 2043 coevo
 // della 2041 (stessa riga, stesso blocco di fase); tutte le incongruenze dei riferimenti
 // sono segnalate in rosso nelle Note.
@@ -19,7 +22,7 @@
 // Include uguaglianze sospette (v114), controllo US uguali (v113), PDF con
 // foglio di continuazione (v112), correzioni conflitti (v108-111).
 // ─────────────────────────────────────────────────────────────────
-const CACHE_NAME = 'smp-scavo-v119';
+const CACHE_NAME = 'smp-scavo-v120';
 
 // Shell dell'app da rendere disponibile offline.
 const APP_SHELL = [

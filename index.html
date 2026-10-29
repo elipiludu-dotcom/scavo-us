@@ -5,7 +5,7 @@
   <!-- PWA -->
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#C9963A">
-  <meta name="app-version" content="119">
+  <meta name="app-version" content="120">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="SMP Scavo">
@@ -9159,6 +9159,8 @@ function _layoutMatrixV116(sel, succ, nodeGroup, ancoreNum, opts) {
     else { bottom = r.c; bottomNum = r.num; seq.add(bottom); }
   }
   const violSu = new Set(), violGiu = new Set(), violOrdine = new Set();
+  const diag = [];   // v120: incongruenze di ordine per lo strumento "Dove intervenire"
+  const numsDi = cs => sel.map(s => String(s.numero)).filter(u => cs.includes(nodeGroup[u]));
   const eqGroups = [];   // gruppi di classi che devono stare sulla stessa riga
 
   // Riferimenti presenti e utilizzabili (ogni voce è una US o un gruppo di US coeve)
@@ -9215,6 +9217,8 @@ function _layoutMatrixV116(sel, succ, nodeGroup, ancoreNum, opts) {
     if (ok) eqGroups.push(g.cs);
     else {
       avvisi.push({ tipo: 'ordine', msg: `I riferimenti ${lab(g)} dovrebbero essere coevi (stessa riga), ma i rapporti scritti ne mettono uno SOPRA l'altro: li ho lasciati dove i rapporti li portano.` });
+      for (let i = 0; i < g.cs.length; i++) for (let j = i + 1; j < g.cs.length; j++) if (raggiunge(g.cs[i], g.cs[j]) || raggiunge(g.cs[j], g.cs[i]))
+        diag.push({ k: 'ordine', titolo: `${lab(g)}: una sopra l'altra`, spiega: 'Questi due riferimenti dovrebbero essere coevi (stessa fase), ma i rapporti scritti ne mettono uno sopra l\'altro.', da: numsDi([g.cs[i]]), a: numsDi([g.cs[j]]) });
       g.cs.forEach(c => violOrdine.add(c));
     }
   });
@@ -9224,6 +9228,7 @@ function _layoutMatrixV116(sel, succ, nodeGroup, ancoreNum, opts) {
     const a = ancoreCl[k], b = ancoreCl[k + 1];
     if (b.cs.some(cb => a.cs.some(ca => raggiunge(cb, ca)))) {
       avvisi.push({ tipo: 'ordine', msg: `Ordine incoerente: i rapporti portano ${lab(b)} SOPRA ${lab(a)}, mentre dovrebbe stare sotto.` });
+      diag.push({ k: 'ordine', titolo: `${lab(b)} sopra ${lab(a)}`, spiega: `${lab(b)} dovrebbe stare SOTTO ${lab(a)}, ma i rapporti scritti lo portano sopra.`, da: numsDi(b.cs), a: numsDi(a.cs) });
       b.cs.forEach(c => violOrdine.add(c));
       continue;
     }
@@ -9262,6 +9267,8 @@ function _layoutMatrixV116(sel, succ, nodeGroup, ancoreNum, opts) {
       avvisi.push({ tipo: 'ordine', msg: `${nomeTop} dovrebbero stare sulla stessa riga, ma i rapporti scritti ne mettono una SOPRA l'altra: le ho lasciate dove i rapporti le portano.` });
       equalizza = false;
     }
+    for (let i = 0; i < tops.length; i++) for (let j = i + 1; j < tops.length; j++) if (raggiunge(tops[i], tops[j]) || raggiunge(tops[j], tops[i]))
+      diag.push({ k: 'ordine', titolo: `${nomeTop}: una sopra l'altra`, spiega: 'Questi due strati dovrebbero stare sulla stessa riga, ma i rapporti scritti ne mettono uno sopra l\'altro.', da: numsDi([tops[i]]), a: numsDi([tops[j]]) });
     if (equalizza && !tops.every(c => c === tops[0])) {
       avvisi.push({ tipo: 'info', msg: `${nomeTop} non risultano dichiarate uguali (uguale_a) nelle schede: le ho messe comunque sulla stessa riga.` });
     }
@@ -9270,16 +9277,19 @@ function _layoutMatrixV116(sel, succ, nodeGroup, ancoreNum, opts) {
   if (tops.length) {
     const r = rev1(), vis = new Set(tops), coda = tops.slice();
     while (coda.length) { const x = coda.pop(); r[x].forEach(y => { if (!vis.has(y)) { vis.add(y); violSu.add(y); coda.push(y); } }); }
+    violSu.forEach(c => { const nn = numsDi([c]); diag.push({ k: 'sopra', titolo: `US ${nn[0]} sopra ${topNomi.join(' / ')}`, spiega: `I rapporti scritti portano la US ${nn[0]} PRIMA (sopra) dello strato di humus, che invece dovrebbe essere il più recente.`, da: nn, a: numsDi(tops) }); });
     tops.forEach(tp => seq.forEach(c => { if (!tops.includes(c) && !violSu.has(c)) dag[tp].add(c); }));
   }
   // Riga più bassa: tutte le altre US stanno sopra; chi sta SOTTO resta e viene segnalato.
   if (bottom !== undefined) {
     if (tops.some(tp => raggiunge(bottom, tp))) {
       avvisi.push({ tipo: 'ordine', msg: `Per i rapporti scritti la US ${bottomNum} sta SOPRA lo strato di humus: non la metto sull'ultima riga.` });
+      diag.push({ k: 'ordine', titolo: `US ${bottomNum} sopra ${topNomi.join(' / ')}`, spiega: `Lo sterile (US ${bottomNum}) dovrebbe stare in fondo, ma i rapporti scritti lo portano sopra lo strato di humus.`, da: [bottomNum], a: numsDi(tops) });
       bottom = undefined;
     } else {
       const vis = new Set([bottom]), coda = [bottom];
       while (coda.length) { const x = coda.pop(); for (const y of dag[x]) if (!vis.has(y)) { vis.add(y); violGiu.add(y); coda.push(y); } }
+      violGiu.forEach(c => { const nn = numsDi([c]); diag.push({ k: 'sotto', titolo: `US ${nn[0]} sotto la US ${bottomNum}`, spiega: `I rapporti scritti portano la US ${nn[0]} DOPO (sotto) lo sterile (US ${bottomNum}), che invece dovrebbe stare in fondo a tutto.`, da: [bottomNum], a: nn }); });
       seq.forEach(c => { if (c !== bottom && !violGiu.has(c)) dag[c].add(bottom); });
     }
   }
@@ -9309,7 +9319,7 @@ function _layoutMatrixV116(sel, succ, nodeGroup, ancoreNum, opts) {
   if (tops.length) ancoreOut.push({ num: topNomi[0], lvl: lvl[tops[0]], label: topNomi.map(n => /^\d/.test(n) ? 'US ' + n : n).join('+') });
   if (bottom !== undefined) ancoreOut.push({ num: bottomNum, lvl: lvl[bottom], label: 'US ' + bottomNum });
   return {
-    levels, strip, ancore: ancoreOut, avvisi, nonAncorate, ritorni: back.size,
+    levels, strip, ancore: ancoreOut, avvisi, nonAncorate, ritorni: back.size, diag,
     sopra: usDiClassi(violSu), sotto: usDiClassi(violGiu), ordine: usDiClassi(violOrdine),
     topNomi, bottomNum: bottom !== undefined ? bottomNum : null
   };
@@ -9481,6 +9491,147 @@ async function matrixCercaVai(r) {
   if (_mxDom.strip && _mxDom.strip.has(key)) showToast(`US ${key}: nessun rapporto di sequenza (fascia in fondo)`);
 }
 
+// ─── v120: DOVE INTERVENIRE ─────────────────────────────────────
+// Per le incongruenze di ORDINE segnalate nelle Note (US sopra l'humus, sotto lo
+// sterile, riferimenti coevi o in ordine sbagliato) mostra, una alla volta, la
+// catena di rapporti scritti che la produce, con le schede da aprire. Sola lettura.
+let _mxDiag = [];
+function _diagGrafo(sel) {
+  const usSet = new Set(sel.map(s => String(s.numero)));
+  const idDi = {}; sel.forEach(s => { idDi[String(s.numero)] = s.id; });
+  const FW = { copre: 'copre', taglia: 'taglia', riempie: 'riempie' };
+  const BW = { coperto_da: 'copre', tagliato_da: 'taglia', riempito_da: 'riempie' };
+  const edges = new Map(), eqs = new Map(), adj = {};
+  const aggiungi = (x, o) => { (adj[x] = adj[x] || []).push(o); };
+  sel.forEach(s => {
+    const a = String(s.numero);
+    const raps = Array.isArray(s.rapporti) ? s.rapporti : (() => { try { return JSON.parse(s.rapporti || '[]'); } catch { return []; } })();
+    raps.forEach(r => {
+      const b = String(r.us);
+      if (!usSet.has(b) || a === b) return;
+      let u, v, vb;
+      if (FW[r.tipo]) { u = a; v = b; vb = FW[r.tipo]; }
+      else if (BW[r.tipo]) { u = b; v = a; vb = BW[r.tipo]; }
+      else if (r.tipo === 'uguale_a') {
+        const [x, y] = [a, b].sort(), k = x + '\u0001' + y;
+        if (!eqs.has(k)) eqs.set(k, { a: x, b: y, da: new Set() });
+        eqs.get(k).da.add(a); return;
+      } else return;
+      const k = u + '\u0001' + v;
+      if (!edges.has(k)) edges.set(k, { u, v, vers: new Set(), da: new Set() });
+      const e = edges.get(k); e.vers.add(vb); e.da.add(a);
+    });
+  });
+  edges.forEach(e => aggiungi(e.u, { to: e.v, e, eq: false }));
+  eqs.forEach(e => { aggiungi(e.a, { to: e.b, e, eq: true }); aggiungi(e.b, { to: e.a, e, eq: true }); });
+  // catena più corta da un insieme di US a un altro (saltando eventualmente un legame)
+  const percorso = (da, a, salta) => {
+    const dest = new Set(a), prec = new Map(), coda = [];
+    da.forEach(x => { prec.set(x, null); coda.push(x); });
+    for (let i = 0; i < coda.length; i++) {
+      const x = coda[i];
+      if (dest.has(x) && prec.get(x) !== null) {
+        const passi = []; let c = x;
+        while (prec.get(c)) { const q = prec.get(c); passi.unshift({ da: q.da, a: c, e: q.o.e, eq: q.o.eq }); c = q.da; }
+        return passi;
+      }
+      for (const o of (adj[x] || [])) {
+        if (o.e === salta || prec.has(o.to)) continue;
+        prec.set(o.to, { da: x, o }); coda.push(o.to);
+      }
+    }
+    return null;
+  };
+  return { idDi, percorso };
+}
+
+function apriDiagMatrix(start) {
+  if (!_mxDiag.length || !_mxCat) return;
+  const ex = document.getElementById('matrixNoteOverlay'); if (ex) ex.remove();
+  const ex2 = document.getElementById('matrixDiagOverlay'); if (ex2) ex2.remove();
+  const P = _creaPannelloFlottante('matrixDiagOverlay', '🔍 Dove intervenire');
+  const { overlay, counter, body, foot, bX, apriScheda } = P;
+  const G = _diagGrafo(_mxCat.sel);
+  let i = Math.max(0, Math.min(start || 0, _mxDiag.length - 1));
+
+  const bPrev = document.createElement('button'); bPrev.className = 'btn btn-secondary'; bPrev.style.cssText = 'font-size:0.75rem'; bPrev.textContent = '‹ Precedente';
+  const bNext = document.createElement('button'); bNext.className = 'btn btn-secondary'; bNext.style.cssText = 'font-size:0.75rem'; bNext.textContent = 'Successiva ›';
+  const bNote = document.createElement('button'); bNote.className = 'btn btn-secondary'; bNote.style.cssText = 'font-size:0.75rem'; bNote.textContent = 'ℹ Note';
+  const bClose = document.createElement('button'); bClose.className = 'btn btn-primary'; bClose.style.cssText = 'font-size:0.75rem'; bClose.textContent = 'Chiudi';
+  [bPrev, bNext, bNote, bClose].forEach(b => foot.appendChild(b));
+  bClose.onclick = () => overlay.remove(); bX.onclick = () => overlay.remove();
+  bNote.onclick = () => { overlay.remove(); apriNoteMatrix(); };
+  bPrev.onclick = () => { if (i > 0) { i--; mostra(); } };
+  bNext.onclick = () => { if (i < _mxDiag.length - 1) { i++; mostra(); } };
+
+  const usChip = n => {
+    const id = G.idDi[n], sp = document.createElement('span');
+    sp.style.cssText = 'font-weight:700;' + (id ? 'cursor:pointer;text-decoration:underline;text-underline-offset:2px' : '');
+    sp.textContent = (/[a-z]{3,}/i.test(n) ? '' : 'US ') + n; if (id) sp.onclick = () => apriScheda(id);
+    return sp;
+  };
+  const riga = (parti, extra, colore) => {
+    const d = document.createElement('div');
+    d.style.cssText = 'font-size:0.78rem;line-height:1.5;margin:0 0 6px;padding:6px 8px;border:1px solid var(--border);border-radius:4px' + (colore ? ';border-color:' + colore : '');
+    parti.forEach(x => d.appendChild(typeof x === 'string' ? document.createTextNode(x) : x));
+    (extra || []).forEach(x => { const e = document.createElement('div'); e.style.cssText = 'font-size:0.7rem;margin-top:2px;color:' + x.c; e.textContent = x.t; d.appendChild(e); });
+    return d;
+  };
+  const catena = (titolo, passi, da, a) => {
+    const box = document.createElement('div'); box.style.cssText = 'margin:10px 0 14px';
+    const h = document.createElement('div'); h.style.cssText = 'font-size:0.8rem;font-weight:700;color:var(--earth);margin-bottom:6px'; h.textContent = titolo; box.appendChild(h);
+    let nCut = 0, nSosp = 0;
+    passi.forEach((p, k) => {
+      const cut = G.percorso(da, a, p.e) === null;
+      const extra = []; let sosp = false;
+      const e = p.e;
+      if (p.eq) {
+        if (e.da.size < 2) { sosp = true; extra.push({ c: '#d94f30', t: `⚠ uguaglianza scritta solo nella scheda ${[...e.da][0]}: manca nell'altra` }); }
+        else extra.push({ c: 'var(--muted)', t: 'uguaglianza dichiarata in entrambe le schede: la catena passa da una US all\'altra come se fossero la stessa' });
+      } else {
+        if (e.da.size < 2) { sosp = true; const solo = [...e.da][0], altra = solo === e.u ? e.v : e.u; extra.push({ c: '#d94f30', t: `⚠ scritto solo nella scheda ${solo}: manca il rapporto inverso nella ${altra}` }); }
+        if (e.vers.size > 1) { sosp = true; extra.push({ c: '#d94f30', t: `⚠ tipi discordanti tra le due schede: ${[...e.vers].join(' / ')}` }); }
+      }
+      if (cut) { nCut++; extra.push({ c: '#C9963A', t: '✂ passo decisivo: se lo correggi la catena si spezza' }); }
+      if (sosp) nSosp++;
+      const parti = p.eq ? [`${k + 1}. `, usChip(p.da), ' = ', usChip(p.a), ' (uguale a)']
+        : [`${k + 1}. `, usChip(e.u), ' ' + [...e.vers].join('/') + ' ', usChip(e.v)];
+      box.appendChild(riga(parti, extra, cut ? '#C9963A' : ''));
+    });
+    const r = document.createElement('div'); r.style.cssText = 'font-size:0.72rem;color:var(--muted);line-height:1.45';
+    r.textContent = `${passi.length} pass${passi.length === 1 ? 'o' : 'i'}` + (nCut ? ` · ${nCut} decisiv${nCut === 1 ? 'o' : 'i'} (✂)` : ' · nessun passo da solo decisivo: ci sono più vie, vanno corrette tutte') + (nSosp ? ` · ${nSosp} sospett${nSosp === 1 ? 'o' : 'i'} (⚠)` : '');
+    box.appendChild(r);
+    return box;
+  };
+
+  function mostra() {
+    const it = _mxDiag[i];
+    counter.textContent = `Incongruenza ${i + 1} di ${_mxDiag.length}`;
+    bPrev.disabled = i === 0; bNext.disabled = i === _mxDiag.length - 1;
+    body.innerHTML = '';
+    const h = document.createElement('div'); h.style.cssText = 'font-size:0.9rem;font-weight:700;color:#d94f30;margin:2px 0 4px'; h.textContent = it.titolo; body.appendChild(h);
+    const sp = document.createElement('div'); sp.style.cssText = 'font-size:0.76rem;line-height:1.5;margin-bottom:6px'; sp.textContent = it.spiega; body.appendChild(sp);
+    const nome = xs => xs.map(n => (/[a-z]{3,}/i.test(n) ? '' : 'US ') + n).join(' / ');
+    const p1 = G.percorso(it.da, it.a), p2 = G.percorso(it.a, it.da);
+    if (!p1 && !p2) {
+      const d = document.createElement('div'); d.style.cssText = 'font-size:0.76rem;color:var(--muted)';
+      d.textContent = 'Non trovo una catena di rapporti tra queste US: controlla direttamente le loro schede.'; body.appendChild(d); return;
+    }
+    if (p1) body.appendChild(catena(`Catena: da ${nome(it.da)} a ${nome(it.a)}`, p1, it.da, it.a));
+    if (p2) body.appendChild(catena(`${p1 ? 'Catena opposta' : 'Catena'}: da ${nome(it.a)} a ${nome(it.da)}`, p2, it.a, it.da));
+    if (p1 && p2) {
+      const c = document.createElement('div'); c.style.cssText = 'font-size:0.74rem;line-height:1.5;padding:8px;border:1px solid #d94f30;border-radius:4px;color:var(--ink)';
+      c.textContent = 'Le due catene insieme formano un ciclo: basta correggere un passo decisivo (✂) di UNA delle due, di solito quello segnato ⚠.';
+      body.appendChild(c);
+    } else {
+      const c = document.createElement('div'); c.style.cssText = 'font-size:0.74rem;line-height:1.5;color:var(--muted)';
+      c.textContent = 'Per risolvere: apri la scheda di un passo decisivo (✂), di solito quello segnato ⚠, e correggi il rapporto. Poi riapri il Matrix per ricontrollare.';
+      body.appendChild(c);
+    }
+  }
+  mostra();
+}
+
 // Note sul Matrix: anomalie e informazioni sul disegno mostrato
 function apriNoteMatrix() {
   if (!_mxNote) return;
@@ -9515,7 +9666,13 @@ function apriNoteMatrix() {
       d.style.cssText = 'font-size:0.72rem;line-height:1.5;margin-bottom:3px';
       d.textContent = r; l.appendChild(d);
     });
-    box.appendChild(l); body.appendChild(box);
+    box.appendChild(l);
+    if (sz.diagIdx !== undefined && sz.diagIdx >= 0) {
+      const bd = document.createElement('button'); bd.className = 'btn btn-secondary';
+      bd.style.cssText = 'font-size:0.72rem;margin-top:8px'; bd.textContent = '🔍 Dove intervenire';
+      bd.onclick = () => apriDiagMatrix(sz.diagIdx); box.appendChild(bd);
+    }
+    body.appendChild(box);
   });
 }
 
@@ -9533,7 +9690,7 @@ function renderMatrix() {
 
   document.getElementById('matrix-info').textContent = `${sel.length} US · Area ${areaSel}`;
   // v116: azzera lo stato della catena evidenziata e delle note
-  _mxDom = null; _mxCat = null; _mxNote = null;
+  _mxDom = null; _mxCat = null; _mxNote = null; _mxDiag = [];
   matrixCercaChiudi();
   ['matrix-chain-open', 'matrix-chain-clear', 'matrix-note-btn'].forEach(id => { const b = document.getElementById(id); if (b) b.style.display = 'none'; });
 
@@ -10134,7 +10291,8 @@ function renderMatrix() {
   // v116: stato per la catena evidenziata e note sul disegno
   _mxDom = dom;
   dom.pos = positions; dom.off = { x: PAD + GUT, y: PAD }; dom.strip = stripSet;   // v117: per centrare la ricerca
-  _mxCat = { succ, pred, ugualGroups, nodeGroup };
+  _mxCat = { succ, pred, ugualGroups, nodeGroup, sel };
+  _mxDiag = layout ? layout.diag : [];
   try {
     const sezioni = [];
     const tra = calcolaRelazioniTraAree(schede);
@@ -10158,18 +10316,21 @@ function renderMatrix() {
     if (layout) {
       if (layout.sopra.length) sezioni.push({
         rosso: true,
+        diagIdx: layout.diag.findIndex(d => d.k === 'sopra'),
         titolo: `US sopra ${layout.topNomi.join(' / ')} — ${layout.sopra.length}`,
         nota: 'Per i rapporti scritti nelle schede stanno PRIMA dello strato di humus (es. «Humus coperto da …»). Sono disegnate nella loro posizione reale, con il bordo rosso: controlla i rapporti.',
         us: layout.sopra
       });
       if (layout.sotto.length) sezioni.push({
         rosso: true,
+        diagIdx: layout.diag.findIndex(d => d.k === 'sotto'),
         titolo: `US sotto la US ${layout.bottomNum} — ${layout.sotto.length}`,
         nota: 'Per i rapporti scritti nelle schede stanno DOPO lo sterile (es. «2445 copre …»). Sono disegnate nella loro posizione reale, con il bordo rosso: controlla i rapporti.',
         us: layout.sotto
       });
       if (layout.avvisi.length) sezioni.push({
         rosso: layout.avvisi.some(a => a.tipo !== 'info') || layout.ordine.length > 0,
+        diagIdx: layout.diag.findIndex(d => d.k === 'ordine'),
         titolo: `Riferimenti cronologici — ${layout.avvisi.length} avvis${layout.avvisi.length === 1 ? 'o' : 'i'}`,
         nota: 'Le righe fisse seguono comunque l\'ordine che hai indicato; queste incongruenze dicono dove i rapporti scritti nelle schede (o la loro assenza) non lo confermano.',
         us: [], righe: layout.avvisi.map(a => a.msg)
@@ -11544,9 +11705,9 @@ function showToast(msg) {
   <script>
     if ('serviceWorker' in navigator && !location.hostname.includes('claudeusercontent.com')) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./service-worker.js?v=119')
+        navigator.serviceWorker.register('./service-worker.js?v=120')
           .then(reg => {
-            console.log('SW registrato v119:', reg.scope);
+            console.log('SW registrato v120:', reg.scope);
             // Forza aggiornamento immediato se c'è una nuova versione
             reg.update();
           })
